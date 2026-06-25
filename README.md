@@ -5,7 +5,7 @@ AI 기반 **Comein** 서비스 프로젝트입니다.
 ## ⚙️ Git 초기 설정 (최초 1회)
 
 ### 1. 저장소 클론
-git clone https://github.com/hoo743-ui/Comein_AIservice.git
+git clone https://github.com/hoo743-ui/Comein_AIservice.git //
 cd Comein_AIservice
 
 ### 2. 사용자 정보 설정 (전역 설정 안 했다면)
