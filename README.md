@@ -2,6 +2,25 @@
 
 AI 기반 **Comein** 서비스 프로젝트입니다.
 
+## ⚙️ Git 초기 설정 (최초 1회)
+
+### 1. 저장소 클론
+git clone https://github.com/hoo743-ui/Comein_AIservice.git
+cd Comein_AIservice
+
+### 2. 사용자 정보 설정 (전역 설정 안 했다면)
+git config user.name "본인 이름"
+git config user.email "본인 이메일"
+
+### 3. develop 브랜치로 전환
+git switch develop
+# 만약 로컬에 develop이 없다면
+git switch -c develop origin/develop
+
+### 4. 최신 상태 확인
+git pull origin develop
+git branch -a   # 원격/로컬 브랜치 확인
+
 ---
 
 # 👥 Team
