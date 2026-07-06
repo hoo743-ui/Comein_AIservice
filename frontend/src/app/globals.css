@@ -1,0 +1,10 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 20%;
+  /* 브랜드 톤: 연보라 · 화이트 미니멀 (docs/04_GUI_UX.md) */
+  --primary: 255 60% 75%;
+}
