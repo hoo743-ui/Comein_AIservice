@@ -1,158 +1,96 @@
-# Comein_AIservice
+<div align="center">
 
-AI 기반 **Comein** 서비스 프로젝트입니다.
+# 🚪 Comein
 
-## ⚙️ Git 초기 설정 (최초 1회)
+### 당신의 AI Workspace
 
-### 1. 저장소 클론
-git clone https://github.com/hoo743-ui/Comein_AIservice.git //
-cd Comein_AIservice
+**Come in. Your workspace is thinking for you.**
+_들어오세요. 당신의 워크스페이스가 대신 생각합니다._
 
-### 2. 사용자 정보 설정 (전역 설정 안 했다면)
-git config user.name "본인 이름"
-git config user.email "본인 이메일"
-
-### 3. develop 브랜치로 전환
-git switch develop
-# 만약 로컬에 develop이 없다면
-git switch -c develop origin/develop
-
-### 4. 최신 상태 확인
-git pull origin develop
-git branch -a   # 원격/로컬 브랜치 확인
+</div>
 
 ---
 
-# 👥 Team
+## 📌 소개
 
-| Role              | Members |
-| ----------------- | ------- |
-| Frontend Engineer | 1 (TBD) |
-| Backend Engineer  | 1       |
-| AI Engineer       | 3       |
+Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 정리되는 대화형 AI 워크스페이스**입니다.
+
+기존 생산성 앱은 사용자가 직접 입력하고 분류해야 하는 "빈 사무실"이었습니다. Comein에서는 **말만 하면 됩니다.** 나머지는 워크스페이스가 생각합니다.
+
+> **ChatGPT의 입력 경험 + Notion의 저장 구조 + Calendar의 실행력**을 하나로 묶습니다.
+
+### 예시
+
+```
+"다음 주 화요일 3시에 교수님 미팅 잡아줘"
+ → AI가 의도 파악 → 일정 충돌 검사 → 캘린더 자동 등록
+ → "7/14(화) 15:00 '교수님 미팅' 등록했어요."
+```
 
 ---
 
-# 📂 Project Structure
+## ✨ 주요 기능
 
-```text
+| 기능 | 설명 |
+|------|------|
+| 💬 Chat | AI와 대화하며 모든 업무를 처리 (모든 기능의 입구) |
+| 📅 Calendar | 일정 생성·조회·수정·충돌 관리 |
+| 📝 Memo | 생각과 아이디어를 AI가 정리·태깅 |
+| ✅ Todo | 할 일 생성 및 우선순위 관리 |
+| 🎙 Meeting | 회의 일정·요약·참석자 관리 |
+
+---
+
+## 🛠 기술 스택
+
+| 영역 | 스택 |
+|------|------|
+| Frontend | Next.js · TypeScript · Tailwind CSS · shadcn/ui |
+| Backend | FastAPI (Python) |
+| AI | Gemini API · Groq API (Multi-Agent Architecture) |
+| Database | PostgreSQL (Supabase) |
+| Vector DB | Chroma |
+| Cache | Redis (Upstash) |
+| Infra | Vercel · Render/Railway |
+
+> 모든 API·인프라는 **무료 티어** 기준으로 구성됩니다.
+
+---
+
+## 📁 프로젝트 구조
+
+```
 Comein_AIservice/
-├── frontend/        # Frontend
-├── backend/         # Backend API
-├── ai/              # AI Model & Training
-├── docs/            # Project Documents
-├── .gitignore
+├── frontend/     # Next.js 웹 클라이언트
+├── backend/      # FastAPI 서버
+├── ai/           # AI Router · Agents · Prompt · Memory
+├── docs/         # 설계 문서 (00~21)
+├── CLAUDE.md     # 프로젝트 전체 컨텍스트 문서 ⭐
 └── README.md
 ```
 
----
-
-# 🌿 Git Branch Strategy
-
-### Branch
-
-* **main**
-
-  * 최종 제출 및 안정화 브랜치
-
-* **develop**
-
-  * 개발 통합 브랜치
-
-* **feature/**
-
-  * 기능 개발 브랜치
-
-예시
-
-```text
-feature/frontend
-feature/backend-api
-feature/ai-model
-feature/preprocessing
-```
+> 📖 **프로젝트의 상세 설계·아키텍처·데이터 모델·개발 규칙은 [CLAUDE.md](./CLAUDE.md)를 참고하세요.**
 
 ---
 
-# 🔀 Git Workflow
+## 👥 팀 구성
 
-### 1. develop 최신 코드 받기
-
-```bash
-git switch develop
-git pull origin develop
-```
-
-### 2. 기능 브랜치 생성
-
-```bash
-git switch -c feature/기능명
-```
-
-### 3. 개발
-
-각자의 역할에 맞는 폴더에서 작업합니다.
-
-* Frontend → `frontend/`
-* Backend → `backend/`
-* AI → `ai/`
-
-### 4. 작업 완료
-
-```bash
-git add .
-git commit -m "feat: 기능 설명"
-git push origin feature/기능명
-```
-
-### 5. Pull Request
-
-```
-feature/* → develop
-```
-
-으로 Pull Request 생성
-
-### 6. 기능 통합 완료 후
-
-```
-develop → main
-```
-
-으로 Pull Request 생성
+| 역할 | 인원 | 담당 |
+|------|------|------|
+| 기획 (PM) | 1 | 제품 기획, UX, 일정 관리 |
+| AI 엔지니어 | 2 | AI Router, Agents, Memory, 프롬프트 |
+| 풀스택 | 1 | Frontend, Backend, DB, 배포 |
 
 ---
 
-# 📝 Commit Convention
+## 🌿 Git 브랜치 전략
 
-| Type     | Description |
-| -------- | ----------- |
-| feat     | 새로운 기능      |
-| fix      | 버그 수정       |
-| refactor | 코드 리팩토링     |
-| docs     | 문서 수정       |
-| style    | 코드 스타일 수정   |
-| chore    | 기타 작업       |
-
-예시
-
-```bash
-git commit -m "feat: 로그인 API 구현"
-git commit -m "fix: AI 예측 오류 수정"
+```
+main       # 안정화 · 제출 (직접 작업 금지)
+develop    # 개발 통합
+feature/*  # 기능 개발 (frontend / backend-api / ai-model ...)
 ```
 
----
+**Commit Convention**: `feat` · `fix` · `refactor` · `docs` · `style` · `chore`
 
-# 📌 Collaboration Rules
-
-* main 브랜치 직접 작업 금지
-* develop 브랜치를 기준으로 개발
-* 기능마다 feature 브랜치 생성
-* 작업 완료 후 Pull Request 생성
-* Merge 후 develop 최신 코드로 갱신 후 새로운 브랜치 생성
-
----
-
-# 📚 Repository
-
-https://github.com/hoo743-ui/Comein_AIservice
+자세한 워크플로우는 [CLAUDE.md](./CLAUDE.md#10-git-규칙) 참고.
