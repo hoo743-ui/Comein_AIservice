@@ -95,8 +95,11 @@ function interpret(text: string): Interpretation {
 }
 
 // ── 설정 ──
+export type Language = "ko" | "en";
+
 export interface Settings {
   name: string;
+  language: Language;
   weekStart: "sun" | "mon";
   notifications: boolean;
   autoConfirm: boolean; // AI 제안 일정을 자동 확정할지
@@ -111,6 +114,7 @@ interface WorkspaceState {
   memos: Memo[];
   meetings: Meeting[];
   settings: Settings;
+  commandOpen: boolean;
 
   // Chat
   newConversation: () => ID;
@@ -141,6 +145,9 @@ interface WorkspaceState {
 
   // Settings
   updateSettings: (patch: Partial<Settings>) => void;
+
+  // Command palette
+  setCommandOpen: (v: boolean) => void;
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
@@ -150,7 +157,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   todos: seedTodos,
   memos: seedMemos,
   meetings: seedMeetings,
-  settings: { name: "나", weekStart: "mon", notifications: true, autoConfirm: false },
+  settings: { name: "나", language: "ko", weekStart: "mon", notifications: true, autoConfirm: false },
+  commandOpen: false,
 
   newConversation: () => {
     const id = uid();
@@ -246,6 +254,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   removeMeeting: (id) => set((st) => ({ meetings: st.meetings.filter((m) => m.id !== id) })),
 
   updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
+
+  setCommandOpen: (v) => set({ commandOpen: v }),
 }));
 
 /** 클라이언트 마운트 여부 (인메모리 스토어의 런타임 값 표시 전 깜빡임/불일치 방지) */

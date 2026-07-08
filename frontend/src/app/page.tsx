@@ -8,6 +8,7 @@ import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FeatureMindmap } from "@/components/feature-mindmap";
+import { useT } from "@/lib/i18n";
 
 /**
  * Comein 랜딩(메인) 페이지 — 깔끔·고급·심플.
@@ -18,6 +19,7 @@ import { FeatureMindmap } from "@/components/feature-mindmap";
 export default function Landing() {
   const router = useRouter();
   const reduce = useReducedMotion();
+  const t = useT();
   const [entering, setEntering] = React.useState(false);
 
   const goWorkspace = React.useCallback(() => {
@@ -85,21 +87,19 @@ export default function Landing() {
               className="flex flex-col items-start"
             >
               <span className="text-[13px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
-                Your AI Workspace
+                {t("land.eyebrow")}
               </span>
 
               <h1 className="mt-5 font-display text-7xl font-semibold leading-none tracking-tight text-foreground sm:text-8xl">
                 Comein<span className="text-brand-gradient">.</span>
               </h1>
 
-              <p className="mt-8 max-w-lg text-2xl font-medium leading-snug text-foreground/90 sm:text-3xl">
-                생각만 하세요.
-                <br />
-                나머지는 <span className="text-brand-gradient">AI</span>가 합니다.
+              <p className="mt-8 max-w-lg whitespace-pre-line text-2xl font-medium leading-snug text-foreground/90 sm:text-3xl">
+                {t("land.tagline")}
               </p>
 
               <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
-                들어오세요. 채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
+                {t("land.desc")}
               </p>
 
               {/* CTA — 정제된 네온 */}
@@ -109,10 +109,10 @@ export default function Landing() {
                   disabled={entering}
                   className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-4 text-lg font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98] disabled:opacity-70"
                 >
-                  입장하기
+                  {t("land.enter")}
                   <ArrowRight className="size-[22px] transition-transform group-hover:translate-x-1" />
                 </button>
-                <span className="text-sm text-muted-foreground">회원가입 없이 둘러보기</span>
+                <span className="text-sm text-muted-foreground">{t("land.browse")}</span>
               </div>
             </motion.div>
 

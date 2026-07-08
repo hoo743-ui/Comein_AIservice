@@ -14,6 +14,7 @@ import {
 
 import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
+import { useT } from "@/lib/i18n";
 import { fmtDate, fmtTime } from "@/lib/format";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,7 @@ import type { Message } from "@/lib/types";
  */
 export default function ChatHome() {
   const hydrated = useHydrated();
+  const t = useT();
   const conversations = useWorkspace((s) => s.conversations);
   const activeId = useWorkspace((s) => s.activeConversationId);
   const sendMessage = useWorkspace((s) => s.sendMessage);
@@ -92,7 +94,7 @@ export default function ChatHome() {
                 submit();
               }
             }}
-            placeholder="무엇을 도와드릴까요?  예) 내일 오후 2시에 스터디 잡아줘"
+            placeholder={t("chat.placeholder")}
             className="max-h-40 flex-1 resize-none bg-transparent px-3 py-2.5 text-sm text-foreground outline-none placeholder:text-muted-foreground"
           />
           <button
@@ -104,7 +106,7 @@ export default function ChatHome() {
           </button>
         </form>
         <p className="mt-2 text-center text-[11px] text-muted-foreground">
-          AI가 생성한 결과는 확인 후 반영됩니다.
+          {t("chat.disclaimer")}
         </p>
       </div>
     </div>
@@ -113,6 +115,7 @@ export default function ChatHome() {
 
 // ── 웰컴(빈 대화) ─────────────────────────────────────
 function Welcome({ onPick }: { onPick: (v: string) => void }) {
+  const t = useT();
   const pills = [
     { icon: Calendar, label: "일정 잡기", hint: "내일 오후 3시 스터디", prompt: "내일 오후 3시에 스터디 일정 잡아줘" },
     { icon: NotebookPen, label: "메모하기", hint: "아이디어 정리·태깅", prompt: "메모해줘: 온보딩 문 애니메이션 개선 아이디어" },
@@ -134,7 +137,7 @@ function Welcome({ onPick }: { onPick: (v: string) => void }) {
           Come <span className="text-brand-gradient">in.</span>
         </h2>
         <p className="mt-3 text-base text-muted-foreground">
-          무엇이든 말씀하세요. 워크스페이스가 대신 정리합니다.
+          {t("chat.subtitle")}
         </p>
         <div className="mt-8 grid w-full grid-cols-2 gap-3 sm:grid-cols-3">
           {pills.map((p) => (
