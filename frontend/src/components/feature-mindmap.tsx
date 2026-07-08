@@ -20,11 +20,11 @@ const CENTER = { x: 50, y: 48 };
 
 // 중앙 오브에서 5개 기능이 뻗어나간다 (좌표는 %)
 const NODES: Node[] = [
-  { icon: MessageCircle, label: "Chat", desc: "모든 업무의 입구", x: 23, y: 16 },
-  { icon: Calendar, label: "Calendar", desc: "일정·충돌 관리", x: 78, y: 14 },
-  { icon: NotebookPen, label: "Memo", desc: "AI 자동 정리·태깅", x: 17, y: 55 },
-  { icon: CheckSquare, label: "Todo", desc: "우선순위 자동 추천", x: 83, y: 57 },
-  { icon: Users, label: "Meeting", desc: "요약·액션아이템", x: 50, y: 86 },
+  { icon: MessageCircle, label: "Chat", desc: "모든 업무의 입구", x: 26, y: 17 },
+  { icon: Calendar, label: "Calendar", desc: "일정 관리·조율", x: 74, y: 15 },
+  { icon: NotebookPen, label: "Memo", desc: "AI 자동 정리·태깅", x: 20, y: 55 },
+  { icon: CheckSquare, label: "Todo", desc: "우선순위 자동 추천", x: 80, y: 57 },
+  { icon: Users, label: "Meeting", desc: "요약·액션아이템", x: 50, y: 85 },
 ];
 
 /**
@@ -96,13 +96,13 @@ export function FeatureMindmap() {
               animate={{ opacity: shown ? 1 : 0, scale: shown ? 1 : 0.4 }}
               transition={{ duration: 0.4, delay: shown ? 0.12 + i * 0.08 : 0, ease: [0.22, 1, 0.36, 1] }}
             >
-              <span className="flex items-center gap-2 rounded-xl border border-white/50 bg-card/80 px-3 py-2 shadow-soft backdrop-blur-md">
-                <span className="grid size-7 shrink-0 place-items-center rounded-lg bg-primary/12 text-primary">
-                  <n.icon className="size-4" />
+              <span className="flex items-center gap-2.5 rounded-2xl border border-primary/25 bg-card/90 px-4 py-2.5 shadow-soft ring-1 ring-black/5 backdrop-blur-md">
+                <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-primary/15 text-primary">
+                  <n.icon className="size-[18px]" />
                 </span>
                 <span className="leading-tight">
-                  <span className="block text-xs font-semibold text-foreground">{n.label}</span>
-                  <span className="block text-[10px] text-muted-foreground">{n.desc}</span>
+                  <span className="block text-sm font-semibold text-foreground">{n.label}</span>
+                  <span className="block text-xs text-muted-foreground">{n.desc}</span>
                 </span>
               </span>
             </motion.div>

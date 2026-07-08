@@ -39,7 +39,7 @@ export default function Landing() {
 
   return (
     <motion.div
-      className="bg-app relative flex min-h-screen flex-col overflow-hidden"
+      className="relative flex min-h-screen flex-col overflow-hidden bg-background"
       animate={
         entering
           ? { opacity: 0, scale: 1.03, filter: "blur(6px)" }
@@ -50,20 +50,25 @@ export default function Landing() {
         if (entering) goWorkspace();
       }}
     >
-      {/* 배경: 유리가 비쳐 보이도록 은은한 컬러 블롭 */}
-      <div aria-hidden className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute -left-24 top-4 size-[26rem] rounded-full bg-primary/25 blur-3xl" />
-        <div className="absolute -right-16 top-1/4 size-[30rem] rounded-full bg-[hsl(232_74%_64%/0.22)] blur-3xl" />
-        <div className="absolute -bottom-24 left-1/3 size-[24rem] rounded-full bg-accent/50 blur-3xl" />
-      </div>
+      {/* 배경 사진 (미니멀 럭스 오피스) */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-[url('/hero-bg.webp')] bg-cover bg-center"
+      />
+      {/* 가독성·테마 워시 */}
+      <div
+        aria-hidden
+        className="absolute inset-0 bg-gradient-to-b from-background/60 via-background/25 to-background/70 dark:from-background/85 dark:via-background/70 dark:to-background/95"
+      />
+      <div aria-hidden className="absolute inset-0 bg-primary/[0.04]" />
       {/* 미세 그레인 텍스처 */}
       <div
         aria-hidden
         className="grain-overlay pointer-events-none fixed inset-0 z-[1] opacity-[0.05] mix-blend-overlay dark:opacity-[0.09]"
       />
 
-      {/* 상단 바 — 글래스 스트립 */}
-      <header className="glass sticky top-0 z-20 flex items-center justify-between border-b border-white/20 px-6 py-4 sm:px-10">
+      {/* 상단 바 — 투명(배경 위에 자연스럽게) */}
+      <header className="relative z-20 flex items-center justify-between px-6 py-6 sm:px-10">
         <Logo subtitle />
         <ThemeToggle />
       </header>
@@ -79,21 +84,21 @@ export default function Landing() {
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="flex flex-col items-start"
             >
-              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+              <span className="text-[13px] font-semibold uppercase tracking-[0.25em] text-muted-foreground">
                 Your AI Workspace
               </span>
 
-              <h1 className="mt-4 font-display text-6xl font-semibold leading-none tracking-tight text-foreground sm:text-7xl">
+              <h1 className="mt-5 font-display text-7xl font-semibold leading-none tracking-tight text-foreground sm:text-8xl">
                 Comein<span className="text-brand-gradient">.</span>
               </h1>
 
-              <p className="mt-7 max-w-md text-xl font-medium leading-snug text-foreground/90 sm:text-2xl">
+              <p className="mt-8 max-w-lg text-2xl font-medium leading-snug text-foreground/90 sm:text-3xl">
                 생각만 하세요.
                 <br />
                 나머지는 <span className="text-brand-gradient">AI</span>가 합니다.
               </p>
 
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+              <p className="mt-5 max-w-md text-base leading-relaxed text-muted-foreground sm:text-lg">
                 들어오세요. 채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
               </p>
 
@@ -102,12 +107,12 @@ export default function Landing() {
                 <button
                   onClick={enter}
                   disabled={entering}
-                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-8 py-4 text-base font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98] disabled:opacity-70"
+                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-4 text-lg font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98] disabled:opacity-70"
                 >
                   입장하기
-                  <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />
+                  <ArrowRight className="size-[22px] transition-transform group-hover:translate-x-1" />
                 </button>
-                <span className="text-xs text-muted-foreground">회원가입 없이 둘러보기</span>
+                <span className="text-sm text-muted-foreground">회원가입 없이 둘러보기</span>
               </div>
             </motion.div>
 

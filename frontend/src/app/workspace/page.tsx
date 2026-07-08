@@ -40,7 +40,7 @@ export default function ChatHome() {
             <FeaturePill icon={<CheckSquare className="size-4" />} label="할 일" hint="우선순위 자동 추천" />
             <FeaturePill icon={<Users className="size-4" />} label="회의 정리" hint="요약·액션아이템 추출" />
             <FeaturePill icon={<MessageCircle className="size-4" />} label="물어보기" hint="오늘 일정 알려줘" />
-            <FeaturePill icon={<Calendar className="size-4" />} label="충돌 확인" hint="겹치는 일정 찾기" />
+            <FeaturePill icon={<Calendar className="size-4" />} label="빈 시간 찾기" hint="겹치지 않는 시간 추천" />
           </div>
         </div>
       </div>
