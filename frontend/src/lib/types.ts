@@ -61,4 +61,5 @@ export interface Conversation {
   title: string;
   createdAt: string; // ISO
   messages: Message[];
+  pinned?: boolean;
 }

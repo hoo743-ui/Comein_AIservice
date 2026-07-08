@@ -9,6 +9,7 @@ const DICT = {
   "sb.search": { ko: "대화 검색", en: "Search chats" },
   "sb.menu": { ko: "메뉴", en: "Menu" },
   "sb.recent": { ko: "최근 대화", en: "Recent" },
+  "sb.pinned": { ko: "고정", en: "Pinned" },
   "sb.noChats": { ko: "대화가 없어요", en: "No conversations" },
   "sb.settings": { ko: "설정", en: "Settings" },
   "sb.workspace": { ko: "내 워크스페이스", en: "My workspace" },

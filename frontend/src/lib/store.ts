@@ -120,6 +120,7 @@ interface WorkspaceState {
   newConversation: () => ID;
   setActiveConversation: (id: ID) => void;
   sendMessage: (text: string) => void;
+  togglePin: (id: ID) => void;
 
   // Schedule
   addSchedule: (s: Omit<Schedule, "id">) => ID;
@@ -168,6 +169,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   setActiveConversation: (id) => set({ activeConversationId: id }),
+
+  togglePin: (id) =>
+    set((st) => ({
+      conversations: st.conversations.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)),
+    })),
 
   sendMessage: (text) => {
     const content = text.trim();

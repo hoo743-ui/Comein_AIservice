@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MessageCircle, Plus, Search, Settings } from "lucide-react";
+import { MessageCircle, Plus, Search, Settings, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -23,6 +23,7 @@ export function Sidebar() {
   const name = useWorkspace((s) => s.settings.name);
   const newConversation = useWorkspace((s) => s.newConversation);
   const setActive = useWorkspace((s) => s.setActiveConversation);
+  const togglePin = useWorkspace((s) => s.togglePin);
 
   // 메뉴 카운트 (한눈에 보이는 가독성)
   const schedules = useWorkspace((s) => s.schedules);
@@ -46,6 +47,51 @@ export function Sidebar() {
     if (id) setActive(id);
     if (pathname !== "/workspace") router.push("/workspace");
   };
+
+  const pinnedChats = filtered.filter((c) => c.pinned);
+  const restChats = filtered.filter((c) => !c.pinned);
+  const producedCount = (c: (typeof conversations)[number]) =>
+    c.messages.filter((m) => m.card).length;
+
+  const renderRow = (c: (typeof conversations)[number]) => (
+    <div
+      key={c.id}
+      className={cn(
+        "group/rc flex items-center gap-1 rounded-lg pr-1 transition-colors",
+        activeId === c.id && pathname === "/workspace"
+          ? "bg-sidebar-accent text-sidebar-accent-foreground"
+          : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
+      )}
+    >
+      <button
+        onClick={() => goChat(c.id)}
+        className="flex min-w-0 flex-1 items-center gap-2 px-3 py-2 text-left text-sm"
+      >
+        <MessageCircle className="size-3.5 shrink-0 text-muted-foreground" />
+        <span className="truncate">{c.title}</span>
+        {producedCount(c) > 0 && (
+          <span
+            title="이 대화에서 만든 항목"
+            className="ml-auto shrink-0 rounded-full bg-primary/12 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-primary"
+          >
+            {producedCount(c)}
+          </span>
+        )}
+      </button>
+      <button
+        onClick={() => togglePin(c.id)}
+        aria-label={c.pinned ? "고정 해제" : "고정"}
+        className={cn(
+          "shrink-0 rounded-md p-1 transition",
+          c.pinned
+            ? "text-primary"
+            : "text-muted-foreground opacity-0 hover:text-primary group-hover/rc:opacity-100"
+        )}
+      >
+        <Star className={cn("size-3.5", c.pinned && "fill-primary")} />
+      </button>
+    </div>
+  );
 
   return (
     <aside className="glass-panel flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border/70">
@@ -136,27 +182,22 @@ export function Sidebar() {
         </div>
       </nav>
 
-      {/* 최근 대화 */}
-      <div className="mt-3 flex min-h-0 flex-1 flex-col px-3">
+      {/* 대화 목록 — 고정 + 최근 */}
+      <div className="mt-3 flex min-h-0 flex-1 flex-col overflow-y-auto px-3 pb-2">
+        {pinnedChats.length > 0 && (
+          <>
+            <p className="flex items-center gap-1 px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
+              <Star className="size-3 fill-primary text-primary" />
+              {t("sb.pinned")}
+            </p>
+            <div className="mb-2 space-y-0.5">{pinnedChats.map(renderRow)}</div>
+          </>
+        )}
         <p className="px-3 pb-1 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/70">
           {t("sb.recent")}
         </p>
-        <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto pb-2">
-          {filtered.map((c) => (
-            <button
-              key={c.id}
-              onClick={() => goChat(c.id)}
-              className={cn(
-                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm transition-colors",
-                activeId === c.id && pathname === "/workspace"
-                  ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                  : "text-sidebar-foreground/75 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
-              )}
-            >
-              <MessageCircle className="size-3.5 shrink-0 text-muted-foreground" />
-              <span className="truncate">{c.title}</span>
-            </button>
-          ))}
+        <div className="space-y-0.5">
+          {restChats.map(renderRow)}
           {filtered.length === 0 && (
             <p className="px-3 py-2 text-xs text-muted-foreground">{t("sb.noChats")}</p>
           )}
