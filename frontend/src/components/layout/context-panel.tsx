@@ -88,7 +88,7 @@ function Card({
   children: React.ReactNode;
 }) {
   return (
-    <section className="glass rounded-xl border border-border/70 p-4 shadow-soft">
+    <section className="elevated rounded-xl border border-border p-4">
       <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
         {icon}
         {title}

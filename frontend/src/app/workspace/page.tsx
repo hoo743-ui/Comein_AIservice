@@ -82,7 +82,7 @@ export default function ChatHome() {
             e.preventDefault();
             submit();
           }}
-          className="glass mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-border/70 p-2 shadow-soft focus-within:ring-2 focus-within:ring-ring"
+          className="elevated mx-auto flex max-w-2xl items-end gap-2 rounded-2xl border border-border p-2 focus-within:ring-2 focus-within:ring-ring"
         >
           <textarea
             rows={1}
@@ -129,7 +129,7 @@ function Welcome({ onPick }: { onPick: (v: string) => void }) {
       <div className="animate-fade-up flex w-full max-w-2xl flex-col items-center text-center">
         <div className="relative mb-7">
           <div className="absolute inset-0 rounded-full brand-gradient opacity-50 blur-2xl" />
-          <div className="relative flex size-20 items-center justify-center rounded-full brand-gradient text-white shadow-glow">
+          <div className="orb-3d relative flex size-20 items-center justify-center rounded-full text-white">
             <MessageCircle className="size-9" />
           </div>
         </div>
@@ -144,7 +144,7 @@ function Welcome({ onPick }: { onPick: (v: string) => void }) {
             <button
               key={p.label}
               onClick={() => onPick(p.prompt)}
-              className="glass group flex flex-col items-start gap-1 rounded-xl border border-border/70 p-3 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-soft"
+              className="elevated group flex flex-col items-start gap-1 rounded-xl border border-border p-3.5 text-left transition-all hover:-translate-y-1 hover:border-primary/50"
             >
               <span className="flex items-center gap-2 text-sm font-semibold text-foreground">
                 <span className="text-primary">

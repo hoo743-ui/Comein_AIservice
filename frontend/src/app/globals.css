@@ -112,16 +112,48 @@
     -webkit-backdrop-filter: blur(10px);
   }
 
-  /* 앱 배경 — 뉴트럴, 거의 무채색의 은은한 라이팅 */
+  /* 앱 배경 — 중앙 브랜드 글로우 + 코너 라이팅 + 비네트로 깊이감 */
   .bg-app {
+    background-color: hsl(var(--background));
     background-image:
-      radial-gradient(60rem 40rem at 85% -10%, hsl(240 28% 97%) 0%, transparent 55%),
-      radial-gradient(50rem 30rem at 0% 0%, hsl(243 26% 97%) 0%, transparent 50%);
+      radial-gradient(72rem 48rem at 50% -14%, hsl(246 52% 95%) 0%, transparent 58%),
+      radial-gradient(56rem 40rem at 102% 110%, hsl(243 44% 95%) 0%, transparent 55%),
+      radial-gradient(130% 110% at 50% 42%, transparent 58%, hsl(240 22% 88% / 0.55) 100%);
   }
   .dark .bg-app {
+    background-color: hsl(var(--background));
     background-image:
-      radial-gradient(60rem 40rem at 85% -10%, hsl(234 20% 13%) 0%, transparent 55%),
-      radial-gradient(50rem 30rem at 0% 0%, hsl(234 18% 12%) 0%, transparent 50%);
+      radial-gradient(72rem 48rem at 50% -14%, hsl(246 42% 18%) 0%, transparent 58%),
+      radial-gradient(56rem 40rem at 102% 110%, hsl(243 38% 15%) 0%, transparent 55%),
+      radial-gradient(130% 110% at 50% 42%, transparent 54%, hsl(234 28% 5% / 0.6) 100%);
+  }
+
+  /* 입체 카드 — 상단 하이라이트 + 레이어드 섀도우로 떠 있는 느낌 */
+  .elevated {
+    background-image: linear-gradient(180deg, hsl(var(--card)), hsl(var(--card) / 0.9));
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.55),
+      0 1px 2px hsl(234 24% 16% / 0.06),
+      0 12px 26px -14px hsl(234 24% 16% / 0.16),
+      0 34px 62px -34px hsl(234 24% 16% / 0.2);
+  }
+  .dark .elevated {
+    background-image: linear-gradient(180deg, hsl(var(--card)), hsl(var(--card) / 0.72));
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.07),
+      0 12px 26px -14px hsl(0 0% 0% / 0.5),
+      0 34px 62px -34px hsl(0 0% 0% / 0.55);
+  }
+
+  /* 3D 오브 — 광택 있는 구체 (상단 하이라이트 + 하단 내부 그림자 + 글로우) */
+  .orb-3d {
+    background-image:
+      radial-gradient(circle at 34% 28%, hsl(0 0% 100% / 0.6) 0%, transparent 42%),
+      linear-gradient(150deg, hsl(250 64% 68%), hsl(240 56% 50%));
+    box-shadow:
+      0 14px 34px -8px hsl(var(--primary) / 0.5),
+      inset 0 -10px 22px -8px hsl(244 60% 28% / 0.6),
+      inset 0 8px 16px -6px hsl(0 0% 100% / 0.45);
   }
 
   /* 미세 그레인(노이즈) — 촉감 있는 깊이 */

@@ -153,7 +153,7 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden rounded-2xl border border-border bg-card shadow-soft">
+    <section className="elevated overflow-hidden rounded-2xl border border-border">
       <div className="flex items-center gap-2.5 border-b border-border/60 bg-muted/30 px-6 py-4">
         <span className="flex size-8 items-center justify-center rounded-lg border border-border bg-card text-primary">
           {icon}
