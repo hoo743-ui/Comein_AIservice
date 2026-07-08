@@ -11,12 +11,16 @@ import { Field, inputClass } from "@/components/ui/modal";
 export default function LoginPage() {
   const router = useRouter();
 
-  const onSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  // 데모: 실제 인증 없이 진입 연출 후 이동 (이메일/Google 공통)
+  const enterDemo = () => {
     try {
       sessionStorage.setItem("comein:entering", "1");
     } catch {}
-    router.push("/workspace"); // 데모: 실제 인증 없이 진입 연출 후 이동
+    router.push("/workspace");
+  };
+  const onSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    enterDemo();
   };
 
   return (
@@ -58,7 +62,7 @@ export default function LoginPage() {
           <span className="h-px flex-1 bg-border" />
         </div>
 
-        <Button variant="outline" size="lg" className="w-full">
+        <Button variant="outline" size="lg" className="w-full" onClick={enterDemo}>
           Google로 계속하기
         </Button>
 

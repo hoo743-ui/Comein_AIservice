@@ -79,6 +79,25 @@ export interface Place {
   lng?: number;
 }
 
+// ── 연락처 / 외부 연동 (데모 · 테스트 데이터) ──
+export type ContactSource = "google" | "outlook" | "manual";
+
+export interface Contact {
+  id: ID;
+  name: string;
+  org?: string;
+  email?: string;
+  phone?: string;
+  source: ContactSource;
+  lastMet?: string; // ISO
+}
+
+export interface Connections {
+  googleCalendar: boolean;
+  googleContacts: boolean;
+  outlook: boolean;
+}
+
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";
 
 export interface ClassEntry {

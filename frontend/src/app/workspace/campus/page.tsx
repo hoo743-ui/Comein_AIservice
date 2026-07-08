@@ -8,6 +8,7 @@ import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { PageShell } from "@/components/workspace/page-shell";
 import { Badge } from "@/components/ui/badge";
+import { KakaoMap, kakaoAvailable } from "@/components/workspace/kakao-map";
 import type { Place, Weekday } from "@/lib/types";
 
 const DAYS: { key: Weekday; label: string }[] = [
@@ -206,14 +207,25 @@ export default function CampusPage() {
             <h2 className="font-display text-lg font-semibold text-foreground">캠퍼스 맵</h2>
             <span className="text-xs text-muted-foreground">가천대 · 데모</span>
           </div>
-          <CampusMap
-            buildings={buildings}
-            focusId={focusId}
-            nextId={next?.buildingId ?? null}
-            origin={origin}
-            target={nextBuilding ?? null}
-            onPick={setFocusId}
-          />
+          {kakaoAvailable ? (
+            <div className="relative flex-1 overflow-hidden rounded-xl border border-border">
+              <KakaoMap
+                places={buildings}
+                focusId={focusId}
+                nextId={next?.buildingId ?? null}
+                onPick={setFocusId}
+              />
+            </div>
+          ) : (
+            <CampusMap
+              buildings={buildings}
+              focusId={focusId}
+              nextId={next?.buildingId ?? null}
+              origin={origin}
+              target={nextBuilding ?? null}
+              onPick={setFocusId}
+            />
+          )}
         </section>
       </div>
     </PageShell>

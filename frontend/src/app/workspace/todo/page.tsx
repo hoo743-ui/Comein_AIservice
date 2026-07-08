@@ -46,6 +46,7 @@ export default function TodoPage() {
   const addTodo = useWorkspace((s) => s.addTodo);
   const moveTodo = useWorkspace((s) => s.moveTodo);
   const removeTodo = useWorkspace((s) => s.removeTodo);
+  const updateTodo = useWorkspace((s) => s.updateTodo);
 
   const hydrated = useHydrated();
   const base = hydrated ? new Date() : new Date(2026, 6, 8);
@@ -54,6 +55,11 @@ export default function TodoPage() {
   const [title, setTitle] = React.useState("");
   const [priority, setPriority] = React.useState<TodoPriority>("mid");
   const [due, setDue] = React.useState("");
+
+  const [editingId, setEditingId] = React.useState<string | null>(null);
+  const editing = editingId
+    ? todos.find((t) => t.id === editingId) ?? null
+    : null;
 
   const openAdd = () => {
     setTitle("");
@@ -116,6 +122,7 @@ export default function TodoPage() {
                       hydrated={hydrated}
                       onMove={moveTodo}
                       onRemove={removeTodo}
+                      onOpen={() => setEditingId(todo.id)}
                     />
                   ))
                 )}
@@ -175,6 +182,85 @@ export default function TodoPage() {
           </Field>
         </div>
       </Modal>
+
+      <Modal
+        open={editing !== null}
+        onClose={() => setEditingId(null)}
+        title="할 일 편집"
+        description="할 일의 세부 정보를 확인하고 수정하세요."
+        footer={
+          <>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (editing) removeTodo(editing.id);
+                setEditingId(null);
+              }}
+            >
+              <Trash2 className="size-4" />
+              삭제
+            </Button>
+            <Button variant="ghost" onClick={() => setEditingId(null)}>
+              닫기
+            </Button>
+          </>
+        }
+      >
+        {editing && (
+          <div className="space-y-4">
+            <Field label="제목">
+              <input
+                value={editing.title}
+                onChange={(e) =>
+                  updateTodo(editing.id, { title: e.target.value })
+                }
+                placeholder="할 일을 입력하세요"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="우선순위">
+              <select
+                value={editing.priority}
+                onChange={(e) =>
+                  updateTodo(editing.id, {
+                    priority: e.target.value as TodoPriority,
+                  })
+                }
+                className={inputClass}
+              >
+                <option value="high">높음</option>
+                <option value="mid">보통</option>
+                <option value="low">낮음</option>
+              </select>
+            </Field>
+            <Field label="상태">
+              <select
+                value={editing.status}
+                onChange={(e) =>
+                  updateTodo(editing.id, {
+                    status: e.target.value as TodoStatus,
+                  })
+                }
+                className={inputClass}
+              >
+                <option value="todo">할 일</option>
+                <option value="doing">진행 중</option>
+                <option value="done">완료</option>
+              </select>
+            </Field>
+            <Field label="마감일">
+              <input
+                type="date"
+                value={editing.due ?? ""}
+                onChange={(e) =>
+                  updateTodo(editing.id, { due: e.target.value || undefined })
+                }
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        )}
+      </Modal>
     </PageShell>
   );
 }
@@ -186,12 +272,14 @@ function TodoCard({
   hydrated,
   onMove,
   onRemove,
+  onOpen,
 }: {
   todo: Todo;
   base: Date;
   hydrated: boolean;
   onMove: (id: string, status: TodoStatus) => void;
   onRemove: (id: string) => void;
+  onOpen: () => void;
 }) {
   const idx = STATUS_ORDER.indexOf(todo.status);
   const done = todo.status === "done";
@@ -207,26 +295,40 @@ function TodoCard({
 
   return (
     <article className="elevated rounded-xl border border-border p-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/40">
-      <p
-        className={cn(
-          "text-sm font-medium text-foreground",
-          done && "text-muted-foreground line-through"
-        )}
+      <div
+        role="button"
+        tabIndex={0}
+        onClick={onOpen}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onOpen();
+          }
+        }}
+        aria-label={`${todo.title} 편집`}
+        className="w-full cursor-pointer rounded-md text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
       >
-        {todo.title}
-      </p>
+        <p
+          className={cn(
+            "text-sm font-medium text-foreground",
+            done && "text-muted-foreground line-through"
+          )}
+        >
+          {todo.title}
+        </p>
 
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <Badge variant={prio.variant}>
-          <Flag className="size-3" />
-          {prio.label}
-        </Badge>
-        {dueChip && (
-          <Badge variant={overdue && !done ? "high" : "outline"}>
-            <Clock className="size-3" />
-            {dueChip}
+        <div className="mt-2 flex flex-wrap items-center gap-1.5">
+          <Badge variant={prio.variant}>
+            <Flag className="size-3" />
+            {prio.label}
           </Badge>
-        )}
+          {dueChip && (
+            <Badge variant={overdue && !done ? "high" : "outline"}>
+              <Clock className="size-3" />
+              {dueChip}
+            </Badge>
+          )}
+        </div>
       </div>
 
       <div className="mt-3 flex items-center justify-between border-t border-border/60 pt-2.5">
@@ -237,7 +339,10 @@ function TodoCard({
             className="size-8"
             aria-label="이전 단계로 이동"
             disabled={idx <= 0}
-            onClick={() => onMove(todo.id, STATUS_ORDER[idx - 1])}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMove(todo.id, STATUS_ORDER[idx - 1]);
+            }}
           >
             <ChevronLeft className="size-4" />
           </Button>
@@ -247,7 +352,10 @@ function TodoCard({
             className="size-8"
             aria-label="다음 단계로 이동"
             disabled={idx >= STATUS_ORDER.length - 1}
-            onClick={() => onMove(todo.id, STATUS_ORDER[idx + 1])}
+            onClick={(e) => {
+              e.stopPropagation();
+              onMove(todo.id, STATUS_ORDER[idx + 1]);
+            }}
           >
             <ChevronRight className="size-4" />
           </Button>
@@ -257,7 +365,10 @@ function TodoCard({
           size="icon"
           className="size-8 text-muted-foreground hover:text-destructive"
           aria-label="삭제"
-          onClick={() => onRemove(todo.id)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRemove(todo.id);
+          }}
         >
           <Trash2 className="size-4" />
         </Button>

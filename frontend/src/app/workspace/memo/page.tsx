@@ -10,15 +10,18 @@ import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/lib/store";
 import { fmtDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
+import type { Memo } from "@/lib/types";
 
 export default function MemoPage() {
   const memos = useWorkspace((s) => s.memos);
   const addMemo = useWorkspace((s) => s.addMemo);
+  const updateMemo = useWorkspace((s) => s.updateMemo);
   const removeMemo = useWorkspace((s) => s.removeMemo);
 
   const [query, setQuery] = React.useState("");
   const [activeTag, setActiveTag] = React.useState<string | null>(null);
   const [open, setOpen] = React.useState(false);
+  const [editing, setEditing] = React.useState<Memo | null>(null);
 
   // Add form state
   const [title, setTitle] = React.useState("");
@@ -150,7 +153,8 @@ export default function MemoPage() {
           {filtered.map((m) => (
             <article
               key={m.id}
-              className="group mb-4 break-inside-avoid elevated rounded-xl border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40"
+              onClick={() => setEditing(m)}
+              className="group mb-4 break-inside-avoid elevated cursor-pointer rounded-xl border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40"
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <h3 className="font-semibold leading-snug text-foreground">
@@ -159,7 +163,10 @@ export default function MemoPage() {
                 <button
                   type="button"
                   aria-label="메모 삭제"
-                  onClick={() => removeMemo(m.id)}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    removeMemo(m.id);
+                  }}
                   className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground opacity-0 transition-all hover:bg-accent hover:text-destructive focus-visible:opacity-100 group-hover:opacity-100"
                 >
                   <Trash2 className="size-4" />
@@ -233,6 +240,78 @@ export default function MemoPage() {
             />
           </Field>
         </div>
+      </Modal>
+
+      {/* 편집 모달 */}
+      <Modal
+        open={editing !== null}
+        onClose={() => setEditing(null)}
+        title="메모 편집"
+        description={editing ? `작성일 ${fmtDate(editing.createdAt)}` : undefined}
+        footer={
+          editing ? (
+            <>
+              <Button
+                variant="destructive"
+                onClick={() => {
+                  removeMemo(editing.id);
+                  setEditing(null);
+                }}
+              >
+                <Trash2 className="size-4" />
+                삭제
+              </Button>
+              <Button variant="ghost" onClick={() => setEditing(null)}>
+                <X className="size-4" />
+                닫기
+              </Button>
+            </>
+          ) : null
+        }
+      >
+        {editing && (
+          <div className="space-y-4">
+            <Field label="제목">
+              <input
+                value={editing.title}
+                onChange={(e) => {
+                  const title = e.target.value;
+                  updateMemo(editing.id, { title });
+                  setEditing({ ...editing, title });
+                }}
+                placeholder="메모 제목"
+                className={inputClass}
+              />
+            </Field>
+            <Field label="내용">
+              <textarea
+                value={editing.content}
+                onChange={(e) => {
+                  const content = e.target.value;
+                  updateMemo(editing.id, { content });
+                  setEditing({ ...editing, content });
+                }}
+                placeholder="떠오른 생각을 자유롭게 적어 보세요"
+                className={cn(inputClass, "min-h-40 resize-y")}
+              />
+            </Field>
+            <Field label="태그">
+              <input
+                value={editing.tags.join(", ")}
+                onChange={(e) => {
+                  const tags = e.target.value
+                    .split(",")
+                    .map((s) => s.trim())
+                    .filter(Boolean);
+                  updateMemo(editing.id, { tags });
+                  setEditing({ ...editing, tags });
+                }}
+                placeholder="쉼표로 구분 (예: 기획, UX, 리서치)"
+                className={inputClass}
+              />
+            </Field>
+          </div>
+        )}
       </Modal>
     </PageShell>
   );

@@ -4,6 +4,8 @@ import { create } from "zustand";
 
 import type {
   ClassEntry,
+  Connections,
+  Contact,
   Conversation,
   Place,
   ID,
@@ -92,6 +94,15 @@ const seedTimetable: ClassEntry[] = [
   { id: "c_8", course: "영어회화", day: "fri", start: "10:00", end: "11:30", buildingId: "b_lib", room: "3F" },
 ];
 
+// 연락처 (데모 · 구글/아웃룩에서 가져온 것처럼)
+const seedContacts: Contact[] = [
+  { id: "ct1", name: "김교수", org: "가천대 AI학과", email: "prof.kim@gachon.ac.kr", phone: "010-1234-5678", source: "google", lastMet: "2026-07-01T15:00:00" },
+  { id: "ct2", name: "이하늘", org: "캡스톤 팀", email: "haneul@example.com", phone: "010-2222-3333", source: "google", lastMet: "2026-07-05T13:00:00" },
+  { id: "ct3", name: "박지원", org: "거래처 · ACME", email: "jiwon@acme.co", phone: "010-4444-5555", source: "outlook", lastMet: "2026-06-28T10:00:00" },
+  { id: "ct4", name: "최민석", org: "알고리즘 스터디", email: "minseok@example.com", source: "google" },
+  { id: "ct5", name: "정예린", org: "동아리", phone: "010-7777-8888", source: "manual" },
+];
+
 const seedConversations: Conversation[] = [
   {
     id: "c1",
@@ -145,6 +156,8 @@ interface WorkspaceState {
   meetings: Meeting[];
   places: Place[];
   timetable: ClassEntry[];
+  contacts: Contact[];
+  connections: Connections;
   settings: Settings;
   commandOpen: boolean;
 
@@ -181,6 +194,9 @@ interface WorkspaceState {
 
   // Command palette
   setCommandOpen: (v: boolean) => void;
+
+  // Connections
+  toggleConnection: (key: keyof Connections) => void;
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
@@ -192,6 +208,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   meetings: seedMeetings,
   places: seedPlaces,
   timetable: seedTimetable,
+  contacts: seedContacts,
+  connections: { googleCalendar: true, googleContacts: true, outlook: false },
   settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false },
   commandOpen: false,
 
@@ -296,6 +314,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
 
   setCommandOpen: (v) => set({ commandOpen: v }),
+
+  toggleConnection: (key) =>
+    set((st) => ({ connections: { ...st.connections, [key]: !st.connections[key] } })),
 }));
 
 /** 클라이언트 마운트 여부 (인메모리 스토어의 런타임 값 표시 전 깜빡임/불일치 방지) */
