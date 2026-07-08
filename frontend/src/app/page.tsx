@@ -68,7 +68,7 @@ export default function Landing() {
 
       {/* 히어로 — 전체를 반투명 글래스 패널 위에 */}
       <main className="relative z-10 flex flex-1 items-center px-4 py-[6vh] sm:px-8">
-        <div className="mx-auto w-full max-w-6xl rounded-2xl border border-border bg-card/70 p-8 shadow-soft backdrop-blur-md sm:p-12">
+        <div className="mx-auto w-full max-w-6xl rounded-2xl border border-border bg-card/70 p-8 shadow-soft backdrop-blur-md sm:p-12 lg:pl-16">
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
             {/* 좌: 카피 */}
             <motion.div
@@ -81,11 +81,11 @@ export default function Landing() {
                 {t("land.eyebrow")}
               </span>
 
-              <h1 className="mt-5 font-display text-7xl font-semibold leading-none tracking-tight text-foreground sm:text-8xl">
+              <h1 className="mt-5 font-display text-6xl font-semibold leading-none tracking-tight text-foreground sm:text-[5rem]">
                 Comein<span className="text-brand-gradient">.</span>
               </h1>
 
-              <p className="mt-8 max-w-lg whitespace-pre-line text-2xl font-medium leading-snug text-foreground/90 sm:text-3xl">
+              <p className="mt-8 max-w-xl whitespace-pre-line text-[1.65rem] font-medium leading-relaxed text-foreground/90 sm:text-[2.05rem]">
                 {t("land.tagline")}
               </p>
 
@@ -97,7 +97,7 @@ export default function Landing() {
               <div className="mt-10 flex items-center gap-4">
                 <button
                   onClick={enter}
-                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-4 text-lg font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98]"
+                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-[18px] text-lg font-semibold text-primary shadow-[0_0_20px_-4px_hsl(var(--primary)/0.10)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-4px_hsl(var(--primary)/0.20)] active:scale-[0.98]"
                 >
                   {t("land.enter")}
                   <ArrowRight className="size-[22px] transition-transform group-hover:translate-x-1" />
