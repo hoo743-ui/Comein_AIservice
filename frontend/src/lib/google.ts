@@ -38,13 +38,28 @@ function loadGis(): Promise<void> {
   return gisPromise;
 }
 
-/** OAuth 토큰 발급(팝업). scope 는 GOOGLE_SCOPES 값들을 공백으로 이어붙임. */
-export async function getGoogleToken(scope: string): Promise<string> {
-  if (!googleClientId) throw new Error("Google Client ID 미설정");
-  await loadGis();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const google = (window as any).google;
+/** GIS 스크립트를 미리 로드(마운트 시 호출) — 클릭 시 팝업이 제스처 안에서 열리도록. */
+export function preloadGoogle() {
+  if (googleClientId) void loadGis();
+}
+
+/**
+ * OAuth 토큰 발급(팝업). 팝업 차단을 피하려면 클릭 핸들러에서 동기적으로 호출해야 하므로
+ * 여기서는 await 없이 즉시 requestAccessToken 을 부른다(스크립트는 preloadGoogle 로 선로딩).
+ */
+export function getGoogleToken(scope: string): Promise<string> {
   return new Promise<string>((resolve, reject) => {
+    if (!googleClientId) {
+      reject(new Error("Google Client ID 미설정"));
+      return;
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const google = (window as any).google;
+    if (!google?.accounts?.oauth2) {
+      void loadGis(); // 다음 클릭을 위해 로드 시작
+      reject(new Error("구글 로그인 준비 중이에요. 잠깐 뒤 다시 눌러주세요."));
+      return;
+    }
     const client = google.accounts.oauth2.initTokenClient({
       client_id: googleClientId,
       scope,

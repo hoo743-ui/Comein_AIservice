@@ -11,6 +11,7 @@ import {
   GOOGLE_SCOPES,
   getGoogleToken,
   googleConfigured,
+  preloadGoogle,
 } from "@/lib/google";
 import { PageShell } from "@/components/workspace/page-shell";
 import { Badge } from "@/components/ui/badge";
@@ -42,6 +43,11 @@ export default function ContactsPage() {
   const [added, setAdded] = React.useState<Set<string>>(new Set());
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+
+  // 팝업 차단 방지: 구글 스크립트를 미리 로드해두고, 클릭 시 즉시 팝업.
+  React.useEffect(() => {
+    preloadGoogle();
+  }, []);
 
   // 실제 Google 연동(브라우저 OAuth). 키 없으면 데모 토글로 폴백.
   const connectGoogle = async (key: "googleCalendar" | "googleContacts") => {

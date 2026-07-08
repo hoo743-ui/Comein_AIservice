@@ -208,14 +208,22 @@ export default function CampusPage() {
             <span className="text-xs text-muted-foreground">가천대 · 데모</span>
           </div>
           {kakaoAvailable ? (
-            <div className="relative flex-1 overflow-hidden rounded-xl border border-border">
-              <KakaoMap
-                places={buildings}
-                focusId={focusId}
-                nextId={next?.buildingId ?? null}
-                onPick={setFocusId}
-              />
-            </div>
+            <KakaoMap
+              places={buildings}
+              focusId={focusId}
+              nextId={next?.buildingId ?? null}
+              onPick={setFocusId}
+              fallback={
+                <CampusMap
+                  buildings={buildings}
+                  focusId={focusId}
+                  nextId={next?.buildingId ?? null}
+                  origin={origin}
+                  target={nextBuilding ?? null}
+                  onPick={setFocusId}
+                />
+              }
+            />
           ) : (
             <CampusMap
               buildings={buildings}

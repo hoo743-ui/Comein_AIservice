@@ -42,16 +42,19 @@ export function KakaoMap({
   focusId,
   nextId,
   onPick,
+  fallback = null,
 }: {
   places: Place[];
   focusId: string | null;
   nextId: string | null;
   onPick: (id: string) => void;
+  fallback?: React.ReactNode;
 }) {
   const ref = React.useRef<HTMLDivElement>(null);
   const mapRef = React.useRef<any>(null);
   const markersRef = React.useRef<Record<string, any>>({});
   const [ready, setReady] = React.useState(false);
+  const [failed, setFailed] = React.useState(false);
 
   const located = React.useMemo(
     () => places.filter((p) => typeof p.lat === "number" && typeof p.lng === "number"),
@@ -64,24 +67,26 @@ export function KakaoMap({
     loadSdk()
       .then(() => {
         if (cancelled || !ref.current) return;
-        const kakao = window.kakao;
-        const center = new kakao.maps.LatLng(located[0].lat, located[0].lng);
-        const map = new kakao.maps.Map(ref.current, { center, level: 3 });
-        mapRef.current = map;
-        const bounds = new kakao.maps.LatLngBounds();
-        located.forEach((p) => {
-          const pos = new kakao.maps.LatLng(p.lat, p.lng);
-          bounds.extend(pos);
-          const marker = new kakao.maps.Marker({ position: pos, map, title: p.name });
-          kakao.maps.event.addListener(marker, "click", () => onPick(p.id));
-          markersRef.current[p.id] = marker;
-        });
-        if (located.length > 1) map.setBounds(bounds);
-        setReady(true);
+        try {
+          const kakao = window.kakao;
+          const center = new kakao.maps.LatLng(located[0].lat, located[0].lng);
+          const map = new kakao.maps.Map(ref.current, { center, level: 3 });
+          mapRef.current = map;
+          const bounds = new kakao.maps.LatLngBounds();
+          located.forEach((p) => {
+            const pos = new kakao.maps.LatLng(p.lat, p.lng);
+            bounds.extend(pos);
+            const marker = new kakao.maps.Marker({ position: pos, map, title: p.name });
+            kakao.maps.event.addListener(marker, "click", () => onPick(p.id));
+            markersRef.current[p.id] = marker;
+          });
+          if (located.length > 1) map.setBounds(bounds);
+          setReady(true);
+        } catch {
+          setFailed(true);
+        }
       })
-      .catch(() => {
-        /* 로드 실패 시 폴백은 호출부에서 처리 */
-      });
+      .catch(() => setFailed(true));
     return () => {
       cancelled = true;
     };
@@ -95,7 +100,7 @@ export function KakaoMap({
     if (target) mapRef.current.panTo(new window.kakao.maps.LatLng(target.lat, target.lng));
   }, [focusId, nextId, ready, located]);
 
-  if (!KEY || located.length === 0) return null;
+  if (!KEY || located.length === 0 || failed) return <>{fallback}</>;
 
-  return <div ref={ref} className="h-full w-full rounded-xl" />;
+  return <div ref={ref} className="w-full flex-1 rounded-xl border border-border" />;
 }
