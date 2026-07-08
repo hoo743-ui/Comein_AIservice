@@ -174,7 +174,7 @@ export default function CalendarPage() {
               <Button variant="outline" size="icon" onClick={goPrev} aria-label="이전 달">
                 <ChevronLeft className="size-4" />
               </Button>
-              <h2 className="min-w-[7rem] text-center font-display text-lg font-semibold text-foreground">
+              <h2 className="min-w-[7.5rem] text-center text-lg font-semibold tabular-nums tracking-tight text-foreground">
                 {monthLabel}
               </h2>
               <Button variant="outline" size="icon" onClick={goNext} aria-label="다음 달">
