@@ -13,6 +13,7 @@ export interface Schedule {
   start: string; // ISO
   end?: string; // ISO
   location?: string;
+  placeId?: ID; // 좌표 있는 장소 연결(지도·이동시간)
   status: ScheduleStatus; // AI 제안(pending) → 사용자 확정(confirmed)
 }
 
@@ -64,12 +65,15 @@ export interface Conversation {
   pinned?: boolean;
 }
 
-// ── 캠퍼스 모드 (한 캠퍼스 기준, 스키매틱 좌표 0~100) ──
-export interface Building {
+// ── 장소 (범용) — 좌표 있는 위치. 캠퍼스 건물/사옥/사용자 장소 모두. 스키매틱 0~100(추후 lat/lng) ──
+export type PlaceCategory = "campus" | "office" | "custom";
+
+export interface Place {
   id: ID;
-  name: string; // "AI공학관"
-  code: string; // "AI"
-  x: number; // 0~100 (실제 지도 연동 시 lat/lng 로 교체)
+  name: string; // "AI공학관", "본사 3층 대회의실"
+  code?: string; // 캠퍼스 건물 약칭 등
+  category: PlaceCategory;
+  x: number; // 0~100
   y: number; // 0~100
 }
 

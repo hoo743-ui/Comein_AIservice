@@ -3,9 +3,9 @@
 import { create } from "zustand";
 
 import type {
-  Building,
   ClassEntry,
   Conversation,
+  Place,
   ID,
   Meeting,
   Memo,
@@ -34,9 +34,9 @@ export function overlaps(a: Schedule, b: Schedule): boolean {
 
 // ── 시드 데이터 (백엔드 연결 전 데모용, 고정 ISO로 SSR 안전) ──
 const seedSchedules: Schedule[] = [
-  { id: "s1", title: "교수님 미팅", start: "2026-07-08T15:00:00", end: "2026-07-08T16:00:00", location: "공학관 401", status: "confirmed" },
+  { id: "s1", title: "교수님 미팅", start: "2026-07-08T15:00:00", end: "2026-07-08T16:00:00", location: "공학관 401", placeId: "b_eng", status: "confirmed" },
   { id: "s2", title: "팀 스탠드업", start: "2026-07-08T17:30:00", end: "2026-07-08T18:00:00", location: "온라인", status: "confirmed" },
-  { id: "s3", title: "캡스톤 중간발표", start: "2026-07-09T14:00:00", end: "2026-07-09T15:30:00", location: "대강당", status: "confirmed" },
+  { id: "s3", title: "캡스톤 중간발표", start: "2026-07-09T14:00:00", end: "2026-07-09T15:30:00", location: "대강당", placeId: "b_vis", status: "confirmed" },
   { id: "s4", title: "스터디", start: "2026-07-10T19:00:00", end: "2026-07-10T21:00:00", location: "스터디카페", status: "pending" },
 ];
 
@@ -66,15 +66,18 @@ const seedMeetings: Meeting[] = [
   },
 ];
 
-// 캠퍼스 (한 캠퍼스 기준 목업 · 스키매틱 좌표 0~100). 실제 지도 연동 시 x/y→lat/lng.
-const seedBuildings: Building[] = [
-  { id: "b_ai", name: "AI공학관", code: "AI", x: 30, y: 36 },
-  { id: "b_eng", name: "공학관", code: "E", x: 55, y: 24 },
-  { id: "b_vis", name: "비전타워", code: "V", x: 72, y: 54 },
-  { id: "b_lib", name: "중앙도서관", code: "LIB", x: 46, y: 60 },
-  { id: "b_art", name: "예술체육관", code: "ART", x: 19, y: 72 },
-  { id: "b_stu", name: "학생회관", code: "STU", x: 50, y: 82 },
-  { id: "b_sci", name: "자연과학관", code: "SCI", x: 78, y: 30 },
+// 장소 (범용 · 스키매틱 좌표 0~100). 캠퍼스 건물 + 직장인 프리셋 예시. 실제 지도 연동 시 x/y→lat/lng.
+const seedPlaces: Place[] = [
+  { id: "b_ai", name: "AI공학관", code: "AI", category: "campus", x: 30, y: 36 },
+  { id: "b_eng", name: "공학관", code: "E", category: "campus", x: 55, y: 24 },
+  { id: "b_vis", name: "비전타워", code: "V", category: "campus", x: 72, y: 54 },
+  { id: "b_lib", name: "중앙도서관", code: "LIB", category: "campus", x: 46, y: 60 },
+  { id: "b_art", name: "예술체육관", code: "ART", category: "campus", x: 19, y: 72 },
+  { id: "b_stu", name: "학생회관", code: "STU", category: "campus", x: 50, y: 82 },
+  { id: "b_sci", name: "자연과학관", code: "SCI", category: "campus", x: 78, y: 30 },
+  // 직장인 프리셋 예시 (같은 스키매틱 위 다른 지점 — 데모)
+  { id: "o_hq", name: "본사 3층 대회의실", category: "office", x: 62, y: 20 },
+  { id: "o_client", name: "강남 거래처", category: "office", x: 84, y: 68 },
 ];
 
 const seedTimetable: ClassEntry[] = [
@@ -137,7 +140,7 @@ interface WorkspaceState {
   todos: Todo[];
   memos: Memo[];
   meetings: Meeting[];
-  buildings: Building[];
+  places: Place[];
   timetable: ClassEntry[];
   settings: Settings;
   commandOpen: boolean;
@@ -184,7 +187,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   todos: seedTodos,
   memos: seedMemos,
   meetings: seedMeetings,
-  buildings: seedBuildings,
+  places: seedPlaces,
   timetable: seedTimetable,
   settings: { name: "나", language: "ko", weekStart: "mon", notifications: true, autoConfirm: false },
   commandOpen: false,

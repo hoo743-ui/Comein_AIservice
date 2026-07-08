@@ -8,7 +8,7 @@ import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { PageShell } from "@/components/workspace/page-shell";
 import { Badge } from "@/components/ui/badge";
-import type { Building, ClassEntry, Weekday } from "@/lib/types";
+import type { Place, Weekday } from "@/lib/types";
 
 const DAYS: { key: Weekday; label: string }[] = [
   { key: "mon", label: "월" },
@@ -31,7 +31,11 @@ const walkMinutes = (a: { x: number; y: number }, b: { x: number; y: number }) =
 
 export default function CampusPage() {
   const hydrated = useHydrated();
-  const buildings = useWorkspace((s) => s.buildings);
+  const places = useWorkspace((s) => s.places);
+  const buildings = React.useMemo(
+    () => places.filter((p) => p.category === "campus"),
+    [places]
+  );
   const timetable = useWorkspace((s) => s.timetable);
 
   const base = hydrated ? new Date() : new Date(2026, 6, 8, 10, 15); // 데모: 수 10:15
@@ -224,11 +228,11 @@ function CampusMap({
   target,
   onPick,
 }: {
-  buildings: Building[];
+  buildings: Place[];
   focusId: string | null;
   nextId: string | null;
   origin: { x: number; y: number };
-  target: Building | null;
+  target: Place | null;
   onPick: (id: string) => void;
 }) {
   return (

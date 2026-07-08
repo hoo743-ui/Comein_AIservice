@@ -7,6 +7,8 @@ import {
   ArrowUp,
   Calendar,
   CheckSquare,
+  Footprints,
+  MapPin,
   MessageCircle,
   NotebookPen,
   Users,
@@ -16,6 +18,7 @@ import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { useT } from "@/lib/i18n";
 import { fmtDate, fmtTime } from "@/lib/format";
+import { CURRENT_LOC, shouldLeaveNow, walkMinutes } from "@/lib/geo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import type { Message } from "@/lib/types";
@@ -192,16 +195,24 @@ function EntityCard({ card }: { card: NonNullable<Message["card"]> }) {
   const schedules = useWorkspace((s) => s.schedules);
   const todos = useWorkspace((s) => s.todos);
   const memos = useWorkspace((s) => s.memos);
+  const places = useWorkspace((s) => s.places);
   const confirmSchedule = useWorkspace((s) => s.confirmSchedule);
   const removeSchedule = useWorkspace((s) => s.removeSchedule);
   const conflictsFor = useWorkspace((s) => s.conflictsFor);
+  const hydrated = useHydrated();
 
   if (card.kind === "schedule") {
     const s = schedules.find((x) => x.id === card.id);
     if (!s) return <Dismissed>일정이 취소되었습니다.</Dismissed>;
     const conflicts = conflictsFor(s.id);
+    const place = s.placeId ? places.find((p) => p.id === s.placeId) : undefined;
+    const travel = place ? walkMinutes(CURRENT_LOC, place) : null;
+    const leaveNow =
+      place && travel !== null && hydrated
+        ? shouldLeaveNow(+new Date(s.start), Date.now(), travel)
+        : false;
     return (
-      <div className="max-w-[85%] rounded-xl border border-border bg-card p-4 shadow-soft">
+      <div className="elevated max-w-[85%] rounded-xl border border-border p-4">
         <div className="flex items-center gap-2">
           <Calendar className="size-4 text-primary" />
           <span className="text-sm font-semibold text-foreground">{s.title}</span>
@@ -214,6 +225,24 @@ function EntityCard({ card }: { card: NonNullable<Message["card"]> }) {
           {s.end ? `–${fmtTime(s.end)}` : ""}
           {s.location ? ` · ${s.location}` : ""}
         </p>
+        {place && (
+          <p className="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
+            <span className="inline-flex items-center gap-1 text-muted-foreground">
+              <MapPin className="size-3.5" />
+              {place.name}
+            </span>
+            {travel !== null && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 font-medium text-foreground">
+                <Footprints className="size-3" />도보 {travel}분
+              </span>
+            )}
+            {leaveNow && (
+              <span className="rounded-full bg-primary/12 px-2 py-0.5 font-semibold text-primary">
+                지금 출발
+              </span>
+            )}
+          </p>
+        )}
         {conflicts.length > 0 && (
           <p className="mt-2 rounded-md bg-destructive/10 px-2 py-1 text-xs font-medium text-destructive">
             ⚠ {conflicts[0].title}와(과) 시간이 겹칩니다.

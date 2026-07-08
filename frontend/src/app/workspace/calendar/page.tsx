@@ -7,6 +7,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  Footprints,
   MapPin,
   Plus,
   Trash2,
@@ -19,6 +20,7 @@ import { Badge } from "@/components/ui/badge";
 import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
 import { fmtTime, fmtDate, isSameDay } from "@/lib/format";
+import { CURRENT_LOC, walkMinutes } from "@/lib/geo";
 import { cn } from "@/lib/utils";
 import type { Schedule } from "@/lib/types";
 
@@ -82,6 +84,7 @@ export default function CalendarPage() {
   const removeSchedule = useWorkspace((s) => s.removeSchedule);
   const confirmSchedule = useWorkspace((s) => s.confirmSchedule);
   const conflictsFor = useWorkspace((s) => s.conflictsFor);
+  const places = useWorkspace((s) => s.places);
 
   const hydrated = useHydrated();
 
@@ -298,6 +301,8 @@ export default function CalendarPage() {
             <ul className="flex flex-col gap-2">
               {sorted.map((s) => {
                 const hasConflict = conflictsFor(s.id).length > 0;
+                const place = s.placeId ? places.find((p) => p.id === s.placeId) : undefined;
+                const travel = place ? walkMinutes(CURRENT_LOC, place) : null;
                 return (
                   <li
                     key={s.id}
@@ -342,6 +347,11 @@ export default function CalendarPage() {
                         <Badge className="bg-amber-500/15 text-amber-600 dark:text-amber-400">
                           <AlertTriangle className="size-3" />
                           일정 충돌
+                        </Badge>
+                      )}
+                      {travel !== null && (
+                        <Badge variant="muted">
+                          <Footprints className="size-3" />도보 {travel}분
                         </Badge>
                       )}
                       {s.status === "pending" && (
