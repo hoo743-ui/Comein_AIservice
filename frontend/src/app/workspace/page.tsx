@@ -21,6 +21,7 @@ import { fmtDate, fmtTime } from "@/lib/format";
 import { CURRENT_LOC, shouldLeaveNow, walkMinutes } from "@/lib/geo";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { NotificationBell } from "@/components/layout/notification-bell";
 import type { Message } from "@/lib/types";
 
 /**
@@ -58,11 +59,14 @@ export default function ChatHome() {
         <h1 className="truncate text-sm font-semibold text-foreground">
           {active?.title ?? "Chat"}
         </h1>
-        {hydrated && (
-          <span className="rounded-full border border-border/60 bg-secondary/70 px-3 py-1 text-xs font-medium text-secondary-foreground">
-            {fmtDate(new Date())}
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {hydrated && (
+            <span className="rounded-full border border-border/60 bg-secondary/70 px-3 py-1 text-xs font-medium text-secondary-foreground">
+              {fmtDate(new Date())}
+            </span>
+          )}
+          <NotificationBell />
+        </div>
       </header>
 
       {/* 대화 영역 */}

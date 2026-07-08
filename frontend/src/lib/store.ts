@@ -160,6 +160,7 @@ interface WorkspaceState {
   connections: Connections;
   settings: Settings;
   commandOpen: boolean;
+  dismissedNotifs: ID[];
 
   // Chat
   newConversation: () => ID;
@@ -195,6 +196,10 @@ interface WorkspaceState {
   // Command palette
   setCommandOpen: (v: boolean) => void;
 
+  // Notifications (닫은 알림 id 기억 — 세션 내 유지)
+  dismissNotif: (id: ID) => void;
+  dismissNotifs: (ids: ID[]) => void;
+
   // Connections
   toggleConnection: (key: keyof Connections) => void;
   setConnection: (key: keyof Connections, value: boolean) => void;
@@ -214,6 +219,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   connections: { googleCalendar: true, googleContacts: true, outlook: false },
   settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false },
   commandOpen: false,
+  dismissedNotifs: [],
 
   newConversation: () => {
     const id = uid();
@@ -316,6 +322,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
 
   setCommandOpen: (v) => set({ commandOpen: v }),
+
+  dismissNotif: (id) =>
+    set((st) =>
+      st.dismissedNotifs.includes(id)
+        ? st
+        : { dismissedNotifs: [...st.dismissedNotifs, id] }
+    ),
+  dismissNotifs: (ids) =>
+    set((st) => ({
+      dismissedNotifs: [...new Set([...st.dismissedNotifs, ...ids])],
+    })),
 
   toggleConnection: (key) =>
     set((st) => ({ connections: { ...st.connections, [key]: !st.connections[key] } })),

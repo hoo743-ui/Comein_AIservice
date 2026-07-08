@@ -9,6 +9,77 @@
 
 ---
 
+## 0. Product Vision & North Star
+
+> **북극성.** 모든 화면·기능·디자인 결정은 이 문서를 기준으로 판단한다.
+> 프로토타입: `frontend/src/app/reimagine/` (워크플로우 중심 · 문턱 인트로 · 슬림 레일 + 단일 캔버스).
+> **시각 언어 규격(토큰·타이포·색·여백·모션): `frontend/src/app/reimagine/DESIGN.md`** — "feel expensive, not look expensive".
+
+### Core Principle
+
+> **Comein은 일을 *관리*하게 만드는 도구가 아니라, 일이 *스스로 정리되게* 만드는 공간이다.**
+> Comein doesn't help people manage work. It helps work organize itself.
+
+> **"생각은 흩어집니다. 질서는 만들어집니다." (Scattered thoughts become structured flow.)**
+
+Comein은 또 하나의 챗봇도, 대시보드도, 노트앱도 아니다. **생각하는 워크스페이스(thinking workspace)** 다 — 흩어진 생각이 자연스럽게 정리된 일이 되는 곳.
+
+### Design North Star
+
+모든 화면은 하나의 질문에 답해야 한다:
+
+> **"이것은 사용자가 *생각하도록* 돕는가, 아니면 *소프트웨어를 조작하게* 만드는가?"**
+> 소프트웨어를 조작하게 만든다면 — 잘못된 디자인이다. 다시 만든다.
+
+### Product Philosophy
+
+- 사용자는 소프트웨어를 조작한다고 느끼면 안 된다 → **차분한 공간에 들어와, AI가 주변을 조용히 정리해주는** 느낌.
+- **AI는 인터페이스를 지배하지 않는다.** 조용히 돕는다. 인터페이스는 사라지고, 사용자의 사고가 초점이 된다.
+- **럭셔리는 절제에서 온다** — 장식·그라디언트·글래스가 아니라 여백·타이포·모션·구성에서. Timeless · Calm · Editorial · Intentional.
+
+### The Product Journey — 세 개의 완전히 다른 순간
+
+1. **Landing** — 철학을 소개한다. 기능 설명 X. "Comein이 무엇인가"만 감정적으로. *갤러리에 들어서는 느낌.* 초점은 정체성.
+2. **Experience** — Comein이 *어떻게 생각하는지* 보여준다. 또 하나의 챗 UI가 아니라 **변환(transformation)**을 보여줌: `생각 → AI 이해 → 회의 → 캘린더 → Todo → 메모 → 워크스페이스`. "내 생각이 자동으로 정리되는구나"를 즉시 이해. 경험을 판다, 인터페이스가 아니라.
+3. **Workspace** — 실제로 일하는 곳(시간을 보내는 곳). *감탄시키는 곳이 아님.* 참신함보다 **명확함**. 즉시 배울 만큼 익숙하되, 틀림없이 Comein다운. 인지 부하 최소, AI가 조용히 정리. 살아있되 산만하지 않게.
+
+### Workspace Principles
+
+- **중심은 대화가 아니라 워크플로우.** 대화는 여러 입력 방식 중 하나일 뿐.
+- Calendar · Todo · Meetings · Notes · Files · Projects · People 는 **사용자의 의도(intention)**로 연결된다. AI가 의도를 조용히 실행으로 바꾼다.
+
+### Emotional Goal
+
+- 들어올 때: *"내 사고의 공간에 들어왔다."*
+- 쓰고 난 뒤: *"나는 아무것도 정리하지 않았는데, 알아서 정리되어 있었다."* — **그 느낌이 곧 제품이다.**
+
+### Decision Framework — 기능 구현 전 자문
+
+1. 이것이 **생각의 수고를 줄이는가?**
+2. 일이 **스스로 정리되게** 하는가?
+3. **차분한가?**
+4. 5년 뒤에도 **프리미엄**으로 느껴질까?
+5. **틀림없이 Comein인가?**
+
+하나라도 "아니오"면 다시 디자인한다. 다른 AI 제품이 있다고 해서 기능을 따라 넣지 않는다.
+
+### Visual Keywords
+
+Calm · Flow · Thought · Focus · Space · Editorial · Premium · Invisible AI · Natural Motion · Soft Depth · Timeless
+
+### Never / Always
+
+- ❌ ChatGPT/Copilot/Notion 클론 · 대시보드 · 엔터프라이즈/어드민 패널 · 기능 나열
+- ✓ Calm · Human · Emotional · Contextual · Elegant · Understandable · Intelligent · Minimal · Memorable
+
+### Success Metric
+
+- 랜딩을 보면 → **철학**을 기억한다.
+- Experience를 보면 → **변환**을 이해한다.
+- 워크스페이스를 쓰면 → 소프트웨어를 의식하지 않는다. 그냥 **생각한다.**
+
+---
+
 ## 1. 프로젝트 개요
 
 ### 한 문장 정의

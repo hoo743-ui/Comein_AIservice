@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { MessageCircle, Plus, Search, Settings, Star } from "lucide-react";
+import { DoorOpen, MessageCircle, Plus, Search, Settings, Star } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/brand/logo";
@@ -95,9 +95,17 @@ export function Sidebar() {
 
   return (
     <aside className="glass-panel flex h-full w-64 shrink-0 flex-col border-r border-sidebar-border/70">
-      <div className="flex h-16 items-center px-5">
+      <div className="flex h-16 items-center justify-between px-5">
         <Link href="/workspace" className="transition-opacity hover:opacity-80">
           <Logo subtitle />
+        </Link>
+        <Link
+          href="/"
+          aria-label={t("sb.home")}
+          title={t("sb.home")}
+          className="flex size-9 items-center justify-center rounded-lg text-muted-foreground transition-colors hover:bg-accent hover:text-primary"
+        >
+          <DoorOpen className="size-[18px]" />
         </Link>
       </div>
 

@@ -13,6 +13,7 @@ const DICT = {
   "sb.noChats": { ko: "대화가 없어요", en: "No conversations" },
   "sb.settings": { ko: "설정", en: "Settings" },
   "sb.workspace": { ko: "내 워크스페이스", en: "My workspace" },
+  "sb.home": { ko: "첫 화면으로", en: "Back to start" },
 
   // 랜딩
   "land.eyebrow": { ko: "당신의 AI 워크스페이스", en: "Your AI Workspace" },

@@ -6,6 +6,7 @@ import { Clock, Footprints, MapPin, Navigation } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/store";
 import { useHydrated } from "@/lib/use-hydrated";
+import { realWalkMinutes, type LatLng } from "@/lib/geo";
 import { PageShell } from "@/components/workspace/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { KakaoMap, kakaoAvailable } from "@/components/workspace/kakao-map";
@@ -19,16 +20,13 @@ const DAYS: { key: Weekday; label: string }[] = [
   { key: "fri", label: "금" },
 ];
 const DAY_ORDER = DAYS.map((d) => d.key);
-const GATE = { x: 50, y: 96 }; // 정문(경로 기본 출발점)
+const GATE = { x: 50, y: 96 }; // 정문(경로 기본 출발점 · 스키매틱)
+const GATE_LATLNG = { lat: 37.4501, lng: 127.129, label: "정문" }; // 실지도(카카오) 출발점
 
 const toMin = (t: string) => {
   const [h, m] = t.split(":").map(Number);
   return h * 60 + m;
 };
-const dist = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-  Math.hypot(a.x - b.x, a.y - b.y);
-const walkMinutes = (a: { x: number; y: number }, b: { x: number; y: number }) =>
-  Math.max(1, Math.round(dist(a, b) * 0.7));
 
 export default function CampusPage() {
   const hydrated = useHydrated();
@@ -80,7 +78,30 @@ export default function CampusPage() {
     return prev ? buildingOf(prev.buildingId) : undefined;
   }, [next, week, buildingOf]);
   const origin = originBuilding ?? GATE;
-  const walk = nextBuilding ? walkMinutes(origin, nextBuilding) : null;
+
+  // 출발점(lat/lng): 직전 강의 건물 → 없으면 정문. 실제 거리·경로선·시간 계산의 기준.
+  const originName = originBuilding?.name ?? "정문";
+  const originLatLng: LatLng & { label: string } =
+    originBuilding && typeof originBuilding.lat === "number" && typeof originBuilding.lng === "number"
+      ? { lat: originBuilding.lat, lng: originBuilding.lng, label: originBuilding.name }
+      : GATE_LATLNG;
+
+  // 건물별 실제 도보 시간(분) — 출발점 기준. 좌표 없으면 null.
+  const latLngOf = React.useCallback(
+    (p?: Place): LatLng | null =>
+      p && typeof p.lat === "number" && typeof p.lng === "number" ? { lat: p.lat, lng: p.lng } : null,
+    []
+  );
+  const walkTo = React.useCallback(
+    (p?: Place) => realWalkMinutes(originLatLng, latLngOf(p)),
+    [originLatLng, latLngOf]
+  );
+
+  // 현재 "선택된 목적지" = 지도/시간표에서 포커스한 건물, 없으면 다음 강의 건물.
+  // 시간·경로선이 선택에 따라 각각 다르게 연동된다.
+  const focusedBuilding = focusId ? buildingOf(focusId) : undefined;
+  const destBuilding = focusedBuilding ?? nextBuilding;
+  const walk = walkTo(destBuilding);
 
   return (
     <PageShell
@@ -115,14 +136,14 @@ export default function CampusPage() {
             </div>
           </div>
           <div className="flex items-center gap-3">
-            {walk !== null && (
+            {walk !== null && destBuilding && (
               <div className="rounded-xl border border-border bg-muted/50 px-4 py-2 text-center">
                 <p className="flex items-center justify-center gap-1 text-lg font-bold tabular-nums text-foreground">
                   <Footprints className="size-4 text-primary" />
                   {walk}분
                 </p>
                 <p className="text-[11px] text-muted-foreground">
-                  {originBuilding ? `${originBuilding.name}에서` : "정문에서"} 도보
+                  {originName} → {destBuilding.name}
                 </p>
               </div>
             )}
@@ -168,6 +189,7 @@ export default function CampusPage() {
             {dayClasses.map((c) => {
               const b = buildingOf(c.buildingId);
               const isNext = next?.id === c.id;
+              const mins = walkTo(b); // 출발점 → 이 건물 실제 도보(분)
               return (
                 <button
                   key={c.id}
@@ -189,6 +211,15 @@ export default function CampusPage() {
                       {b?.name} · {c.room}
                     </p>
                   </div>
+                  {mins !== null && (
+                    <span
+                      title={`${originName}에서 도보 약 ${mins}분`}
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border/70 bg-muted/50 px-2 py-0.5 text-[11px] font-semibold tabular-nums text-muted-foreground"
+                    >
+                      <Footprints className="size-3 text-primary" />
+                      {mins}분
+                    </span>
+                  )}
                   {isNext && <Badge>다음</Badge>}
                 </button>
               );
@@ -212,6 +243,7 @@ export default function CampusPage() {
               places={buildings}
               focusId={focusId}
               nextId={next?.buildingId ?? null}
+              origin={originLatLng}
               onPick={setFocusId}
               fallback={
                 <CampusMap
@@ -219,7 +251,7 @@ export default function CampusPage() {
                   focusId={focusId}
                   nextId={next?.buildingId ?? null}
                   origin={origin}
-                  target={nextBuilding ?? null}
+                  target={destBuilding ?? null}
                   onPick={setFocusId}
                 />
               }
