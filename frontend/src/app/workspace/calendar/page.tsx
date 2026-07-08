@@ -66,6 +66,7 @@ interface DraftState {
   start: string;
   end: string;
   location: string;
+  placeId: string;
 }
 
 const emptyDraft = (date: string): DraftState => ({
@@ -75,6 +76,7 @@ const emptyDraft = (date: string): DraftState => ({
   start: "09:00",
   end: "",
   location: "",
+  placeId: "",
 });
 
 export default function CalendarPage() {
@@ -125,6 +127,7 @@ export default function CalendarPage() {
       start: toTimeInput(st),
       end: s.end ? toTimeInput(new Date(s.end)) : "",
       location: s.location ?? "",
+      placeId: s.placeId ?? "",
     });
     setModalOpen(true);
   };
@@ -138,6 +141,7 @@ export default function CalendarPage() {
       start: combineISO(draft.date, draft.start),
       end: draft.end ? combineISO(draft.date, draft.end) : undefined,
       location: draft.location.trim() || undefined,
+      placeId: draft.placeId || undefined,
       status: "pending",
     };
     if (draft.id) {
@@ -147,6 +151,7 @@ export default function CalendarPage() {
         start: payload.start,
         end: payload.end,
         location: payload.location,
+        placeId: payload.placeId,
       });
     } else {
       addSchedule(payload);
@@ -434,6 +439,20 @@ export default function CalendarPage() {
               onChange={(e) => setDraft((d) => ({ ...d, location: e.target.value }))}
               placeholder="예: 공학관 401"
             />
+          </Field>
+          <Field label="지도 장소 (이동시간 안내)">
+            <select
+              className={inputClass}
+              value={draft.placeId}
+              onChange={(e) => setDraft((d) => ({ ...d, placeId: e.target.value }))}
+            >
+              <option value="">연결 안 함</option>
+              {places.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.name}
+                </option>
+              ))}
+            </select>
           </Field>
         </div>
       </Modal>

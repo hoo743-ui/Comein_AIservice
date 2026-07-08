@@ -39,7 +39,8 @@ export default function AuthLayout({ children }: { children: React.ReactNode }) 
           aria-hidden
           className="animate-sheen pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,transparent_42%,rgba(255,255,255,0.14)_50%,transparent_58%)]"
         />
-        <div className="absolute inset-0 bg-gradient-to-t from-background via-background/30 to-background/10" />
+        {/* 배너를 더 투명하게 — 사진(바람 모션)이 더 보이도록, 하단만 텍스트용 스크림 */}
+        <div className="absolute inset-0 bg-gradient-to-t from-background/80 via-background/10 to-background/25" />
         <div className="absolute inset-0 flex flex-col justify-between p-14">
           <span className="text-sm font-medium tracking-wide text-foreground/70">
             당신의 AI 워크스페이스

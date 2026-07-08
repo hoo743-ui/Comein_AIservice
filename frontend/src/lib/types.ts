@@ -73,8 +73,10 @@ export interface Place {
   name: string; // "AI공학관", "본사 3층 대회의실"
   code?: string; // 캠퍼스 건물 약칭 등
   category: PlaceCategory;
-  x: number; // 0~100
+  x: number; // 0~100 (스키매틱 맵)
   y: number; // 0~100
+  lat?: number; // 실지도(카카오) 연동용 — 있으면 실제 지도 사용
+  lng?: number;
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";

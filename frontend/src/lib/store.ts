@@ -68,16 +68,17 @@ const seedMeetings: Meeting[] = [
 
 // 장소 (범용 · 스키매틱 좌표 0~100). 캠퍼스 건물 + 직장인 프리셋 예시. 실제 지도 연동 시 x/y→lat/lng.
 const seedPlaces: Place[] = [
-  { id: "b_ai", name: "AI공학관", code: "AI", category: "campus", x: 30, y: 36 },
-  { id: "b_eng", name: "공학관", code: "E", category: "campus", x: 55, y: 24 },
-  { id: "b_vis", name: "비전타워", code: "V", category: "campus", x: 72, y: 54 },
-  { id: "b_lib", name: "중앙도서관", code: "LIB", category: "campus", x: 46, y: 60 },
-  { id: "b_art", name: "예술체육관", code: "ART", category: "campus", x: 19, y: 72 },
-  { id: "b_stu", name: "학생회관", code: "STU", category: "campus", x: 50, y: 82 },
-  { id: "b_sci", name: "자연과학관", code: "SCI", category: "campus", x: 78, y: 30 },
-  // 직장인 프리셋 예시 (같은 스키매틱 위 다른 지점 — 데모)
-  { id: "o_hq", name: "본사 3층 대회의실", category: "office", x: 62, y: 20 },
-  { id: "o_client", name: "강남 거래처", category: "office", x: 84, y: 68 },
+  // 캠퍼스(가천대 글로벌캠퍼스 근사 좌표 — 실지도 연동 대비)
+  { id: "b_ai", name: "AI공학관", code: "AI", category: "campus", x: 30, y: 36, lat: 37.4536, lng: 127.1284 },
+  { id: "b_eng", name: "공학관", code: "E", category: "campus", x: 55, y: 24, lat: 37.4541, lng: 127.1301 },
+  { id: "b_vis", name: "비전타워", code: "V", category: "campus", x: 72, y: 54, lat: 37.4519, lng: 127.1309 },
+  { id: "b_lib", name: "중앙도서관", code: "LIB", category: "campus", x: 46, y: 60, lat: 37.4522, lng: 127.1293 },
+  { id: "b_art", name: "예술체육관", code: "ART", category: "campus", x: 19, y: 72, lat: 37.4512, lng: 127.1278 },
+  { id: "b_stu", name: "학생회관", code: "STU", category: "campus", x: 50, y: 82, lat: 37.4508, lng: 127.1296 },
+  { id: "b_sci", name: "자연과학관", code: "SCI", category: "campus", x: 78, y: 30, lat: 37.4538, lng: 127.1312 },
+  // 직장인 프리셋 예시 (강남 근사 — 데모)
+  { id: "o_hq", name: "본사 3층 대회의실", category: "office", x: 62, y: 20, lat: 37.4998, lng: 127.0364 },
+  { id: "o_client", name: "강남 거래처", category: "office", x: 84, y: 68, lat: 37.5045, lng: 127.049 },
 ];
 
 const seedTimetable: ClassEntry[] = [
@@ -123,10 +124,12 @@ function interpret(text: string): Interpretation {
 
 // ── 설정 ──
 export type Language = "ko" | "en";
+export type Mode = "student" | "office" | "general";
 
 export interface Settings {
   name: string;
   language: Language;
+  mode: Mode; // 사용 유형 — 기본 장소 프리셋/라벨에 반영
   weekStart: "sun" | "mon";
   notifications: boolean;
   autoConfirm: boolean; // AI 제안 일정을 자동 확정할지
@@ -189,7 +192,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   meetings: seedMeetings,
   places: seedPlaces,
   timetable: seedTimetable,
-  settings: { name: "나", language: "ko", weekStart: "mon", notifications: true, autoConfirm: false },
+  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false },
   commandOpen: false,
 
   newConversation: () => {

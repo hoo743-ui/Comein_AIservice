@@ -12,12 +12,13 @@ import {
   Sparkles,
   Sun,
   UserRound,
+  Users,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
 import { inputClass } from "@/components/ui/modal";
 import { PageShell } from "@/components/workspace/page-shell";
-import { useWorkspace, type Language } from "@/lib/store";
+import { useWorkspace, type Language, type Mode } from "@/lib/store";
 import { useT } from "@/lib/i18n";
 
 export default function SettingsPage() {
@@ -36,6 +37,11 @@ export default function SettingsPage() {
   const langs: { key: Language; label: string }[] = [
     { key: "ko", label: t("set.korean") },
     { key: "en", label: t("set.english") },
+  ];
+  const modes: { key: Mode; label: string }[] = [
+    { key: "student", label: t("set.modeStudent") },
+    { key: "office", label: t("set.modeOffice") },
+    { key: "general", label: t("set.modeGeneral") },
   ];
 
   return (
@@ -74,6 +80,30 @@ export default function SettingsPage() {
                     )}
                   >
                     {l.label}
+                  </button>
+                );
+              })}
+            </div>
+          </Row>
+        </Section>
+
+        <Section icon={<Users className="size-4" />} title={t("set.mode")} desc={t("set.modeDesc")}>
+          <Row label={t("set.modeRow")} desc={t("set.modeRowDesc")}>
+            <div className="flex gap-2">
+              {modes.map((m) => {
+                const active = settings.mode === m.key;
+                return (
+                  <button
+                    key={m.key}
+                    onClick={() => updateSettings({ mode: m.key })}
+                    className={cn(
+                      "rounded-lg border px-4 py-2 text-sm font-medium transition-colors",
+                      active
+                        ? "border-primary bg-primary/10 text-primary"
+                        : "border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                    )}
+                  >
+                    {m.label}
                   </button>
                 );
               })}
