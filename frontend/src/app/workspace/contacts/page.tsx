@@ -5,6 +5,13 @@ import { CalendarDays, CalendarPlus, Check, Contact as ContactIcon, Mail, Phone,
 
 import { cn } from "@/lib/utils";
 import { useWorkspace } from "@/lib/store";
+import {
+  fetchGoogleContacts,
+  fetchGoogleEvents,
+  GOOGLE_SCOPES,
+  getGoogleToken,
+  googleConfigured,
+} from "@/lib/google";
 import { PageShell } from "@/components/workspace/page-shell";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -27,10 +34,49 @@ export default function ContactsPage() {
   const contacts = useWorkspace((s) => s.contacts);
   const connections = useWorkspace((s) => s.connections);
   const toggleConnection = useWorkspace((s) => s.toggleConnection);
+  const setConnection = useWorkspace((s) => s.setConnection);
+  const addContact = useWorkspace((s) => s.addContact);
   const addSchedule = useWorkspace((s) => s.addSchedule);
 
   const [query, setQuery] = React.useState("");
   const [added, setAdded] = React.useState<Set<string>>(new Set());
+  const [busy, setBusy] = React.useState<string | null>(null);
+  const [error, setError] = React.useState<string | null>(null);
+
+  // 실제 Google 연동(브라우저 OAuth). 키 없으면 데모 토글로 폴백.
+  const connectGoogle = async (key: "googleCalendar" | "googleContacts") => {
+    setError(null);
+    setBusy(key);
+    try {
+      if (key === "googleCalendar") {
+        const token = await getGoogleToken(GOOGLE_SCOPES.calendar);
+        const events = await fetchGoogleEvents(token);
+        events.forEach((e) => {
+          if (e.start) {
+            addSchedule({ title: e.title, start: e.start, end: e.end, location: e.location, status: "confirmed" });
+          }
+        });
+      } else {
+        const token = await getGoogleToken(GOOGLE_SCOPES.contacts);
+        const list = await fetchGoogleContacts(token);
+        list.forEach((c) => addContact({ name: c.name, email: c.email, phone: c.phone, org: c.org, source: "google" }));
+      }
+      setConnection(key, true);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "연동에 실패했어요");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const onConnect = (key: keyof Connections) => {
+    const on = connections[key];
+    if (googleConfigured && (key === "googleCalendar" || key === "googleContacts") && !on) {
+      void connectGoogle(key);
+    } else {
+      toggleConnection(key); // 데모 토글 / 연결 해제
+    }
+  };
 
   const filtered = contacts.filter((c) => {
     const q = query.trim().toLowerCase();
@@ -63,7 +109,17 @@ export default function ContactsPage() {
     >
       {/* 연동 상태 */}
       <section>
-        <h2 className="mb-3 font-display text-lg font-semibold text-foreground">연동</h2>
+        <div className="mb-3 flex items-center justify-between gap-2">
+          <h2 className="font-display text-lg font-semibold text-foreground">연동</h2>
+          <span className="text-xs text-muted-foreground">
+            {googleConfigured ? "Google 실연동 활성 (OAuth)" : "데모 모드 · Client ID 설정 시 실연동"}
+          </span>
+        </div>
+        {error && (
+          <p className="mb-3 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive">
+            {error}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           {CONNECTIONS.map((c) => {
             const on = connections[c.key];
@@ -81,15 +137,17 @@ export default function ContactsPage() {
                 <button
                   role="switch"
                   aria-checked={on}
-                  onClick={() => toggleConnection(c.key)}
+                  disabled={busy === c.key}
+                  onClick={() => onConnect(c.key)}
                   className={cn(
-                    "inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors",
+                    "inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors disabled:opacity-60",
                     on ? "bg-primary" : "bg-muted"
                   )}
                 >
                   <span
                     className={cn(
                       "size-5 rounded-full bg-white shadow transition-transform",
+                      busy === c.key && "animate-pulse",
                       on ? "translate-x-5" : "translate-x-0"
                     )}
                   />

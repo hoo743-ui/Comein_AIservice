@@ -197,6 +197,8 @@ interface WorkspaceState {
 
   // Connections
   toggleConnection: (key: keyof Connections) => void;
+  setConnection: (key: keyof Connections, value: boolean) => void;
+  addContact: (c: Omit<Contact, "id">) => void;
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
@@ -317,6 +319,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   toggleConnection: (key) =>
     set((st) => ({ connections: { ...st.connections, [key]: !st.connections[key] } })),
+  setConnection: (key, value) =>
+    set((st) => ({ connections: { ...st.connections, [key]: value } })),
+  addContact: (c) => set((st) => ({ contacts: [{ ...c, id: uid() }, ...st.contacts] })),
 }));
 
 /** 클라이언트 마운트 여부 (인메모리 스토어의 런타임 값 표시 전 깜빡임/불일치 방지) */
