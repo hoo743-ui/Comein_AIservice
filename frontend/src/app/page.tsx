@@ -86,7 +86,7 @@ export default function Landing() {
 
       {/* 히어로 — 전체를 반투명 글래스 패널 위에 */}
       <main className="relative z-10 flex flex-1 items-center px-4 py-[6vh] sm:px-8">
-        <div className="mx-auto w-full max-w-6xl rounded-[2.5rem] border border-white/40 bg-card/40 p-8 shadow-soft backdrop-blur-2xl dark:border-white/10 dark:bg-white/5 sm:p-12">
+        <div className="mx-auto w-full max-w-6xl rounded-2xl border border-border bg-card/70 p-8 shadow-soft backdrop-blur-md sm:p-12">
           <div className="grid items-center gap-10 lg:grid-cols-2 lg:gap-12">
             {/* 좌: 카피 */}
             <motion.div
