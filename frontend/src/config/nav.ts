@@ -1,6 +1,7 @@
 import {
   Calendar,
   CheckSquare,
+  MapPin,
   MessageCircle,
   NotebookPen,
   Users,
@@ -21,4 +22,5 @@ export const NAV_ITEMS: NavItem[] = [
   { title: "Memo", href: "/workspace/memo", icon: NotebookPen, desc: "생각과 아이디어를 AI가 정리" },
   { title: "Todo", href: "/workspace/todo", icon: CheckSquare, desc: "할 일 생성 및 우선순위" },
   { title: "Meeting", href: "/workspace/meeting", icon: Users, desc: "회의 일정·요약·참석자" },
+  { title: "Campus", href: "/workspace/campus", icon: MapPin, desc: "시간표 기반 다음 강의 위치·경로" },
 ];

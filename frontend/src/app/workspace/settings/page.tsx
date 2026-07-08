@@ -40,7 +40,7 @@ export default function SettingsPage() {
 
   return (
     <PageShell title={t("set.title")} subtitle={t("set.subtitle")} icon={<SettingsIcon className="size-5" />}>
-      <div className="mx-auto max-w-3xl space-y-6">
+      <div className="mx-auto max-w-4xl space-y-5">
         <Section icon={<UserRound className="size-4" />} title={t("set.profile")} desc={t("set.profileDesc")}>
           <Row label={t("set.displayName")} desc={t("set.displayNameDesc")}>
             <div className="flex items-center gap-3">

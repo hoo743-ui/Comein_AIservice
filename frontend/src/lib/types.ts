@@ -63,3 +63,24 @@ export interface Conversation {
   messages: Message[];
   pinned?: boolean;
 }
+
+// ── 캠퍼스 모드 (한 캠퍼스 기준, 스키매틱 좌표 0~100) ──
+export interface Building {
+  id: ID;
+  name: string; // "AI공학관"
+  code: string; // "AI"
+  x: number; // 0~100 (실제 지도 연동 시 lat/lng 로 교체)
+  y: number; // 0~100
+}
+
+export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";
+
+export interface ClassEntry {
+  id: ID;
+  course: string; // "인공지능개론"
+  day: Weekday;
+  start: string; // "09:00"
+  end: string; // "10:30"
+  buildingId: ID;
+  room: string; // "401"
+}

@@ -3,6 +3,8 @@
 import { create } from "zustand";
 
 import type {
+  Building,
+  ClassEntry,
   Conversation,
   ID,
   Meeting,
@@ -64,6 +66,28 @@ const seedMeetings: Meeting[] = [
   },
 ];
 
+// 캠퍼스 (한 캠퍼스 기준 목업 · 스키매틱 좌표 0~100). 실제 지도 연동 시 x/y→lat/lng.
+const seedBuildings: Building[] = [
+  { id: "b_ai", name: "AI공학관", code: "AI", x: 30, y: 36 },
+  { id: "b_eng", name: "공학관", code: "E", x: 55, y: 24 },
+  { id: "b_vis", name: "비전타워", code: "V", x: 72, y: 54 },
+  { id: "b_lib", name: "중앙도서관", code: "LIB", x: 46, y: 60 },
+  { id: "b_art", name: "예술체육관", code: "ART", x: 19, y: 72 },
+  { id: "b_stu", name: "학생회관", code: "STU", x: 50, y: 82 },
+  { id: "b_sci", name: "자연과학관", code: "SCI", x: 78, y: 30 },
+];
+
+const seedTimetable: ClassEntry[] = [
+  { id: "c_1", course: "인공지능개론", day: "mon", start: "09:00", end: "10:30", buildingId: "b_ai", room: "401" },
+  { id: "c_2", course: "자료구조", day: "mon", start: "13:00", end: "14:30", buildingId: "b_eng", room: "202" },
+  { id: "c_3", course: "웹 프로그래밍", day: "tue", start: "10:30", end: "12:00", buildingId: "b_ai", room: "305" },
+  { id: "c_4", course: "확률과 통계", day: "tue", start: "15:00", end: "16:30", buildingId: "b_sci", room: "110" },
+  { id: "c_5", course: "캡스톤 디자인", day: "wed", start: "09:00", end: "10:30", buildingId: "b_vis", room: "701" },
+  { id: "c_6", course: "데이터베이스", day: "wed", start: "11:00", end: "12:30", buildingId: "b_eng", room: "210" },
+  { id: "c_7", course: "알고리즘", day: "thu", start: "13:00", end: "14:30", buildingId: "b_ai", room: "402" },
+  { id: "c_8", course: "영어회화", day: "fri", start: "10:00", end: "11:30", buildingId: "b_lib", room: "3F" },
+];
+
 const seedConversations: Conversation[] = [
   {
     id: "c1",
@@ -113,6 +137,8 @@ interface WorkspaceState {
   todos: Todo[];
   memos: Memo[];
   meetings: Meeting[];
+  buildings: Building[];
+  timetable: ClassEntry[];
   settings: Settings;
   commandOpen: boolean;
 
@@ -158,6 +184,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   todos: seedTodos,
   memos: seedMemos,
   meetings: seedMeetings,
+  buildings: seedBuildings,
+  timetable: seedTimetable,
   settings: { name: "나", language: "ko", weekStart: "mon", notifications: true, autoConfirm: false },
   commandOpen: false,
 

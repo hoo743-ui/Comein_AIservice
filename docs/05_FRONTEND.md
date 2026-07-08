@@ -64,6 +64,18 @@ src/
 - 타이포: 헤드라인 `font-display`(Fraunces), 본문 Pretendard, 숫자정렬 `tabular-nums`.
 - 기능 페이지는 `PageShell`(세리프 타이틀 + 액션)로 통일.
 
+## 레이아웃 규격 (밀도 · 표준)
+
+화면 여백을 낭비하지 않도록 컨테이너·간격을 규격화한다.
+
+- **기능 페이지**(캘린더·투두·메모·회의·캠퍼스): `PageShell` 본문(`p-6`)에서 **전체 폭 사용**. 불필요한 `max-w`로 좁히지 않는다.
+- **읽기 중심**(설정): `mx-auto max-w-4xl` 중앙 정렬.
+- **채팅 스트림/입력**: `mx-auto max-w-2xl` 중앙(가독성 우선).
+- **2분할**은 폭을 채우는 그리드: 예) `xl:grid-cols-[minmax(0,1fr)_minmax(0,1.3fr)]`.
+- **간격 스케일**: 섹션 간 `gap-6`, 카드 내부 `p-4`~`p-5`, 리스트 `space-y-2`~`space-y-3`.
+- **표면 규칙**: 카드=`.elevated border border-border rounded-xl|2xl`, 트레이/컬럼=`bg-muted/40`(recessed), 히어로/입력=`.elevated`.
+- **타이틀**: 페이지 타이틀은 `PageShell`(세리프), 섹션 타이틀 `font-display text-lg`.
+
 ## i18n
 
 `const t = useT();` → `t("키")`. 사전은 `lib/i18n.ts`. 언어는 설정에서 전환(`settings.language`).
