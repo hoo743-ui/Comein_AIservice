@@ -9,6 +9,7 @@ import { ArrowRight } from "lucide-react";
 import { Logo } from "@/components/brand/logo";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { FeatureMindmap } from "@/components/feature-mindmap";
+import { MarkSplash } from "@/components/brand/mark-splash";
 import { useT } from "@/lib/i18n";
 
 /**
@@ -20,9 +21,11 @@ import { useT } from "@/lib/i18n";
 export default function Landing() {
   const router = useRouter();
   const t = useT();
+  const [entering, setEntering] = React.useState(false);
 
-  // 입장: 플래그를 남기고 이동 → 워크스페이스에서 도어 마크가 뜬 뒤 투명화되며 드러남
-  const enter = React.useCallback(() => {
+  // 입장: 첫 페이지가 투명해지며 마크 스플래시가 뜨고 → 워크스페이스로 이어짐
+  const enter = React.useCallback(() => setEntering(true), []);
+  const goWorkspace = React.useCallback(() => {
     try {
       sessionStorage.setItem("comein:entering", "1");
     } catch {}
@@ -34,7 +37,12 @@ export default function Landing() {
   }, [router]);
 
   return (
-    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background">
+    <>
+      <motion.div
+        className="relative flex min-h-screen flex-col overflow-hidden bg-background"
+        animate={{ opacity: entering ? 0 : 1 }}
+        transition={{ duration: 0.85, ease: [0.4, 0, 0.2, 1] }}
+      >
       {/* 배경 사진 (미니멀 럭스 오피스) — 바람 부는 앰비언트 드리프트 */}
       <div
         aria-hidden
@@ -123,6 +131,20 @@ export default function Landing() {
           </div>
         </div>
       </main>
-    </div>
+      </motion.div>
+
+      {/* 입장 크로스 디졸브 — 첫 페이지가 투명해지며 마크 스플래시 등장 */}
+      {entering && (
+        <motion.div
+          className="pointer-events-none fixed inset-0 z-[100]"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          transition={{ duration: 0.85, delay: 0.15, ease: [0.4, 0, 0.2, 1] }}
+          onAnimationComplete={goWorkspace}
+        >
+          <MarkSplash />
+        </motion.div>
+      )}
+    </>
   );
 }
