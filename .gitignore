@@ -16,6 +16,9 @@ eggs/
 .eggs/
 lib/
 lib64/
+# 예외: 프론트엔드 소스의 lib 디렉터리는 파이썬 규칙에서 제외
+!frontend/src/lib/
+!frontend/src/lib/**
 parts/
 sdist/
 var/
