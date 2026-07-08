@@ -79,14 +79,14 @@ export default function Landing() {
               </span>
 
               <h1 className="mt-6 text-4xl font-bold leading-[1.14] tracking-tight text-foreground sm:text-5xl xl:text-6xl">
-                사용자를 들여보내라,
+                Come in,
                 <span className="mt-2 block text-brand-gradient">Comein.</span>
               </h1>
 
               <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
-                Your workspace is thinking for you.
+                들어오세요. 당신의 워크스페이스가 대신 생각합니다.
                 <br />
-                들어오세요. 채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
+                채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
               </p>
 
               {/* CTA — 투명 네온 버튼 */}
