@@ -32,19 +32,25 @@ export function Sidebar() {
               key={item.href}
               href={item.href}
               className={cn(
-                "group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
+                "group flex flex-col rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                 active
                   ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-soft"
                   : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-accent-foreground"
               )}
             >
-              <item.icon
-                className={cn(
-                  "size-[18px] transition-colors",
-                  active ? "text-primary" : "text-muted-foreground group-hover:text-primary"
-                )}
-              />
-              {item.title}
+              <span className="flex items-center gap-3">
+                <item.icon
+                  className={cn(
+                    "size-[18px] shrink-0 transition-colors",
+                    active ? "text-primary" : "text-muted-foreground group-hover:text-primary"
+                  )}
+                />
+                {item.title}
+              </span>
+              {/* 마우스 오버 시 설명이 아래로 펼쳐짐 */}
+              <span className="ml-[30px] max-h-0 overflow-hidden text-xs font-normal leading-snug text-muted-foreground opacity-0 transition-all duration-300 group-hover:mt-1 group-hover:max-h-10 group-hover:opacity-100">
+                {item.desc}
+              </span>
             </Link>
           );
         })}
