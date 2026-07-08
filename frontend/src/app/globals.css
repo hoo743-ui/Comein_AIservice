@@ -3,79 +3,78 @@
 @tailwind utilities;
 
 /*
- * Comein 디자인 토큰 — 연보라·화이트 미니멀 (브랜드 포스터 기준)
- * HSL 값만 저장하고 hsl(var(--x)) 로 소비한다 (shadcn/ui 컨벤션).
- * 브랜드: Come(딥 인디고) + in.(페리윙클 바이올렛) / 라벤더-화이트 배경.
+ * Comein 디자인 토큰 — 정제된 "assistant" 무드 (탈-AI 리파인)
+ * 차분한 뉴트럴 + 절제된 딥 인디고 액센트 + 크리스프 헤어라인.
+ * HSL 값만 저장하고 hsl(var(--x)) 로 소비 (shadcn/ui 컨벤션).
  */
 @layer base {
   :root {
-    /* 표면 */
-    --background: 258 60% 99%;
-    --foreground: 246 34% 20%;
+    /* 표면 — 뉴트럴 화이트 */
+    --background: 240 20% 99%;
+    --foreground: 234 24% 16%;
     --card: 0 0% 100%;
-    --card-foreground: 246 34% 20%;
+    --card-foreground: 234 24% 16%;
     --popover: 0 0% 100%;
-    --popover-foreground: 246 34% 20%;
+    --popover-foreground: 234 24% 16%;
 
-    /* 브랜드 액센트 — 포스터의 "in." 페리윙클 바이올렛 */
-    --primary: 248 62% 63%;
+    /* 브랜드 액센트 — 절제된 딥 인디고 */
+    --primary: 243 47% 52%;
     --primary-foreground: 0 0% 100%;
 
-    /* 보조 표면 — 파스텔 라벤더 */
-    --secondary: 252 48% 96%;
-    --secondary-foreground: 248 32% 32%;
-    --muted: 252 40% 96%;
-    --muted-foreground: 246 12% 48%;
-    --accent: 252 56% 94%;
-    --accent-foreground: 248 40% 34%;
+    /* 보조 표면 — 저채도 쿨 그레이 */
+    --secondary: 240 18% 96%;
+    --secondary-foreground: 234 20% 28%;
+    --muted: 240 16% 96%;
+    --muted-foreground: 235 10% 46%;
+    --accent: 243 30% 95%;
+    --accent-foreground: 243 40% 32%;
 
-    --destructive: 0 72% 56%;
+    --destructive: 0 65% 51%;
     --destructive-foreground: 0 0% 100%;
 
-    --border: 250 34% 91%;
-    --input: 250 34% 90%;
-    --ring: 248 62% 63%;
+    --border: 240 15% 89%;
+    --input: 240 15% 88%;
+    --ring: 243 47% 52%;
 
-    --radius: 0.85rem;
+    --radius: 0.625rem;
 
-    /* 사이드바 (약간 더 진한 라벤더 틴트) */
-    --sidebar: 255 48% 98%;
-    --sidebar-foreground: 246 30% 26%;
-    --sidebar-accent: 250 56% 94%;
-    --sidebar-accent-foreground: 248 46% 38%;
-    --sidebar-border: 250 32% 90%;
+    --sidebar: 240 22% 98%;
+    --sidebar-foreground: 234 18% 24%;
+    --sidebar-accent: 243 28% 94%;
+    --sidebar-accent-foreground: 243 42% 34%;
+    --sidebar-border: 240 15% 90%;
   }
 
   .dark {
-    --background: 250 24% 8%;
-    --foreground: 252 28% 92%;
-    --card: 250 22% 11%;
-    --card-foreground: 252 28% 92%;
-    --popover: 250 22% 11%;
-    --popover-foreground: 252 28% 92%;
+    --background: 234 16% 9%;
+    --foreground: 240 14% 92%;
+    --card: 234 15% 12%;
+    --card-foreground: 240 14% 92%;
+    --popover: 234 15% 12%;
+    --popover-foreground: 240 14% 92%;
 
-    --primary: 248 74% 72%;
-    --primary-foreground: 250 30% 12%;
+    --primary: 243 58% 70%;
+    --primary-foreground: 234 30% 12%;
 
-    --secondary: 250 18% 18%;
-    --secondary-foreground: 252 24% 90%;
-    --muted: 250 16% 17%;
-    --muted-foreground: 250 12% 62%;
-    --accent: 250 22% 22%;
-    --accent-foreground: 252 28% 92%;
+    --secondary: 234 12% 18%;
+    --secondary-foreground: 240 12% 90%;
+    --muted: 234 12% 17%;
+    --muted-foreground: 238 8% 60%;
+    --accent: 234 13% 21%;
+    --accent-foreground: 240 14% 92%;
 
-    --destructive: 0 62% 48%;
+    --destructive: 0 58% 50%;
     --destructive-foreground: 0 0% 98%;
 
-    --border: 250 16% 22%;
-    --input: 250 16% 24%;
-    --ring: 248 74% 72%;
+    --border: 234 12% 21%;
+    --input: 234 12% 23%;
+    --ring: 243 58% 70%;
 
-    --sidebar: 250 24% 10%;
-    --sidebar-foreground: 252 24% 88%;
-    --sidebar-accent: 250 20% 18%;
-    --sidebar-accent-foreground: 252 28% 92%;
-    --sidebar-border: 250 16% 20%;
+    --sidebar: 234 15% 11%;
+    --sidebar-foreground: 240 12% 86%;
+    --sidebar-accent: 234 13% 19%;
+    --sidebar-accent-foreground: 240 14% 92%;
+    --sidebar-border: 234 12% 19%;
   }
 }
 
@@ -89,43 +88,45 @@
   }
 }
 
-/* 브랜드 그라디언트 유틸 — 로고/글로우/히어로 텍스트에 재사용 */
 @layer utilities {
+  /* 브랜드 그라디언트 — 절제된 모노크롬 인디고 (무지개 X) */
   .brand-gradient {
-    background-image: linear-gradient(135deg, hsl(258 68% 68%), hsl(232 72% 64%));
-  }
-
-  /* 반투명 글래스 표면 — 카드/입력창/상단바 */
-  .glass {
-    background-color: hsl(var(--card) / 0.62);
-    backdrop-filter: blur(12px) saturate(1.4);
-    -webkit-backdrop-filter: blur(12px) saturate(1.4);
-  }
-  /* 사이드바/컨텍스트 패널용 글래스 */
-  .glass-panel {
-    background-color: hsl(var(--sidebar) / 0.68);
-    backdrop-filter: blur(16px) saturate(1.3);
-    -webkit-backdrop-filter: blur(16px) saturate(1.3);
+    background-image: linear-gradient(135deg, hsl(243 52% 60%), hsl(236 46% 48%));
   }
   .text-brand-gradient {
-    background-image: linear-gradient(135deg, hsl(258 68% 66%), hsl(232 74% 60%));
+    background-image: linear-gradient(135deg, hsl(243 52% 54%), hsl(236 48% 46%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
+
+  /* 프로스티드 표면 — 반투명 축소(더 솔리드) + 약한 블러 */
+  .glass {
+    background-color: hsl(var(--card) / 0.8);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+  }
+  .glass-panel {
+    background-color: hsl(var(--sidebar) / 0.86);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+  }
+
+  /* 앱 배경 — 뉴트럴, 거의 무채색의 은은한 라이팅 */
   .bg-app {
     background-image:
-      radial-gradient(60rem 40rem at 85% -10%, hsl(252 70% 95%) 0%, transparent 55%),
-      radial-gradient(50rem 30rem at 0% 0%, hsl(248 66% 96%) 0%, transparent 50%);
-  }
-  /* 미세 그레인(노이즈) — 유리/배경에 촉감 있는 깊이 */
-  .grain-overlay {
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-    background-size: 140px 140px;
+      radial-gradient(60rem 40rem at 85% -10%, hsl(240 28% 97%) 0%, transparent 55%),
+      radial-gradient(50rem 30rem at 0% 0%, hsl(243 26% 97%) 0%, transparent 50%);
   }
   .dark .bg-app {
     background-image:
-      radial-gradient(60rem 40rem at 85% -10%, hsl(250 40% 16%) 0%, transparent 55%),
-      radial-gradient(50rem 30rem at 0% 0%, hsl(250 36% 14%) 0%, transparent 50%);
+      radial-gradient(60rem 40rem at 85% -10%, hsl(234 20% 13%) 0%, transparent 55%),
+      radial-gradient(50rem 30rem at 0% 0%, hsl(234 18% 12%) 0%, transparent 50%);
+  }
+
+  /* 미세 그레인(노이즈) — 촉감 있는 깊이 */
+  .grain-overlay {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+    background-size: 140px 140px;
   }
 }

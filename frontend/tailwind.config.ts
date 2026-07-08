@@ -67,9 +67,9 @@ const config: Config = {
         display: ["var(--font-display)", "ui-serif", "Georgia", "serif"],
       },
       boxShadow: {
-        // 레이어드 소프트 섀도우 (프리미엄 · 확산형)
-        soft: "0 1px 2px hsl(var(--primary) / 0.05), 0 8px 24px -10px hsl(var(--primary) / 0.14), 0 24px 60px -24px hsl(var(--primary) / 0.20)",
-        glow: "0 0 40px -6px hsl(var(--primary) / 0.55)",
+        // 레이어드 소프트 섀도우 — 뉴트럴 잉크(비-보라)로 정제
+        soft: "0 1px 2px hsl(234 24% 16% / 0.05), 0 6px 20px -10px hsl(234 24% 16% / 0.12), 0 20px 44px -24px hsl(234 24% 16% / 0.16)",
+        glow: "0 0 40px -10px hsl(var(--primary) / 0.4)",
       },
       keyframes: {
         "accordion-down": {
