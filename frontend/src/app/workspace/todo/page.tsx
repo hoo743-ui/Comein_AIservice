@@ -92,19 +92,19 @@ export default function TodoPage() {
           return (
             <section
               key={col.status}
-              className="flex flex-col rounded-xl border border-border bg-card/60 p-3"
+              className="flex flex-col rounded-2xl border border-border bg-muted/40 p-3.5"
             >
-              <div className="mb-3 flex items-center justify-between px-1">
-                <div className="flex items-center gap-2 text-sm font-semibold text-foreground">
+              <div className="mb-3.5 flex items-center justify-between px-1">
+                <div className="flex items-center gap-2 text-[0.9375rem] font-semibold text-foreground">
                   <span className="text-muted-foreground">{col.icon}</span>
                   {col.label}
                 </div>
                 <Badge variant="muted">{items.length}</Badge>
               </div>
 
-              <div className="flex flex-col gap-2.5">
+              <div className="space-y-3">
                 {items.length === 0 ? (
-                  <p className="rounded-lg border border-dashed border-border/70 px-3 py-8 text-center text-xs text-muted-foreground">
+                  <p className="rounded-xl border border-dashed border-border/70 px-3 py-10 text-center text-xs text-muted-foreground">
                     비어 있어요
                   </p>
                 ) : (
@@ -206,7 +206,7 @@ function TodoCard({
     : false;
 
   return (
-    <article className="rounded-lg border border-border bg-card p-3 shadow-soft transition-colors hover:border-primary/40">
+    <article className="elevated rounded-xl border border-border p-3.5 transition-all hover:-translate-y-0.5 hover:border-primary/40">
       <p
         className={cn(
           "text-sm font-medium text-foreground",

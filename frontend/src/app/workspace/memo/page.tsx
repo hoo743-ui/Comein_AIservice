@@ -97,10 +97,10 @@ export default function MemoPage() {
               type="button"
               onClick={() => setActiveTag(null)}
               className={cn(
-                "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                 activeTag === null
                   ? "bg-primary text-primary-foreground"
-                  : "border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                  : "border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground"
               )}
             >
               전체
@@ -113,10 +113,10 @@ export default function MemoPage() {
                   type="button"
                   onClick={() => setActiveTag(active ? null : tag)}
                   className={cn(
-                    "rounded-full px-3 py-1 text-xs font-medium transition-colors",
+                    "rounded-full px-3 py-1.5 text-xs font-medium transition-colors",
                     active
                       ? "bg-primary text-primary-foreground"
-                      : "border border-border text-muted-foreground hover:bg-accent hover:text-accent-foreground"
+                      : "border border-border bg-card text-muted-foreground hover:bg-accent hover:text-accent-foreground"
                   )}
                 >
                   #{tag}
@@ -150,7 +150,7 @@ export default function MemoPage() {
           {filtered.map((m) => (
             <article
               key={m.id}
-              className="group mb-4 break-inside-avoid rounded-xl border border-border bg-card p-4 shadow-soft transition-colors hover:border-primary/40"
+              className="group mb-4 break-inside-avoid elevated rounded-xl border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40"
             >
               <div className="mb-2 flex items-start justify-between gap-2">
                 <h3 className="font-semibold leading-snug text-foreground">
@@ -167,7 +167,7 @@ export default function MemoPage() {
               </div>
 
               {m.content && (
-                <p className="line-clamp-4 whitespace-pre-wrap text-sm text-muted-foreground">
+                <p className="line-clamp-4 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
                   {m.content}
                 </p>
               )}

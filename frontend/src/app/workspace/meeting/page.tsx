@@ -107,7 +107,7 @@ export default function MeetingPage() {
           </Button>
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-[280px_1fr]">
+        <div className="grid grid-cols-1 gap-5 lg:grid-cols-[280px_1fr]">
           {/* ── 좌측: 회의 리스트 ── */}
           <aside className="flex flex-col gap-2.5">
             {meetings.map((m) => {
@@ -117,10 +117,10 @@ export default function MeetingPage() {
                   key={m.id}
                   onClick={() => setSelectedId(m.id)}
                   className={cn(
-                    "rounded-xl border bg-card p-3 text-left shadow-soft transition-colors hover:border-primary/40",
+                    "rounded-xl border p-3 text-left transition-colors",
                     active
-                      ? "border-primary ring-1 ring-primary/30"
-                      : "border-border"
+                      ? "elevated border-primary/50 bg-accent/60"
+                      : "border-border bg-card hover:bg-accent"
                   )}
                 >
                   <p className="truncate text-sm font-semibold text-foreground">
@@ -243,7 +243,7 @@ function MeetingDetail({
   addTodo: (t: { title: string; priority: "mid"; status: "todo" }) => void;
 }) {
   return (
-    <div className="rounded-2xl border border-border bg-card p-6 shadow-soft">
+    <div className="elevated space-y-6 rounded-2xl border border-border p-6">
       {/* 헤더 */}
       <div className="flex items-start justify-between gap-4">
         <div>
@@ -267,13 +267,13 @@ function MeetingDetail({
       </div>
 
       {/* 참석자 */}
-      <section className="mt-6">
+      <section>
         <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <UserRound className="size-4 text-muted-foreground" />
           참석자
         </h3>
         {meeting.participants.length ? (
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {meeting.participants.map((p, i) => (
               <Badge key={`${p}-${i}`} variant="muted">
                 <UserRound className="size-3" />
@@ -287,12 +287,12 @@ function MeetingDetail({
       </section>
 
       {/* 요약 */}
-      <section className="mt-6">
+      <section>
         <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <FileText className="size-4 text-muted-foreground" />
           요약
         </h3>
-        <div className="rounded-lg border border-border bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
+        <div className="rounded-xl border border-border bg-muted/40 p-4 text-sm leading-relaxed text-foreground">
           {meeting.summary?.trim() || (
             <span className="text-muted-foreground">요약이 없습니다</span>
           )}
@@ -300,13 +300,13 @@ function MeetingDetail({
       </section>
 
       {/* 액션 아이템 */}
-      <section className="mt-6">
+      <section>
         <h3 className="mb-2 flex items-center gap-1.5 text-sm font-semibold text-foreground">
           <ListChecks className="size-4 text-muted-foreground" />
           액션 아이템
         </h3>
         {meeting.actionItems?.length ? (
-          <ul className="flex flex-col gap-2">
+          <ul className="flex flex-col gap-1.5">
             {meeting.actionItems.map((item, i) => (
               <ActionItemRow
                 key={`${item}-${i}`}
@@ -339,7 +339,7 @@ function ActionItemRow({
   };
 
   return (
-    <li className="flex items-center gap-3 rounded-lg border border-border bg-card p-3">
+    <li className="flex items-center gap-3 rounded-lg border border-transparent p-3 transition-colors hover:border-border hover:bg-accent">
       <span
         className={cn(
           "size-2.5 shrink-0 rounded-full",
