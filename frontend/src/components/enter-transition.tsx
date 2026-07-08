@@ -10,7 +10,8 @@ const useIsoLayoutEffect =
 /**
  * 워크스페이스 진입 연출.
  * 랜딩에서 sessionStorage 플래그를 세팅하고 넘어오면,
- * 반투명 문 두 짝이 가로로 갈라지며 워크스페이스를 드러낸다.
+ * 배경색으로 덮인 오버레이가 부드럽게 사라지며(페이드아웃) 워크스페이스가 열린다.
+ * 랜딩의 페이드아웃과 이어져 하나의 크로스 디졸브처럼 보인다.
  * (직접 /workspace 방문 시엔 재생하지 않음)
  */
 export function EnterReveal() {
@@ -29,25 +30,14 @@ export function EnterReveal() {
   return (
     <AnimatePresence>
       {show && (
-        <div className="pointer-events-none fixed inset-0 z-50">
-          <motion.div
-            className="absolute inset-y-0 left-0 w-1/2 bg-background/80 backdrop-blur-xl"
-            initial={{ x: 0 }}
-            animate={{ x: "-100%" }}
-            transition={{ duration: 0.62, ease: [0.7, 0, 0.3, 1], delay: 0.05 }}
-            onAnimationComplete={() => setShow(false)}
-          >
-            <div className="absolute right-0 top-0 h-full w-[3px] brand-gradient shadow-glow" />
-          </motion.div>
-          <motion.div
-            className="absolute inset-y-0 right-0 w-1/2 bg-background/80 backdrop-blur-xl"
-            initial={{ x: 0 }}
-            animate={{ x: "100%" }}
-            transition={{ duration: 0.62, ease: [0.7, 0, 0.3, 1], delay: 0.05 }}
-          >
-            <div className="absolute left-0 top-0 h-full w-[3px] brand-gradient shadow-glow" />
-          </motion.div>
-        </div>
+        <motion.div
+          key="enter-reveal"
+          className="bg-app pointer-events-none fixed inset-0 z-50"
+          initial={{ opacity: 1 }}
+          animate={{ opacity: 0 }}
+          transition={{ duration: 0.7, ease: [0.4, 0, 0.2, 1] }}
+          onAnimationComplete={() => setShow(false)}
+        />
       )}
     </AnimatePresence>
   );
