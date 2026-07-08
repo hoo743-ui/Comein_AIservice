@@ -8,6 +8,7 @@ import { useWorkspace } from "@/lib/store";
 import {
   fetchGoogleContacts,
   fetchGoogleEvents,
+  fetchGoogleOtherContacts,
   GOOGLE_SCOPES,
   getGoogleToken,
   googleConfigured,
@@ -43,6 +44,7 @@ export default function ContactsPage() {
   const [added, setAdded] = React.useState<Set<string>>(new Set());
   const [busy, setBusy] = React.useState<string | null>(null);
   const [error, setError] = React.useState<string | null>(null);
+  const [notice, setNotice] = React.useState<string | null>(null);
 
   // 팝업 차단 방지: 구글 스크립트를 미리 로드해두고, 클릭 시 즉시 팝업.
   React.useEffect(() => {
@@ -52,6 +54,7 @@ export default function ContactsPage() {
   // 실제 Google 연동(브라우저 OAuth). 키 없으면 데모 토글로 폴백.
   const connectGoogle = async (key: "googleCalendar" | "googleContacts") => {
     setError(null);
+    setNotice(null);
     setBusy(key);
     try {
       if (key === "googleCalendar") {
@@ -62,10 +65,30 @@ export default function ContactsPage() {
             addSchedule({ title: e.title, start: e.start, end: e.end, location: e.location, status: "confirmed" });
           }
         });
+        setNotice(
+          events.length
+            ? `구글 캘린더에서 일정 ${events.length}개를 가져왔어요.`
+            : "가져올 다가오는 일정이 없어요(캘린더가 비어있음)."
+        );
       } else {
         const token = await getGoogleToken(GOOGLE_SCOPES.contacts);
-        const list = await fetchGoogleContacts(token);
-        list.forEach((c) => addContact({ name: c.name, email: c.email, phone: c.phone, org: c.org, source: "google" }));
+        let list = await fetchGoogleContacts(token);
+        // 저장된 연락처가 없으면 '기타 연락처'(메일 주고받은 사람 등)로 보완
+        if (list.length === 0) {
+          try {
+            list = await fetchGoogleOtherContacts(token);
+          } catch {
+            /* 기타 연락처 실패는 무시 */
+          }
+        }
+        list.forEach((c) =>
+          addContact({ name: c.name, email: c.email, phone: c.phone, org: c.org, source: "google" })
+        );
+        setNotice(
+          list.length
+            ? `구글에서 연락처 ${list.length}개를 가져왔어요.`
+            : "구글 계정에 저장된 연락처가 없어요."
+        );
       }
       setConnection(key, true);
     } catch (e) {
@@ -76,11 +99,20 @@ export default function ContactsPage() {
   };
 
   const onConnect = (key: keyof Connections) => {
+    setError(null);
+    setNotice(null);
     const on = connections[key];
     if (googleConfigured && (key === "googleCalendar" || key === "googleContacts") && !on) {
       void connectGoogle(key);
+    } else if (key === "outlook") {
+      toggleConnection(key);
+      setNotice(
+        on
+          ? "Outlook 연결을 해제했어요."
+          : "Outlook 실연동은 준비 중이에요 — 지금은 데모 표시입니다."
+      );
     } else {
-      toggleConnection(key); // 데모 토글 / 연결 해제
+      toggleConnection(key); // 연결 해제 / (키 없을 때) 데모 토글
     }
   };
 
@@ -126,6 +158,11 @@ export default function ContactsPage() {
             {error}
           </p>
         )}
+        {notice && (
+          <p className="mb-3 rounded-lg border border-primary/30 bg-primary/10 px-3 py-2 text-xs font-medium text-primary">
+            {notice}
+          </p>
+        )}
         <div className="grid gap-4 sm:grid-cols-3">
           {CONNECTIONS.map((c) => {
             const on = connections[c.key];
@@ -146,13 +183,13 @@ export default function ContactsPage() {
                   disabled={busy === c.key}
                   onClick={() => onConnect(c.key)}
                   className={cn(
-                    "inline-flex h-6 w-11 shrink-0 items-center rounded-full px-0.5 transition-colors disabled:opacity-60",
-                    on ? "bg-primary" : "bg-muted"
+                    "inline-flex h-6 w-11 shrink-0 items-center rounded-full border px-0.5 transition-colors disabled:opacity-60",
+                    on ? "border-primary bg-primary" : "border-border bg-muted-foreground/25"
                   )}
                 >
                   <span
                     className={cn(
-                      "size-5 rounded-full bg-white shadow transition-transform",
+                      "size-5 rounded-full bg-white shadow ring-1 ring-black/10 transition-transform",
                       busy === c.key && "animate-pulse",
                       on ? "translate-x-5" : "translate-x-0"
                     )}

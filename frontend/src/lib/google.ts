@@ -18,7 +18,9 @@ export const googleConfigured = Boolean(googleClientId);
 
 export const GOOGLE_SCOPES = {
   calendar: "https://www.googleapis.com/auth/calendar.readonly",
-  contacts: "https://www.googleapis.com/auth/contacts.readonly",
+  // 저장된 연락처 + 기타(자동수집) 연락처 모두
+  contacts:
+    "https://www.googleapis.com/auth/contacts.readonly https://www.googleapis.com/auth/contacts.other.readonly",
 } as const;
 
 let gisPromise: Promise<void> | null = null;
@@ -104,11 +106,11 @@ export async function fetchGoogleEvents(token: string): Promise<ImportedEvent[]>
   }));
 }
 
-/** 연락처 가져오기(People API). */
+/** 저장된 연락처 가져오기(People API connections). */
 export async function fetchGoogleContacts(token: string): Promise<ImportedContact[]> {
   const url =
     "https://people.googleapis.com/v1/people/me/connections" +
-    "?personFields=names,emailAddresses,phoneNumbers,organizations&pageSize=100";
+    "?personFields=names,emailAddresses,phoneNumbers,organizations&pageSize=200";
   const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!r.ok) throw new Error(`연락처 조회 실패(${r.status})`);
   const data = await r.json();
@@ -118,5 +120,21 @@ export async function fetchGoogleContacts(token: string): Promise<ImportedContac
     email: p.emailAddresses?.[0]?.value,
     phone: p.phoneNumbers?.[0]?.value,
     org: p.organizations?.[0]?.name,
+  }));
+}
+
+/** 기타(자동수집) 연락처 — 메일 주고받은 사람 등. connections 가 비었을 때 보완. */
+export async function fetchGoogleOtherContacts(token: string): Promise<ImportedContact[]> {
+  const url =
+    "https://people.googleapis.com/v1/otherContacts" +
+    "?readMask=names,emailAddresses,phoneNumbers&pageSize=200";
+  const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!r.ok) throw new Error(`기타 연락처 조회 실패(${r.status})`);
+  const data = await r.json();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (data.otherContacts ?? []).map((p: any) => ({
+    name: p.names?.[0]?.displayName ?? p.emailAddresses?.[0]?.value ?? "이름 없음",
+    email: p.emailAddresses?.[0]?.value,
+    phone: p.phoneNumbers?.[0]?.value,
   }));
 }
