@@ -63,11 +63,12 @@ const config: Config = {
         sm: "calc(var(--radius) - 4px)",
       },
       fontFamily: {
-        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        sans: ['"Pretendard Variable"', "var(--font-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "ui-serif", "Georgia", "serif"],
       },
       boxShadow: {
-        // 포스터의 부드러운 카드/필 그림자
-        soft: "0 2px 12px -2px hsl(var(--primary) / 0.12), 0 4px 24px -6px hsl(var(--primary) / 0.10)",
+        // 레이어드 소프트 섀도우 (프리미엄 · 확산형)
+        soft: "0 1px 2px hsl(var(--primary) / 0.05), 0 8px 24px -10px hsl(var(--primary) / 0.14), 0 24px 60px -24px hsl(var(--primary) / 0.20)",
         glow: "0 0 40px -6px hsl(var(--primary) / 0.55)",
       },
       keyframes: {

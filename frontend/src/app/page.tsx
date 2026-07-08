@@ -56,6 +56,11 @@ export default function Landing() {
         <div className="absolute -right-16 top-1/4 size-[30rem] rounded-full bg-[hsl(232_74%_64%/0.22)] blur-3xl" />
         <div className="absolute -bottom-24 left-1/3 size-[24rem] rounded-full bg-accent/50 blur-3xl" />
       </div>
+      {/* 미세 그레인 텍스처 */}
+      <div
+        aria-hidden
+        className="grain-overlay pointer-events-none fixed inset-0 z-[1] opacity-[0.05] mix-blend-overlay dark:opacity-[0.09]"
+      />
 
       {/* 상단 바 — 글래스 스트립 */}
       <header className="glass sticky top-0 z-20 flex items-center justify-between border-b border-white/20 px-6 py-4 sm:px-10">
@@ -74,27 +79,30 @@ export default function Landing() {
               transition={{ duration: 0.6, ease: [0.22, 1, 0.36, 1] }}
               className="flex flex-col items-start"
             >
-              <span className="rounded-full border border-border/70 bg-card/60 px-3 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-                당신의 AI Workspace
+              <span className="text-[11px] font-semibold uppercase tracking-[0.22em] text-muted-foreground">
+                Your AI Workspace
               </span>
 
-              <h1 className="mt-6 text-4xl font-bold leading-[1.14] tracking-tight text-foreground sm:text-5xl xl:text-6xl">
-                Come in,
-                <span className="mt-2 block text-brand-gradient">Comein.</span>
+              <h1 className="mt-4 font-display text-6xl font-semibold leading-none tracking-tight text-foreground sm:text-7xl">
+                Comein<span className="text-brand-gradient">.</span>
               </h1>
 
-              <p className="mt-6 max-w-md text-base leading-relaxed text-muted-foreground">
-                들어오세요. 당신의 워크스페이스가 대신 생각합니다.
+              <p className="mt-7 max-w-md text-xl font-medium leading-snug text-foreground/90 sm:text-2xl">
+                생각만 하세요.
                 <br />
-                채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
+                나머지는 <span className="text-brand-gradient">AI</span>가 합니다.
               </p>
 
-              {/* CTA — 투명 네온 버튼 */}
-              <div className="mt-9 flex items-center gap-4">
+              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">
+                들어오세요. 채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.
+              </p>
+
+              {/* CTA — 정제된 네온 */}
+              <div className="mt-10 flex items-center gap-4">
                 <button
                   onClick={enter}
                   disabled={entering}
-                  className="group relative flex items-center gap-2 rounded-full border border-primary/60 bg-primary/10 px-8 py-4 text-base font-semibold text-primary shadow-[0_0_22px_-4px_hsl(var(--primary)/0.65)] backdrop-blur-md transition-all hover:bg-primary/20 hover:shadow-[0_0_34px_-2px_hsl(var(--primary)/0.9)] active:scale-[0.98] disabled:opacity-70 dark:text-primary"
+                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-8 py-4 text-base font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98] disabled:opacity-70"
                 >
                   입장하기
                   <ArrowRight className="size-5 transition-transform group-hover:translate-x-1" />

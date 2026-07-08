@@ -26,7 +26,7 @@ export default function ChatHome() {
             </div>
           </div>
 
-          <h2 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+          <h2 className="font-display text-4xl font-semibold tracking-tight text-foreground sm:text-5xl">
             Come <span className="text-brand-gradient">in.</span>
           </h2>
           <p className="mt-3 text-base text-muted-foreground">

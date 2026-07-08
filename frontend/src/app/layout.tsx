@@ -1,10 +1,18 @@
 import type { Metadata } from "next";
-import { Inter } from "next/font/google";
+import { Fraunces, Inter } from "next/font/google";
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
 
-const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
+// 본문(라틴) — Inter, 한글은 Pretendard(아래 CDN)로 우선 적용
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
+// 디스플레이(헤드라인) — 우아한 세리프 Fraunces
+const fraunces = Fraunces({
+  subsets: ["latin"],
+  variable: "--font-display",
+  display: "swap",
+  style: ["normal", "italic"],
+});
 
 export const metadata: Metadata = {
   title: "Comein — AI Workspace",
@@ -16,8 +24,13 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko" suppressHydrationWarning>
-      <body className={`${inter.variable} font-sans`}>
+    <html lang="ko" suppressHydrationWarning className={`${inter.variable} ${fraunces.variable}`}>
+      <body className="font-sans">
+        {/* 한글 프리미엄 폰트 Pretendard (동적 서브셋) — React가 head로 hoist */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
+        />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"
