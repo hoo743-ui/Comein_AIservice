@@ -31,14 +31,14 @@ export function EnterReveal() {
       {show && (
         <motion.div
           key="enter-reveal"
-          className="pointer-events-none fixed inset-0 z-[100] flex items-center justify-center"
-          style={{ backgroundColor: "#14141d" }}
+          className="bg-app pointer-events-none fixed inset-0 z-[100] flex items-center justify-center bg-background"
           initial={{ opacity: 1 }}
           animate={{ opacity: 0 }}
           transition={{ duration: 1.1, ease: [0.4, 0, 0.2, 1], delay: 1.3 }}
           onAnimationComplete={() => setShow(false)}
         >
           <motion.div
+            className="overflow-hidden rounded-[1.75rem] shadow-2xl ring-1 ring-border/50"
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: [0, 1, 1, 0], scale: [0.9, 1, 1, 1.05] }}
             transition={{ duration: 2.4, ease: [0.22, 1, 0.36, 1], times: [0, 0.16, 0.78, 1] }}
@@ -49,7 +49,7 @@ export function EnterReveal() {
               width={1000}
               height={1000}
               priority
-              className="h-auto w-[min(84vw,560px)]"
+              className="h-auto w-[min(82vw,500px)]"
             />
           </motion.div>
         </motion.div>

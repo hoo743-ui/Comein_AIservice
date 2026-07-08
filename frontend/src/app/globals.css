@@ -129,45 +129,4 @@
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 140px 140px;
   }
-
-  /* 바람/공기 느낌 — 켄번즈 드리프트 + 빛 스윕 (로그인 배경) */
-  .animate-kenburns {
-    animation: kenburns 26s ease-in-out infinite;
-    will-change: transform;
-  }
-  .animate-sheen {
-    animation: sheen 11s ease-in-out infinite;
-  }
-}
-
-@keyframes kenburns {
-  0%,
-  100% {
-    transform: scale(1.06);
-  }
-  50% {
-    transform: scale(1.14) translate3d(-1.6%, -1.2%, 0);
-  }
-}
-@keyframes sheen {
-  0% {
-    transform: translateX(-45%);
-    opacity: 0;
-  }
-  45% {
-    opacity: 0.4;
-  }
-  60% {
-    opacity: 0.4;
-  }
-  100% {
-    transform: translateX(45%);
-    opacity: 0;
-  }
-}
-@media (prefers-reduced-motion: reduce) {
-  .animate-kenburns,
-  .animate-sheen {
-    animation: none;
-  }
 }

@@ -35,10 +35,15 @@ export default function Landing() {
 
   return (
     <div className="relative flex min-h-screen flex-col overflow-hidden bg-background">
-      {/* 배경 사진 (미니멀 럭스 오피스) */}
+      {/* 배경 사진 (미니멀 럭스 오피스) — 바람 부는 앰비언트 드리프트 */}
       <div
         aria-hidden
-        className="absolute inset-0 bg-[url('/hero-bg.webp')] bg-cover bg-center"
+        className="animate-kenburns absolute inset-0 bg-[url('/hero-bg.webp')] bg-cover bg-center"
+      />
+      {/* 빛이 스치는 스윕 */}
+      <div
+        aria-hidden
+        className="animate-sheen pointer-events-none absolute inset-0 bg-[linear-gradient(105deg,transparent_42%,rgba(255,255,255,0.12)_50%,transparent_58%)]"
       />
       {/* 가독성·테마 워시 */}
       <div

@@ -97,8 +97,6 @@ export default function CalendarPage() {
     [schedules]
   );
 
-  const monthLabel = `${month.getFullYear()}년 ${month.getMonth() + 1}월`;
-
   const goPrev = () => setMonth((m) => new Date(m.getFullYear(), m.getMonth() - 1, 1));
   const goNext = () => setMonth((m) => new Date(m.getFullYear(), m.getMonth() + 1, 1));
   const goToday = () => {
@@ -167,16 +165,39 @@ export default function CalendarPage() {
     >
       <div className="grid gap-6 lg:grid-cols-[1fr_20rem]">
         {/* ── 달력 ── */}
-        <section className="rounded-xl border border-border bg-card p-4 shadow-soft sm:p-5">
+        <section className="rounded-2xl border border-border bg-card p-5 shadow-soft">
           {/* 툴바 */}
           <div className="mb-4 flex items-center justify-between gap-3">
             <div className="flex items-center gap-2">
               <Button variant="outline" size="icon" onClick={goPrev} aria-label="이전 달">
                 <ChevronLeft className="size-4" />
               </Button>
-              <h2 className="min-w-[7.5rem] text-center text-lg font-semibold tabular-nums tracking-tight text-foreground">
-                {monthLabel}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <select
+                  aria-label="연도 선택"
+                  value={month.getFullYear()}
+                  onChange={(e) => setMonth((m) => new Date(Number(e.target.value), m.getMonth(), 1))}
+                  className="cursor-pointer rounded-lg border border-border bg-background px-2.5 py-1.5 text-base font-semibold tabular-nums text-foreground outline-none transition-colors hover:border-primary/50 focus:border-primary"
+                >
+                  {[2024, 2025, 2026, 2027, 2028, 2029].map((y) => (
+                    <option key={y} value={y}>
+                      {y}년
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="월 선택"
+                  value={month.getMonth()}
+                  onChange={(e) => setMonth((m) => new Date(m.getFullYear(), Number(e.target.value), 1))}
+                  className="cursor-pointer rounded-lg border border-border bg-background px-2.5 py-1.5 text-base font-semibold tabular-nums text-foreground outline-none transition-colors hover:border-primary/50 focus:border-primary"
+                >
+                  {Array.from({ length: 12 }, (_, i) => i).map((mi) => (
+                    <option key={mi} value={mi}>
+                      {mi + 1}월
+                    </option>
+                  ))}
+                </select>
+              </div>
               <Button variant="outline" size="icon" onClick={goNext} aria-label="다음 달">
                 <ChevronRight className="size-4" />
               </Button>
@@ -187,12 +208,12 @@ export default function CalendarPage() {
           </div>
 
           {/* 요일 헤더 */}
-          <div className="grid grid-cols-7 border-b border-border pb-2">
+          <div className="grid grid-cols-7 border-b border-border pb-2.5">
             {WEEKDAYS.map((w, i) => (
               <div
                 key={w}
                 className={cn(
-                  "text-center text-xs font-semibold",
+                  "text-center text-[13px] font-semibold",
                   i === 0 ? "text-destructive/80" : "text-muted-foreground"
                 )}
               >
@@ -202,7 +223,7 @@ export default function CalendarPage() {
           </div>
 
           {/* 날짜 그리드 */}
-          <div className="grid grid-cols-7 gap-1 pt-1">
+          <div className="grid grid-cols-7 gap-1.5 pt-2">
             {cells.map((cell) => {
               const inMonth = cell.getMonth() === month.getMonth();
               const isToday = hydrated && isSameDay(cell, new Date());
@@ -215,16 +236,20 @@ export default function CalendarPage() {
                   type="button"
                   onClick={() => openAdd(toDateInput(cell))}
                   className={cn(
-                    "flex min-h-[5.5rem] flex-col gap-1 rounded-lg border border-border/60 bg-background/40 p-1.5 text-left transition-colors hover:border-primary/50 hover:bg-accent",
+                    "flex min-h-[6.5rem] flex-col gap-1 rounded-xl border border-border/50 bg-background/30 p-2 text-left transition-colors hover:border-primary/40 hover:bg-accent/60",
                     !inMonth && "opacity-40",
-                    isToday && "ring-2 ring-primary"
+                    isToday && "border-primary/40 bg-primary/[0.04]"
                   )}
                 >
                   <span
                     className={cn(
-                      "text-xs font-semibold",
-                      isSunday ? "text-destructive/80" : "text-foreground",
-                      !inMonth && "text-muted-foreground"
+                      "flex size-7 items-center justify-center rounded-full text-[15px] font-semibold tabular-nums",
+                      isToday
+                        ? "bg-primary text-primary-foreground shadow-soft"
+                        : isSunday
+                          ? "text-destructive/80"
+                          : "text-foreground",
+                      !inMonth && !isToday && "text-muted-foreground"
                     )}
                   >
                     {cell.getDate()}

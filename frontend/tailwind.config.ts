@@ -84,11 +84,25 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(8px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // 바람/공기 느낌 — 켄번즈 드리프트
+        kenburns: {
+          "0%, 100%": { transform: "scale(1.06) translate3d(0, 0, 0)" },
+          "50%": { transform: "scale(1.18) translate3d(-2.5%, -1.8%, 0)" },
+        },
+        // 빛이 스쳐 지나가는 스윕
+        sheen: {
+          "0%": { transform: "translateX(-65%)", opacity: "0" },
+          "40%": { opacity: "0.55" },
+          "60%": { opacity: "0.55" },
+          "100%": { transform: "translateX(65%)", opacity: "0" },
+        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
         "fade-up": "fade-up 0.4s ease-out both",
+        kenburns: "kenburns 18s ease-in-out infinite",
+        sheen: "sheen 7s ease-in-out infinite",
       },
     },
   },
