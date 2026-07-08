@@ -15,7 +15,7 @@ const DICT = {
 
   // 랜딩
   "land.eyebrow": { ko: "당신의 AI 워크스페이스", en: "Your AI Workspace" },
-  "land.tagline": { ko: "생각만 하세요.\n나머지는 AI가 합니다.", en: "Just think.\nAI does the rest." },
+  "land.tagline": { ko: "생각은 흩어집니다.\n질서는 만들어집니다.", en: "Thoughts scatter.\nOrder is made." },
   "land.desc": {
     ko: "들어오세요. 채팅 한 줄이면 일정·메모·할 일·회의가 자동으로 정리됩니다.",
     en: "Come in. One line of chat and your schedule, notes, tasks and meetings organize themselves.",

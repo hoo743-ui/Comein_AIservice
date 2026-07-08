@@ -7,22 +7,20 @@ import { ArrowRight } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Field, inputClass } from "@/components/ui/modal";
-import { BrandLoader } from "@/components/brand/brand-loader";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [loading, setLoading] = React.useState(false);
 
   const onSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    setLoading(true); // 데모: 실제 인증 없이 브랜드 로딩 후 진입
+    try {
+      sessionStorage.setItem("comein:entering", "1");
+    } catch {}
+    router.push("/workspace"); // 데모: 실제 인증 없이 진입 연출 후 이동
   };
 
   return (
-    <>
-      {loading && <BrandLoader onDone={() => router.push("/workspace")} />}
-
-      <div>
+    <div>
         <h1 className="font-display text-4xl font-semibold tracking-tight text-foreground">
           다시 오신 걸 환영해요
         </h1>
@@ -71,6 +69,5 @@ export default function LoginPage() {
           </Link>
         </p>
       </div>
-    </>
   );
 }

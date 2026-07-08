@@ -3,7 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { motion, useReducedMotion } from "framer-motion";
+import { motion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
 
 import { Logo } from "@/components/brand/logo";
@@ -19,40 +19,22 @@ import { useT } from "@/lib/i18n";
  */
 export default function Landing() {
   const router = useRouter();
-  const reduce = useReducedMotion();
   const t = useT();
-  const [entering, setEntering] = React.useState(false);
 
-  const goWorkspace = React.useCallback(() => {
+  // 입장: 플래그를 남기고 이동 → 워크스페이스에서 도어 마크가 뜬 뒤 투명화되며 드러남
+  const enter = React.useCallback(() => {
     try {
       sessionStorage.setItem("comein:entering", "1");
     } catch {}
     router.push("/workspace");
   }, [router]);
 
-  const enter = React.useCallback(() => {
-    if (entering) return;
-    if (reduce) return goWorkspace();
-    setEntering(true);
-  }, [entering, reduce, goWorkspace]);
-
   React.useEffect(() => {
     router.prefetch("/workspace");
   }, [router]);
 
   return (
-    <motion.div
-      className="relative flex min-h-screen flex-col overflow-hidden bg-background"
-      animate={
-        entering
-          ? { opacity: 0, scale: 1.03, filter: "blur(6px)" }
-          : { opacity: 1, scale: 1, filter: "blur(0px)" }
-      }
-      transition={{ duration: 0.6, ease: [0.4, 0, 0.2, 1] }}
-      onAnimationComplete={() => {
-        if (entering) goWorkspace();
-      }}
-    >
+    <div className="relative flex min-h-screen flex-col overflow-hidden bg-background">
       {/* 배경 사진 (미니멀 럭스 오피스) */}
       <div
         aria-hidden
@@ -115,8 +97,7 @@ export default function Landing() {
               <div className="mt-10 flex items-center gap-4">
                 <button
                   onClick={enter}
-                  disabled={entering}
-                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-4 text-lg font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98] disabled:opacity-70"
+                  className="group relative flex items-center gap-2 rounded-full border border-primary/50 bg-primary/10 px-9 py-4 text-lg font-semibold text-primary shadow-[0_0_18px_-6px_hsl(var(--primary)/0.5)] backdrop-blur-md transition-all hover:border-primary/70 hover:bg-primary/[0.16] hover:shadow-[0_0_26px_-6px_hsl(var(--primary)/0.7)] active:scale-[0.98]"
                 >
                   {t("land.enter")}
                   <ArrowRight className="size-[22px] transition-transform group-hover:translate-x-1" />
@@ -137,6 +118,6 @@ export default function Landing() {
           </div>
         </div>
       </main>
-    </motion.div>
+    </div>
   );
 }

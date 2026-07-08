@@ -17,8 +17,8 @@
     --popover: 0 0% 100%;
     --popover-foreground: 234 24% 16%;
 
-    /* 브랜드 액센트 — 절제된 딥 인디고 */
-    --primary: 243 47% 52%;
+    /* 브랜드 액센트 — 연보라/페리윙클 (뉴트럴 표면 위 절제 사용) */
+    --primary: 245 55% 62%;
     --primary-foreground: 0 0% 100%;
 
     /* 보조 표면 — 저채도 쿨 그레이 */
@@ -26,22 +26,22 @@
     --secondary-foreground: 234 20% 28%;
     --muted: 240 16% 96%;
     --muted-foreground: 235 10% 46%;
-    --accent: 243 30% 95%;
-    --accent-foreground: 243 40% 32%;
+    --accent: 246 42% 95%;
+    --accent-foreground: 245 46% 38%;
 
     --destructive: 0 65% 51%;
     --destructive-foreground: 0 0% 100%;
 
     --border: 240 15% 89%;
     --input: 240 15% 88%;
-    --ring: 243 47% 52%;
+    --ring: 245 55% 62%;
 
     --radius: 0.625rem;
 
     --sidebar: 240 22% 98%;
     --sidebar-foreground: 234 18% 24%;
-    --sidebar-accent: 243 28% 94%;
-    --sidebar-accent-foreground: 243 42% 34%;
+    --sidebar-accent: 246 40% 94%;
+    --sidebar-accent-foreground: 245 48% 40%;
     --sidebar-border: 240 15% 90%;
   }
 
@@ -53,7 +53,7 @@
     --popover: 234 15% 12%;
     --popover-foreground: 240 14% 92%;
 
-    --primary: 243 58% 70%;
+    --primary: 246 64% 74%;
     --primary-foreground: 234 30% 12%;
 
     --secondary: 234 12% 18%;
@@ -68,7 +68,7 @@
 
     --border: 234 12% 21%;
     --input: 234 12% 23%;
-    --ring: 243 58% 70%;
+    --ring: 246 64% 74%;
 
     --sidebar: 234 15% 11%;
     --sidebar-foreground: 240 12% 86%;
@@ -91,10 +91,10 @@
 @layer utilities {
   /* 브랜드 그라디언트 — 절제된 모노크롬 인디고 (무지개 X) */
   .brand-gradient {
-    background-image: linear-gradient(135deg, hsl(243 52% 60%), hsl(236 46% 48%));
+    background-image: linear-gradient(135deg, hsl(250 62% 66%), hsl(240 56% 56%));
   }
   .text-brand-gradient {
-    background-image: linear-gradient(135deg, hsl(243 52% 54%), hsl(236 48% 46%));
+    background-image: linear-gradient(135deg, hsl(250 60% 60%), hsl(240 56% 52%));
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -128,5 +128,46 @@
   .grain-overlay {
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
     background-size: 140px 140px;
+  }
+
+  /* 바람/공기 느낌 — 켄번즈 드리프트 + 빛 스윕 (로그인 배경) */
+  .animate-kenburns {
+    animation: kenburns 26s ease-in-out infinite;
+    will-change: transform;
+  }
+  .animate-sheen {
+    animation: sheen 11s ease-in-out infinite;
+  }
+}
+
+@keyframes kenburns {
+  0%,
+  100% {
+    transform: scale(1.06);
+  }
+  50% {
+    transform: scale(1.14) translate3d(-1.6%, -1.2%, 0);
+  }
+}
+@keyframes sheen {
+  0% {
+    transform: translateX(-45%);
+    opacity: 0;
+  }
+  45% {
+    opacity: 0.4;
+  }
+  60% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateX(45%);
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .animate-kenburns,
+  .animate-sheen {
+    animation: none;
   }
 }
