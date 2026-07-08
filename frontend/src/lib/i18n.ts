@@ -22,6 +22,7 @@ const DICT = {
   },
   "land.enter": { ko: "입장하기", en: "Enter" },
   "land.browse": { ko: "회원가입 없이 둘러보기", en: "Explore, no sign-up" },
+  "land.login": { ko: "로그인", en: "Log in" },
 
   // 채팅
   "chat.subtitle": { ko: "무엇이든 말씀하세요. 워크스페이스가 대신 정리합니다.", en: "Say anything. Your workspace organizes it for you." },

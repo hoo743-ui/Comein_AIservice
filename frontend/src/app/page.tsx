@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { ArrowRight } from "lucide-react";
@@ -72,7 +73,15 @@ export default function Landing() {
       {/* 상단 바 — 투명(배경 위에 자연스럽게) */}
       <header className="relative z-20 flex items-center justify-between px-6 py-6 sm:px-10">
         <Logo subtitle />
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <Link
+            href="/login"
+            className="rounded-full px-4 py-2 text-sm font-medium text-foreground/80 transition-colors hover:bg-accent hover:text-foreground"
+          >
+            {t("land.login")}
+          </Link>
+          <ThemeToggle />
+        </div>
       </header>
 
       {/* 히어로 — 전체를 반투명 글래스 패널 위에 */}
