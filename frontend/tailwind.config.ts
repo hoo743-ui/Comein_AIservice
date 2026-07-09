@@ -1,5 +1,4 @@
 import type { Config } from "tailwindcss";
-import tailwindcssAnimate from "tailwindcss-animate";
 
 /**
  * Comein 디자인 시스템 — 연보라·화이트 미니멀 (브랜드 포스터 기준)
@@ -107,7 +106,7 @@ const config: Config = {
       },
     },
   },
-  plugins: [tailwindcssAnimate],
+  plugins: [],
 };
 
 export default config;

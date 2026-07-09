@@ -22,13 +22,12 @@
 
 | # | 순간 | 라우트 | 답하는 질문 | 유일한 목표 | 주 액션(하나) |
 |---|------|--------|-------------|-------------|----------------|
-| 1 | **Landing** | `/` | "Comein이 무엇인가?" | 정체성·철학을 각인 | **Come in** (→ Experience) · *"how it works"* 부가 |
-| 2 | **Experience** | `/experience` | "내 생각이 어떻게 정리되지?" | 변환(transformation) 시연 | **Come in** (→ Enter) · Skip 허용 |
+| 1 | **Landing** | `/` | "Comein이 무엇인가?" | 정체성·철학을 각인 | **들어가기** (→ Experience) · **바로 입장** (→ Enter) |
+| 2 | **Experience** | `/experience` | "내 생각이 어떻게 정리되지?" | 변환 시연 → 로그인 | Co·me·in 시네마틱 리빌 후 **로그인** (→ Workspace) · Skip 허용 |
 | 3 | **Enter** | `/enter` | "어떻게 들어가지?" | 문턱을 넘는다(소셜) | **Continue with …** (→ Workspace) |
 | 4 | **Workspace** | `/workspace` | "지금 무엇을, 무엇을 할까?" | 일이 스스로 정리되게 | **캡처 바** (항상) |
 
-> 현재 프로토타입 매핑: Landing=`/`(기존), Experience=`/reimagine/experience`, Enter=`/reimagine/enter`, Workspace=`/reimagine`.
-> 정식 채택 시 위 표의 최상위 라우트로 승격한다.
+> **구현 상태(라우트 = 위 표대로 승격 완료).** 인증 경로는 둘: **Experience(`/experience`)** 는 시네마틱 리빌이 로그인으로 이어져 바로 Workspace로 가고(첫 방문의 몰입 경로), **Enter(`/enter`)** 는 그 없이 소셜 로그인만 하는 **express 경로**(Landing의 "바로 입장"). 시그니처 비주얼 데모는 `/lab`.
 
 ### 노드별 정보 밀도 (점진적 공개)
 

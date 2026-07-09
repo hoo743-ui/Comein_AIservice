@@ -71,7 +71,7 @@ export default function Opening() {
     // 문이 다시 열리고 빛이 앞으로 — 워크스페이스로 건너간다(문턱은 이 순간이 대신함).
     setPhase("entering");
     try { sessionStorage.setItem("comein:reimagine", "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
-    setTimeout(() => router.push("/reimagine"), 1300);
+    setTimeout(() => router.push("/workspace"), 1300);
   }, [router]);
 
   const social = (p: Provider) => {

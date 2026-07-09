@@ -12,8 +12,8 @@
 ## 0. Product Vision & North Star
 
 > **북극성.** 모든 화면·기능·디자인 결정은 이 문서를 기준으로 판단한다.
-> 프로토타입: `frontend/src/app/reimagine/` (워크플로우 중심 · 문턱 인트로 · 슬림 레일 + 단일 캔버스).
-> **시각 언어 규격(토큰·타이포·색·여백·모션): `frontend/src/app/reimagine/DESIGN.md`** — "feel expensive, not look expensive".
+> **채택된 틀:** 워크플로우 중심 · 문턱 인트로 · 슬림 레일 + 단일 캔버스. 라이브 앱 최상위 라우트(`/` Landing · `/experience` · `/enter` · `/workspace`)로 구현되어 있다.
+> **시각 언어 규격(토큰·타이포·색·여백·모션): `docs/22_DESIGN_LANGUAGE.md`**, **화면 여정·IA: `docs/23_USER_JOURNEY.md`** — "feel expensive, not look expensive".
 
 ### Core Principle
 
@@ -146,7 +146,7 @@ Comein의 로고는 살짝 열린 문이다.
 
 ```
 Comein_AIservice/
-├── frontend/        # Next.js (React, TypeScript, Tailwind, shadcn/ui)
+├── frontend/        # Next.js (React, TypeScript, Tailwind) — 슬림 레일 + 단일 캔버스
 ├── backend/         # FastAPI (REST API, DB, Auth, 외부 연동)
 ├── ai/              # AI Router, Agents, Prompt, Memory, 평가
 ├── docs/            # 프로젝트 설계 문서
@@ -196,7 +196,7 @@ API Gateway (REST API)  ← backend/
 1. 사용자가 Chat에서 자연어로 요청
 2. AI Router가 의도를 파악하여 적절한 Agent로 라우팅
 3. Agent가 정보를 추출/가공하여 DB에 저장 or 조회
-4. 결과를 자연어 + 인라인 카드로 응답
+4. 결과를 자연어 + 캡처 결과(receipt)로 응답 — 무엇이 어느 뷰로 정리됐는지 조용히 표시
 5. 필요 시 외부 서비스(캘린더, 알림 등)와 연동
 
 ---
@@ -208,7 +208,7 @@ API Gateway (REST API)  ← backend/
 | 영역 | 선택 | 비고 |
 |------|------|------|
 | Frontend | Next.js (React, TS, Tailwind CSS) | `frontend/` |
-| UI | **shadcn/ui** + FullCalendar + dnd-kit + Recharts + Framer Motion | 아래 6절 참고 |
+| UI | **컴포넌트 로컬 `<style>` + CSS 토큰** · lucide-react(아이콘) · next-themes(테마) · zustand(상태) | 무거운 UI 프레임워크 비의존 — 절제가 곧 럭셔리. 아래 6절 참고 |
 | Backend | FastAPI (Python) | `backend/` |
 | LLM (생성/파싱) | **Gemini API 무료 티어** | JSON 모드 지원 |
 | LLM (분류) | **Groq API (Llama)** | 초고속, Intent 분류 전용 |
@@ -227,29 +227,30 @@ API Gateway (REST API)  ← backend/
 
 ## 6. GUI 방향
 
-### 선택: shadcn/ui + Tailwind CSS
+> 상세 시각 규격은 `docs/22_DESIGN_LANGUAGE.md`, 화면 여정·전환은 `docs/23_USER_JOURNEY.md`, 워크스페이스 UX 원칙은 `docs/04_GUI_UX.md`. 여기서는 방향만.
 
-- 포스터의 연보라·화이트 미니멀 톤을 디자인 토큰으로 그대로 구현 가능
-- 채팅 + 사이드바 + 카드형 위젯 조합 예제가 풍부
-- v0.dev / Claude로 화면 생성 → 그대로 사용 가능 (풀스택 1명 체제에 최적)
-- 보완: 캘린더 뷰 **FullCalendar**, Todo 보드 DnD **dnd-kit**, 차트 **Recharts**, 온보딩 애니메이션 **Framer Motion**
+### 선택: 절제된 커스텀 + Tailwind CSS
 
-### 기본 레이아웃 (3분할)
+- **무거운 UI 프레임워크(shadcn/FullCalendar/dnd-kit/Recharts)를 쓰지 않는다.** 각 화면은 컴포넌트 로컬 `<style>` + CSS 토큰으로 자체 완결 — "비싸게 보이는" 대신 "힘이 안 드는" 느낌.
+- 대부분 모노크롬(차가운 블루-그레이) + 브랜드 퍼플 액센트 한 지점. 카드·글래스·큰 그림자 없이 여백 + 1px 헤어라인으로 구획.
+- 아이콘 lucide-react, 테마 next-themes, 상태 zustand. 한글 Pretendard + 라틴 Inter(세리프 없음).
+
+### 기본 레이아웃 (슬림 레일 + 단일 캔버스)
 
 ```
-┌────────┬─────────────────────────┬──────────────┐
-│ 사이드바 │      Chat (중앙, 홈)     │  컨텍스트 패널  │
-│ · Chat │  대화 스트림 + 인라인 카드   │ 오늘 일정      │
-│ · 캘린더 │  (일정/메모/Todo가        │ 임박한 Todo   │
-│ · 메모  │   말풍선 안 카드로 생성)    │ 최근 메모      │
-│ · Todo │                         │              │
-│ · 회의  │  [입력창 ──────────── ➤] │              │
-└────────┴─────────────────────────┴──────────────┘
+┌──┬───────────────────────────────────────┐
+│레│   단일 캔버스 (뷰가 크로스페이드로 교체)      │
+│일│   그리팅 · 날씨 · 오늘의 흐름             │
+│  │   AI 어시스트 한 줄 (조용한 제안)         │
+│  │   [  캡처 바 ───────────────────  ➤ ]   │
+└──┴───────────────────────────────────────┘
+ 슬림 레일: Today · Calendar · Tasks · Notes · Meetings · People
 ```
 
-- **Chat이 홈** — "대화가 곧 인터페이스"
-- AI 생성 결과는 인라인 카드로 렌더 + 확인/수정/취소 버튼 (AI 오답 대비 UX)
-- 온보딩: 문이 열리며 워크스페이스로 들어가는 연출 (브랜드 스토리 연결)
+- **중심은 대화가 아니라 워크플로우.** 캡처 바는 입력 방식 중 하나 — 말 한 줄이 일정/할 일/회의/메모로 분류되어 목적지 뷰로 배정된다.
+- 뷰 전환은 라우트 이동 없이 캔버스만 크로스페이드, 레일·캡처 바 상시 고정 — "페이지 이동"이 아니라 "한 공간의 재구성".
+- 입장: 문턱(threshold) 전환 1회 재생 — 문이 열리듯 워크스페이스로 (브랜드 스토리 연결).
+- 진입 여정: `/` Landing → `/experience`(시네마틱 + 로그인) → `/enter`(간편 로그인) → `/workspace`.
 
 ---
 
@@ -372,8 +373,8 @@ User ─┬─< Conversation ─< Message
 | 01_PRODUCT.md | PRD — 문제 정의, 시나리오, User Story, MVP 범위 | 기획 |
 | 02_SYSTEM.md | 전체 아키텍처, Data Flow, AI Router, 의존성 | 풀스택 |
 | 03_DEVELOPMENT_FLOW.md | Phase별 개발 순서, Docker 구성 | 풀스택 |
-| 04_GUI_UX.md | 3분할 레이아웃, Wireframe, 인라인 카드, UX 원칙 | 기획 |
-| 05_FRONTEND.md | Next.js 구조, shadcn/ui 규칙, Zustand, React Query | 풀스택 |
+| 04_GUI_UX.md | 슬림 레일 + 단일 캔버스, 6뷰, 캡처 바, UX 원칙 | 기획 |
+| 05_FRONTEND.md | Next.js 구조(승격 라우트), 커스텀 스타일 규칙, Zustand | 풀스택 |
 | 06_BACKEND.md | FastAPI 구조, 패턴, JWT, LLM Provider 추상화 | 풀스택 |
 | 07_AI_SYSTEM.md | AI Router, Confidence, Retry, 쿼터 이원화 전략 | AI A |
 | 08_AI_AGENTS.md | Agent 15종 상세 설계 | AI A/B |
@@ -389,7 +390,9 @@ User ─┬─< Conversation ─< Message
 | 18_CODING_STYLE.md | Python/React Style, Naming, Directory Rule | 풀스택 |
 | 19_TEST.md | Unit/Integration/API/AI Test(Agent 정답셋) | AI B + 기획 |
 | 20_WORKFLOW.md | 기능별 시퀀스 다이어그램 | 풀스택 |
-| 21_ARCHITECTURE_DECISION_RECORD.md | 기술 선택 ADR (무료 스택, shadcn/ui 포함) | 전원 |
+| 21_ARCHITECTURE_DECISION_RECORD.md | 기술 선택 ADR (무료 스택 등) | 전원 |
+| 22_DESIGN_LANGUAGE.md | **시각 언어 규격** — 토큰·타이포·색·여백·모션 ("feel expensive") | 풀스택 |
+| 23_USER_JOURNEY.md | **화면 여정·IA** — Landing→Experience→Enter→Workspace, 전환 | 기획 |
 
 ---
 

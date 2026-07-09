@@ -5,7 +5,8 @@
 ## 현재 상태(목업)
 
 - 위치: `src/lib/store.ts`의 `interpret(text)` — 키워드 기반으로 `schedule/todo/memo/chat` 판별 후 엔티티 생성 + 응답 문구 반환.
-- 채팅 흐름: `sendMessage(text)` → 사용자 메시지 push → `interpret()` → 엔티티 생성(일정은 pending) → AI 메시지 + 인라인 카드(`message.card`).
+- 채팅 흐름: `sendMessage(text)` → 사용자 메시지 push → `interpret()` → 엔티티 생성(일정은 pending) → AI 메시지 + 카드(`message.card`).
+  - 계약(`message.card`)은 그대로 유효. 단, 현 워크스페이스(슬림 레일 + 단일 캔버스)는 이를 **캡처 결과(receipt)** 로 렌더한다 — "무엇이 어느 뷰로 정리됐는지". UI 표현만 다를 뿐 AI↔프론트 계약은 동일.
 
 ## 목표 seam (권장 리팩터)
 

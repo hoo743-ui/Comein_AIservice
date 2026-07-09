@@ -41,7 +41,7 @@ export default function Enter() {
           // 이 순간이 곧 '문턱' — 워크스페이스는 threshold를 다시 재생하지 않는다.
           sessionStorage.setItem("comein:reimagine", "1");
         } catch {}
-        timers.current.push(setTimeout(() => router.push("/reimagine"), 1100));
+        timers.current.push(setTimeout(() => router.push("/workspace"), 1100));
       }, 1050)
     );
   };
