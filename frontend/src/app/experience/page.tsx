@@ -249,19 +249,19 @@ const CSS = `
 .opn-door.open .opn-door-svg { filter: drop-shadow(0 0 10px var(--glow)) drop-shadow(0 0 26px var(--glow)); }
 
 /* 인증 카드 — 빛에서 태어난다. 가볍게, 하나의 수직 리듬. */
-.opn-card { width: min(360px, 90vw); margin-top: clamp(34px, 6vh, 56px);
+.opn-card { width: min(392px, 92vw); margin-top: clamp(34px, 6vh, 56px);
   display: flex; flex-direction: column; align-items: stretch;
-  padding: 26px 24px 22px; border-radius: 20px;
+  padding: 30px 28px 26px; border-radius: 22px;
   background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 46%), rgba(18,19,27,0.72);
   border: 1px solid rgba(255,255,255,0.06);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04), 0 24px 64px -30px rgba(0,0,0,0.6), 0 0 60px -20px var(--glow);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px -20px rgba(0,0,0,0.4), 0 30px 70px -34px rgba(0,0,0,0.55), 0 0 64px -22px var(--glow);
   backdrop-filter: blur(10px);
   animation: opn-card-in 1.3s cubic-bezier(0.22,1,0.36,1) 0.2s both; }
 @keyframes opn-card-in { from { opacity: 0; transform: translateY(14px) scale(0.975); } to { opacity: 1; transform: translateY(0) scale(1); } }
 .opn-card-hi { margin: 0 0 20px; text-align: center; font-size: 1.02rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
 
-.opn-providers { display: flex; flex-direction: column; gap: 8px; }
-.opn-provider { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 50px; padding: 0 16px;
+.opn-providers { display: flex; flex-direction: column; gap: 13px; }
+.opn-provider { display: flex; align-items: center; justify-content: center; gap: 10px; width: 100%; min-height: 52px; padding: 0 16px;
   background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08); border-radius: 13px;
   font-family: inherit; font-size: 0.94rem; font-weight: 500; color: var(--ink); cursor: pointer;
   transition: border-color 0.35s ease, background 0.35s ease, transform 0.25s cubic-bezier(0.22,1,0.36,1), opacity 0.3s;
@@ -278,19 +278,19 @@ const CSS = `
 .opn-div { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; }
 .opn-div::before, .opn-div::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,0.07); }
 .opn-div span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); }
-.opn-form { display: flex; flex-direction: column; gap: 8px; }
-.opn-field { width: 100%; min-height: 46px; padding: 0 14px; border-radius: 12px;
+.opn-form { display: flex; flex-direction: column; gap: 10px; }
+.opn-field { width: 100%; min-height: 52px; padding: 0 15px; border-radius: 13px;
   background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08);
   font-family: inherit; font-size: 0.94rem; font-weight: 400; color: var(--ink); outline: none;
   transition: border-color 0.25s, box-shadow 0.25s; }
 .opn-field::placeholder { color: var(--faint); }
 .opn-field:focus { border-color: color-mix(in srgb, var(--accent) 40%, rgba(255,255,255,0.08)); box-shadow: 0 0 0 3px var(--glow); }
 .opn-err { margin: 2px 0 0; font-size: 0.82rem; color: #E57373; text-align: left; }
-.opn-submit { margin-top: 6px; width: 100%; min-height: 48px; border: 0; border-radius: 13px;
+.opn-submit { margin-top: 6px; width: 100%; min-height: 52px; border: 0; border-radius: 13px;
   background: var(--accent); color: #17140F; font-family: inherit; font-size: 0.96rem; font-weight: 600; cursor: pointer;
-  box-shadow: 0 0 24px -8px var(--glow); transition: transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.25s, opacity 0.2s; }
-.opn-submit:hover:not(:disabled) { transform: translateY(-1px); box-shadow: 0 0 30px -6px var(--glow); }
-.opn-submit:active:not(:disabled) { transform: translateY(0) scale(0.99); }
+  box-shadow: 0 6px 18px -10px rgba(0,0,0,0.5), 0 0 24px -8px var(--glow); transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s; }
+.opn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(0,0,0,0.55), 0 0 36px -6px var(--glow); }
+.opn-submit:active:not(:disabled) { transform: scale(0.98); box-shadow: 0 4px 14px -10px rgba(0,0,0,0.5), 0 0 22px -8px var(--glow); }
 .opn-submit:disabled { opacity: 0.5; cursor: default; }
 .opn-submit:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 3px; }
 .opn-switch { margin: 18px 0 0; text-align: center; font-size: 0.84rem; font-weight: 300; color: var(--muted); }
@@ -328,8 +328,8 @@ const CSS = `
 .opn-authwrap { position: relative; z-index: 2; display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: clamp(32px, 6vw, 88px); width: min(940px, 92vw); animation: opn-card-in 1s cubic-bezier(0.22,1,0.36,1) 0.1s both; }
 .opn-authwrap .opn-card { margin: 0 auto; animation: none; }
 .opn-brand { text-align: left; }
-.opn-brand-logo { margin: 0; font-size: clamp(2.4rem, 5vw, 3.4rem); font-weight: 300; letter-spacing: -0.035em; color: var(--ink); text-shadow: 0 0 48px var(--glow); }
-.opn-brand-tag { margin: 12px 0 24px; font-size: clamp(0.86rem, 1.6vw, 0.98rem); font-weight: 300; color: var(--muted); }
+.opn-brand-logo { margin: 0; font-size: clamp(2.85rem, 6vw, 4.05rem); font-weight: 400; letter-spacing: -0.038em; color: var(--ink); text-shadow: 0 0 56px var(--glow); }
+.opn-brand-tag { margin: 20px 0 26px; font-size: clamp(0.86rem, 1.6vw, 0.98rem); font-weight: 300; color: var(--muted); }
 .opn-brand .opn-tree-word { font-size: clamp(1.05rem, 2.4vw, 1.35rem); }
 .opn-brand .opn-tree-desc { font-size: clamp(0.8rem, 1.5vw, 0.9rem); }
 @media (max-width: 800px) {
