@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  ArrowRight, ArrowUp, Bell, CalendarDays, Check, CheckCircle2, Cloud, CloudRain, CloudSnow,
-  ChevronDown, Command, LogOut, Search, Settings as SettingsIcon, Sparkles, StickyNote, Sun, Users, Video, X,
+  ArrowUp, Bell, CalendarDays, Check, Cloud, CloudRain, CloudSnow,
+  ChevronDown, LogOut, MessagesSquare, Search, Settings as SettingsIcon, Sparkles, StickyNote, Sun, Users, X,
 } from "lucide-react";
 
 import { useWorkspace } from "@/lib/store";
@@ -19,19 +19,45 @@ import { fmtTime, fmtDate } from "@/lib/format";
  * 보라색은 오직 AI 활동의 언어. 배경은 아주 옅게 숨쉰다(래디얼·그레인·미세 입자). 구조는 타이포·여백으로.
  */
 
+// 할 일(Tasks) 레일 아이콘 — 원 안의 리스트(사용자 지정 이미지 기준). lucide와 동일한 stroke 규격.
+function TaskListIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      className={className}
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={2}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <circle cx="12" cy="12" r="9.25" />
+      <circle cx="8.7" cy="9" r="1" />
+      <circle cx="8.7" cy="12" r="1" />
+      <circle cx="8.7" cy="15" r="1" />
+      <line x1="11.7" y1="9" x2="16.3" y2="9" />
+      <line x1="11.7" y1="12" x2="16.3" y2="12" />
+      <line x1="11.7" y1="15" x2="16.3" y2="15" />
+    </svg>
+  );
+}
+
 type View = "today" | "calendar" | "tasks" | "notes" | "meetings" | "people";
 const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "today", label: "Today", icon: Sparkles },
   { key: "calendar", label: "Calendar", icon: CalendarDays },
-  { key: "tasks", label: "Tasks", icon: CheckCircle2 },
+  { key: "tasks", label: "Tasks", icon: TaskListIcon },
   { key: "notes", label: "Notes", icon: StickyNote },
-  { key: "meetings", label: "Meetings", icon: Video },
+  { key: "meetings", label: "Meetings", icon: MessagesSquare },
   { key: "people", label: "People", icon: Users },
 ];
 
 type Kind = "일정" | "회의" | "할 일" | "메모";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
-type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; isAction?: boolean };
+type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; note?: string; isAction?: boolean };
+// 초안(pending) — AI가 이해한 결과. 사용자가 확인/정제 후 확정(confirmed)하면 영수증이 된다.
+type Draft = { title: string; kind: Kind; time: string | null; note: string };
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
   회의: { view: "meetings", label: "회의" },
@@ -154,7 +180,6 @@ function L(lang: Lang) {
     noNotif: en ? "No new notifications." : "새로운 알림이 없어요.",
     topCalendar: en ? "Calendar" : "캘린더",
     topSettings: en ? "Settings" : "설정",
-    topGuide: en ? "Guide" : "가이드",
     themeToggle: en ? "Toggle theme" : "테마 전환",
     liveWorkspace: "Live workspace",
     placeholder: (v: View) => (en ? EN_PLACEHOLDER[v] : PLACEHOLDER[v]),
@@ -191,30 +216,6 @@ function L(lang: Lang) {
     actMeeting: en ? "Wrap meeting into tasks" : "회의 정리해서 할 일로",
     actWeek: en ? "Preview this week" : "이번 주 미리 살펴보기",
     quietNote: (w: number) => (en ? `quiet for ${w} week${w > 1 ? "s" : ""}` : `${w}주째 조용해요`),
-    guideLead: en
-      ? (<>Comein is a workspace that, once you <b>write</b>, organizes the rest for you.<br />Don't operate it — just think.</>)
-      : (<>Comein은 당신이 <b>적으면</b>, 나머지를 알아서 정리하는 워크스페이스예요.<br />조작하지 말고, 생각만 하세요.</>),
-    guideEyeHow: en ? "How to use" : "어떻게 쓰나요",
-    guideEyeWhat: en ? "What it does" : "무엇을 하나요",
-    guideSteps: en
-      ? [
-          { n: "01", t: "Write", d: <>One line with ⌘K — schedule, task, note, meeting; no need to sort.</> },
-          { n: "02", t: "It organizes", d: <>Comein files it in the right place and leaves a trace in <em>‘Just organized’</em>.</> },
-          { n: "03", t: "It stays near", d: <>Open the door on the right for today's context, memory and suggestions.</> },
-        ]
-      : GUIDE_STEPS,
-    guideFeats: en
-      ? [
-          { k: "Capture · ⌘K", d: "One line, the right place" },
-          { k: "Calendar", d: "Events and conflicts at a glance" },
-          { k: "Tasks", d: "Priorities sorted too" },
-          { k: "Notes", d: "Tags & links by AI" },
-          { k: "Meetings", d: "Summary → action items" },
-          { k: "People", d: "Nudges quiet contacts" },
-          { k: "Assistant · right door", d: "Today's context and suggestions" },
-        ]
-      : GUIDE_FEATS,
-    guideFoot: en ? "Stuck? Just write — Comein takes the rest." : "막히면 그냥 적으세요 — 나머지는 Comein이.",
     setName: en ? "Name" : "이름", setNameD: en ? "Display name in greetings and profile" : "인사와 프로필에 쓰이는 표시 이름",
     setLang: en ? "Language" : "언어", setLangD: en ? "Interface language" : "인터페이스 언어",
     setMode: en ? "Usage type" : "사용 유형", setModeD: en ? "Reflected in default places & labels" : "기본 장소·라벨 프리셋에 반영",
@@ -248,11 +249,12 @@ export default function Reimagine() {
   const [shownView, setShownView] = React.useState<View>("today"); // 실제 렌더 중인 뷰 — 전환 시 이전 뷰를 잠깐 더 붙잡아 크로스페이드
   const [flowExit, setFlowExit] = React.useState(false); // 탭 전환: 이전 내용 페이드아웃 단계
   const [receipts, setReceipts] = React.useState<Receipt[]>([]);
+  const [draft, setDraft] = React.useState<Draft | null>(null); // 확인/정제 카드 — 캡처 후 확정 전 pending 상태
   const [organizing, setOrganizing] = React.useState(false);
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
   const [calDay, setCalDay] = React.useState<Date | null>(null);
   const [notifOpen, setNotifOpen] = React.useState(false);
-  const [panel, setPanel] = React.useState<null | "calendar" | "settings" | "guide">(null);
+  const [panel, setPanel] = React.useState<null | "calendar" | "settings">(null);
   const [entered, setEntered] = React.useState(false);
   const [leaving, setLeaving] = React.useState(false);
   const [arriving, setArriving] = React.useState(false); // opening 에서 막 넘어옴 — 페이드인으로 부드럽게 받는다
@@ -390,14 +392,20 @@ export default function Reimagine() {
     orgTimer.current = setTimeout(() => setOrganizing(false), 1600);
   }, []);
 
-  // 캡처 — 즉시 실행하고 목적지로 라우팅한 '영수증'을 남긴다.
+  // 캡처 — 즉시 확정하지 않고, AI가 이해한 결과를 확인/정제 카드(pending)로 띄운다.
   const capture = (v: string) => {
     const t = v.trim();
     if (!t) return;
-    const kind = classify(t);
-    const d = DEST[kind];
+    setDraft({ title: t, kind: classify(t), time: parseTime(t), note: "" });
+  };
+  // 확정(confirmed) — 카드에서 확정해야 목적지로 라우팅한 '영수증'을 남긴다.
+  const commitDraft = (d: Draft) => {
+    const t = d.title.trim();
+    if (!t) return;
+    const dest = DEST[d.kind];
     seq.current += 1;
-    setReceipts((prev) => [{ id: seq.current, at: Date.now(), title: t, kind, destView: d.view, destLabel: d.label, time: parseTime(t) }, ...prev].slice(0, 8));
+    setReceipts((prev) => [{ id: seq.current, at: Date.now(), title: t, kind: d.kind, destView: dest.view, destLabel: dest.label, time: d.time, note: d.note.trim() || undefined }, ...prev].slice(0, 8));
+    setDraft(null);
     ignite();
   };
 
@@ -482,15 +490,10 @@ export default function Reimagine() {
         onMouseLeave={closeRail}
       >
         <div className="rmg-rail-panel">
-          <button
-            type="button"
-            className={`rmg-rail-mark ${panel === "guide" ? "on" : ""}`}
-            onClick={() => setPanel((p) => (p === "guide" ? null : "guide"))}
-            aria-label={lang === "en" ? "Guide and features" : "사용법과 기능 안내"}
-          >
-            <AiDoor active={organizing || panel === "guide"} className="rmg-rail-door" />
+          <div className="rmg-rail-mark" aria-hidden>
+            <AiDoor active={organizing} className="rmg-rail-door" />
             <span className="rmg-rail-word">Comein</span>
-          </button>
+          </div>
           <nav className="rmg-rail-nav" style={{ ["--active" as string]: String(navIndPos) } as React.CSSProperties}>
             <span className="rmg-rail-ind" aria-hidden data-hidden={navActive < 0} />
             {NAV.map((n, i) => {
@@ -665,7 +668,7 @@ export default function Reimagine() {
                         <span className="rmg-rcpt-mark"><AiDoor className="rmg-rcpt-door" /></span>
                         <span className="rmg-rcpt-desc">
                           <b className="rmg-rcpt-title">{r.title}</b>
-                          <span className="rmg-rcpt-dest">{t.viewLabel(r.destView)}{r.time ? ` · ${r.time}` : ""}</span>
+                          <span className="rmg-rcpt-dest">{t.viewLabel(r.destView)}{r.time ? ` · ${r.time}` : ""}{r.note ? ` · ${r.note}` : ""}</span>
                         </span>
                       </span>
                       <span className="rmg-rcpt-acts">
@@ -685,14 +688,18 @@ export default function Reimagine() {
         </div>
 
         {/* 앰비언트 AI — 상주 챗박스가 아니라, 필요할 때만 펼쳐지는 떠다니는 문 (⌘K).
-            전체 패널(캘린더·설정·가이드)이 열리면 컴포저는 물러난다(⌘K 충돌 방지). */}
-        {!panel && <DoorInvoke view={view} lang={lang} organizing={organizing} onSubmit={capture} />}
+            전체 패널(캘린더·설정·가이드)이 열리면 컴포저는 물러난다(⌘K 충돌 방지).
+            초안(pending)이 있으면 컴포저 대신 확인/정제 카드를 그 자리에 띄운다. */}
+        {!panel && !draft && <DoorInvoke view={view} lang={lang} organizing={organizing} onSubmit={capture} />}
+        {!panel && draft && (
+          <ConfirmCard draft={draft} lang={lang} onConfirm={commitDraft} onCancel={() => setDraft(null)} />
+        )}
 
         {/* 가로 옵션에서 여는 전체 화면 란 — 캘린더 전체 / 설정 (모달 아님, 캔버스 위 큰 판) */}
         {panel && mounted && (
-          <section className="rmg-panel" key={panel} aria-label={panel === "calendar" ? t.topCalendar : panel === "settings" ? t.topSettings : t.topGuide}>
+          <section className="rmg-panel" key={panel} aria-label={panel === "calendar" ? t.topCalendar : t.topSettings}>
             <div className="rmg-panel-head">
-              <p className="rmg-panel-title">{panel === "calendar" ? t.topCalendar : panel === "settings" ? t.topSettings : t.topGuide}</p>
+              <p className="rmg-panel-title">{panel === "calendar" ? t.topCalendar : t.topSettings}</p>
               <button type="button" className="rmg-panel-close" onClick={() => setPanel(null)} aria-label={lang === "en" ? "Close" : "닫기"}>
                 <X className="rmg-notif-ic" />
               </button>
@@ -749,16 +756,6 @@ export default function Reimagine() {
                   mounted={mounted}
                   lang={lang}
                 />
-              )}
-              {panel === "guide" && (
-                <>
-                  <GuidePanel lang={lang} onStart={() => { setPanel(null); setView("today"); }} />
-                  <GuideComposer
-                    lang={lang}
-                    onAsk={(q) => { capture(q); setPanel(null); }}
-                    onStart={() => { setPanel(null); setView("today"); }}
-                  />
-                </>
               )}
             </div>
           </section>
@@ -846,6 +843,102 @@ function DoorInvoke({ view, lang, organizing, onSubmit }: { view: View; lang: La
         <span className="rmg-ask-kbd">⌘K</span>
       )}
     </form>
+  );
+}
+
+/** 확인/정제 카드 — 캡처 직후, AI가 이해한 결과(pending)를 조용히 제시하고 살짝 손보게 한다.
+ *  폼을 채우는 게 아니라 'AI가 채운 걸 사용자가 끄덕이는' 경험. 확정하면 목적지로 배정된다. */
+function ConfirmCard({ draft, lang, onConfirm, onCancel }: {
+  draft: Draft; lang: Lang; onConfirm: (d: Draft) => void; onCancel: () => void;
+}) {
+  const t = L(lang);
+  const en = lang === "en";
+  const [d, setD] = React.useState<Draft>(draft);
+  const titleRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => { setD(draft); }, [draft]);
+  React.useEffect(() => { titleRef.current?.focus(); titleRef.current?.select(); }, []);
+  React.useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
+      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); onConfirm({ ...d, time: d.time?.trim() || null }); }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [d, onConfirm, onCancel]);
+
+  const KINDS: Kind[] = ["일정", "회의", "할 일", "메모"];
+  const kindLabel: Record<Kind, string> = en
+    ? { 일정: "Event", 회의: "Meeting", "할 일": "Task", 메모: "Note" }
+    : { 일정: "일정", 회의: "회의", "할 일": "할 일", 메모: "메모" };
+  const dest = DEST[d.kind];
+  const noteLabel = d.kind === "회의" ? (en ? "Participants" : "참석자")
+    : d.kind === "일정" ? (en ? "Location" : "장소")
+    : d.kind === "할 일" ? (en ? "Detail" : "메모")
+    : (en ? "Tags" : "태그");
+  const notePlaceholder = d.kind === "회의" ? (en ? "e.g. Prof. Kim" : "예: 김 교수님")
+    : d.kind === "일정" ? (en ? "e.g. Room 401" : "예: 401호")
+    : (en ? "optional" : "선택");
+
+  return (
+    <div className="rmg-confirm" role="dialog" aria-label={en ? "Confirm capture" : "입력 확인"}>
+      <div className="rmg-confirm-head">
+        <span className="rmg-confirm-mark" aria-hidden><AiDoor active className="rmg-confirm-door" /></span>
+        <span className="rmg-confirm-eye">{en ? "Comein understood" : "Comein이 이해했어요"}</span>
+        <span className="rmg-confirm-dest">→ {t.viewLabel(dest.view)}</span>
+      </div>
+
+      <input
+        ref={titleRef}
+        className="rmg-confirm-title"
+        value={d.title}
+        onChange={(e) => setD((s) => ({ ...s, title: e.target.value }))}
+        aria-label={en ? "Title" : "제목"}
+      />
+
+      <div className="rmg-confirm-chips" role="group" aria-label={en ? "Type" : "종류"}>
+        {KINDS.map((k) => (
+          <button
+            key={k}
+            type="button"
+            className={`rmg-confirm-chip ${d.kind === k ? "on" : ""}`}
+            onClick={() => setD((s) => ({ ...s, kind: k }))}
+            aria-pressed={d.kind === k}
+          >
+            {kindLabel[k]}
+          </button>
+        ))}
+      </div>
+
+      <div className="rmg-confirm-fields">
+        <label className="rmg-confirm-field">
+          <span className="rmg-confirm-flabel">{en ? "Time" : "시간"}</span>
+          <input
+            className="rmg-confirm-finput"
+            value={d.time ?? ""}
+            placeholder={en ? "e.g. 15:00" : "예: 15:00"}
+            onChange={(e) => setD((s) => ({ ...s, time: e.target.value }))}
+          />
+        </label>
+        {d.kind !== "메모" && (
+          <label className="rmg-confirm-field">
+            <span className="rmg-confirm-flabel">{noteLabel}</span>
+            <input
+              className="rmg-confirm-finput"
+              value={d.note}
+              placeholder={notePlaceholder}
+              onChange={(e) => setD((s) => ({ ...s, note: e.target.value }))}
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="rmg-confirm-acts">
+        <button type="button" className="rmg-confirm-cancel" onClick={onCancel}>{en ? "Cancel" : "취소"}</button>
+        <button type="button" className="rmg-confirm-ok" onClick={() => onConfirm({ ...d, time: d.time?.trim() || null })}>
+          {en ? "Confirm" : "확정"}
+        </button>
+      </div>
+    </div>
   );
 }
 
@@ -1441,143 +1534,6 @@ function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang }: {
 }
 type SettingsPanelProps = { name: string; language: "ko" | "en"; mode: "student" | "office" | "general"; weekStart: "sun" | "mon"; notifications: boolean; autoConfirm: boolean; textScale: "md" | "lg" | "xl" };
 
-/** 가이드 — 좌상단 문에서 열리는 '사용법 + 기능' 안내. 매뉴얼이 아니라 조용한 소개. */
-const GUIDE_STEPS = [
-  { n: "01", t: "적으세요", d: <>⌘K 로 무엇이든 한 줄 — 일정·할 일·메모·회의, 구분하지 않아도 돼요.</> },
-  { n: "02", t: "정리됩니다", d: <>AI가 알맞은 곳에 넣고, 어디에 뒀는지 <em>‘방금 정리한 것’</em>에 남겨요.</> },
-  { n: "03", t: "곁에 둡니다", d: <>오른쪽 문을 열면 오늘의 맥락·기억·제안을 조용히 보여줘요.</> },
-];
-const GUIDE_FEATS: { k: string; d: string }[] = [
-  { k: "캡처 · ⌘K", d: "한 줄이면 알맞은 곳으로" },
-  { k: "캘린더", d: "일정과 충돌을 한눈에" },
-  { k: "할 일", d: "우선순위까지 정리" },
-  { k: "메모", d: "태그·연결은 AI가" },
-  { k: "회의", d: "요약 → 액션아이템" },
-  { k: "사람", d: "뜸해진 연락을 챙겨요" },
-  { k: "비서 · 오른쪽 문", d: "오늘의 맥락과 제안" },
-];
-const GUIDE_FEAT_ICONS = [Command, CalendarDays, CheckCircle2, StickyNote, Video, Users, Sparkles];
-function GuidePanel({ lang, onStart }: { lang: Lang; onStart: () => void }) {
-  const t = L(lang);
-  const en = lang === "en";
-  const diffs = en
-    ? [
-        { t: "No sorting needed", d: "One line, and AI splits it into events, tasks, notes and meetings." },
-        { t: "Scattered things connect", d: "Meeting → tasks, note → event. Context carries over on its own." },
-        { t: "It looks ahead", d: "Conflicts, deadlines, contacts gone quiet — surfaced before you ask." },
-      ]
-    : [
-        { t: "분류하지 않아도 됩니다", d: "말 한 줄이면 AI가 일정·할 일·메모·회의로 알아서 나눠요." },
-        { t: "흩어진 것이 연결됩니다", d: "회의 → 할 일, 메모 → 일정. 맥락이 저절로 이어져요." },
-        { t: "먼저 챙깁니다", d: "충돌·마감·뜸해진 연락을 묻기 전에 조용히 알려드려요." },
-      ];
-  return (
-    <div className="rmg-guide">
-      {/* Hero — 문 브랜드 + 리드 + Workspace 시작 CTA */}
-      <header className="rmg-guide-hero">
-        <AiDoor className="rmg-guide-herodoor" />
-        <p className="rmg-guide-herolead">{t.guideLead}</p>
-        <button type="button" className="rmg-guide-herocta" onClick={onStart}>
-          {en ? "Start Workspace" : "Workspace 시작하기"}
-          <ArrowRight className="rmg-gc-cta-ic" />
-        </button>
-      </header>
-
-      {/* 어떻게 쓰나요 — 단계별 카드 */}
-      <section className="rmg-guide-sec">
-        <p className="rmg-eyebrow">{t.guideEyeHow}</p>
-        <ol className="rmg-guide-steps">
-          {t.guideSteps.map((s) => (
-            <li key={s.n} className="rmg-guide-step">
-              <span className="rmg-guide-n">{s.n}</span>
-              <div>
-                <p className="rmg-guide-t">{s.t}</p>
-                <p className="rmg-guide-d">{s.d}</p>
-              </div>
-            </li>
-          ))}
-        </ol>
-      </section>
-
-      {/* Comein만의 차별점 */}
-      <section className="rmg-guide-sec">
-        <p className="rmg-eyebrow">{en ? "What makes Comein different" : "Comein만의 차별점"}</p>
-        <ul className="rmg-guide-diffs">
-          {diffs.map((d) => (
-            <li key={d.t} className="rmg-guide-diff">
-              <span className="rmg-guide-diffdot" aria-hidden />
-              <div>
-                <p className="rmg-guide-difft">{d.t}</p>
-                <p className="rmg-guide-diffd">{d.d}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      </section>
-
-      {/* 무엇을 하나요 — 아이콘 + 기능 */}
-      <section className="rmg-guide-sec">
-        <p className="rmg-eyebrow">{t.guideEyeWhat}</p>
-        <ul className="rmg-guide-feats">
-          {t.guideFeats.map((f, i) => {
-            const Icon = GUIDE_FEAT_ICONS[i] ?? Sparkles;
-            return (
-              <li key={f.k} className="rmg-guide-feat">
-                <span className="rmg-guide-fic"><Icon className="rmg-guide-fic-ic" /></span>
-                <span className="rmg-guide-fk">{f.k}</span>
-                <span className="rmg-guide-fd">{f.d}</span>
-              </li>
-            );
-          })}
-        </ul>
-      </section>
-
-      <p className="rmg-guide-foot">{t.guideFoot}</p>
-    </div>
-  );
-}
-
-/** Guide 전용 하단 — 일반 Composer 대신 '읽은 뒤 자연스럽게 이어지는' 질문 + Workspace 시작 CTA. */
-function GuideComposer({ lang, onAsk, onStart }: { lang: Lang; onAsk: (q: string) => void; onStart: () => void }) {
-  const en = lang === "en";
-  const [q, setQ] = React.useState("");
-  const examples = en
-    ? ["How do I add an event?", "How are meetings organized?", "Do notes link automatically?"]
-    : ["일정은 어떻게 등록하나요?", "회의는 어떻게 정리되나요?", "메모는 자동으로 연결되나요?"];
-  const submit = (e: React.FormEvent) => {
-    e.preventDefault();
-    const v = q.trim();
-    if (!v) return;
-    onAsk(v);
-  };
-  return (
-    <div className="rmg-gc">
-      <p className="rmg-gc-title">{en ? "Any questions?" : "궁금한 점이 있나요?"}</p>
-      <div className="rmg-gc-ex">
-        {examples.map((ex) => (
-          <button key={ex} type="button" className="rmg-gc-chip" onClick={() => setQ(ex)}>{ex}</button>
-        ))}
-      </div>
-      <form className="rmg-gc-form" onSubmit={submit}>
-        <input
-          className="rmg-gc-input"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder={en ? "Ask Comein…" : "Comein에게 질문해보세요..."}
-          aria-label={en ? "Ask a question" : "질문 입력"}
-        />
-        <button type="submit" className="rmg-gc-send" aria-label={en ? "Send" : "보내기"} disabled={!q.trim()}>
-          <ArrowUp className="rmg-railicon" />
-        </button>
-      </form>
-      <button type="button" className="rmg-gc-cta" onClick={onStart}>
-        {en ? "Start Workspace" : "Workspace 시작하기"}
-        <ArrowRight className="rmg-gc-cta-ic" />
-      </button>
-    </div>
-  );
-}
-
 const CSS = `
 .rmg {
   --paper: #141210; --surface: #1B1813; --ink: #F2F0EC; --muted: #98938A; --faint: #5E574C; --hair: #262019; --accent: #9B8E86; --glow: rgba(155,142,134,0.16);
@@ -1664,12 +1620,9 @@ const CSS = `
 }
 
 /* 브랜드 마크(문) + Comein 워드마크 리빌 — 아주 은은한 글로우 */
-.rmg-rail-mark { display: flex; align-items: center; gap: 15px; height: 42px; padding: 0 9px; border: 0; border-radius: 12px; background: none; color: var(--ink); cursor: pointer; overflow: hidden; transition: background 0.25s, transform 0.15s cubic-bezier(0.22,1,0.36,1); }
-.rmg-rail-mark:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.rmg-rail-mark:hover .aidoor-svg, .rmg.rail-open .rmg-rail-mark .aidoor-svg { filter: drop-shadow(0 0 7px var(--glow)); }
-.rmg-rail-mark.on { background: var(--surface); }
-.rmg-rail-mark:active { transform: scale(0.97); }
-.rmg-rail-mark:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 브랜드 마크 — 클릭 불가(가이드 제거). 레일 펼침 시 문에 은은한 숨결만. */
+.rmg-rail-mark { display: flex; align-items: center; gap: 15px; height: 42px; padding: 0 9px; border-radius: 12px; color: var(--ink); overflow: hidden; }
+.rmg.rail-open .rmg-rail-mark .aidoor-svg { filter: drop-shadow(0 0 7px var(--glow)); }
 .rmg-rail-door { width: 22px; height: 28px; flex: 0 0 22px; }
 .rmg-rail-word { font-size: 0.98rem; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
 
@@ -1722,6 +1675,9 @@ const CSS = `
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
 .rmg-heart { position: absolute; right: 8%; top: 30%; width: clamp(120px, 16vw, 220px); aspect-ratio: 40/52; opacity: 0.05; transition: opacity 1.2s ease; }
 .rmg-heart.on { opacity: 0.5; }
+/* light 모드: --muted가 어두운 회색이라 흰 배경 위 실효 ~2% 불투명도로는 문이 사라져 보임 → 휴식 가시성 보강(다크는 유지). .on보다 특이성이 높아 조직화 글로우도 유지. */
+:root:not(.dark) .rmg-heart { opacity: 0.3; }
+:root:not(.dark) .rmg-heart.on { opacity: 0.62; }
 .rmg-heart-door { width: 100%; height: 100%; }
 
 /* 최상단 옵션 바 + 알림 */
@@ -1746,7 +1702,8 @@ const CSS = `
 /* 왼쪽 상시 캘린더 */
 .rmg-calrail { display: none; }
 @media (min-width: 1240px) {
-  .rmg-calrail { display: block; position: absolute; left: 0; top: 52px; bottom: 0; width: 288px; z-index: 4; overflow-y: auto; padding: clamp(20px, 4vh, 44px) 22px 40px 30px; }
+  /* 상단 라인을 메인 인사말(.rmg-flow 상단 여백)에 맞춤 — 월 헤더 윗선이 Good morning. 첫 줄과 같은 높이. +6px는 큰 글자 대비 광학 보정. */
+  .rmg-calrail { display: block; position: absolute; left: 0; top: 0; bottom: 0; width: 288px; z-index: 4; overflow-y: auto; padding: calc(clamp(48px, 12vh, 128px) + 6px) 22px 40px 30px; }
 }
 .rmg-mc { user-select: none; }
 .rmg-mc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
@@ -1918,6 +1875,50 @@ const CSS = `
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
 .rmg-ctx-reflect { color: var(--muted); }
 
+/* 확인/정제 카드 — 캡처 후 확정 전(pending). 폼이 아니라 'AI가 채운 걸 끄덕이는' 카드. */
+.rmg-confirm { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 21;
+  display: flex; flex-direction: column; gap: 12px;
+  width: min(520px, calc(100% - 48px));
+  padding: 16px 18px 15px; border-radius: 18px;
+  background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--hair);
+  backdrop-filter: blur(16px); box-shadow: 0 24px 60px -22px rgba(0,0,0,0.7), 0 0 0 3px var(--glow);
+  animation: rmg-rise 0.28s cubic-bezier(0.22,1,0.36,1) both; }
+.rmg-confirm-head { display: flex; align-items: center; gap: 9px; }
+.rmg-confirm-mark { display: grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--accent); }
+.rmg-confirm-door { width: 13px; height: 17px; }
+.rmg-confirm-eye { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+.rmg-confirm-dest { margin-left: auto; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; color: var(--accent); }
+.rmg-confirm-title { width: 100%; background: transparent; border: 0; outline: none; padding: 2px 0;
+  font-family: inherit; font-size: 1.18rem; font-weight: 400; letter-spacing: -0.015em; color: var(--ink); caret-color: var(--accent); }
+.rmg-confirm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.rmg-confirm-chip { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent);
+  color: var(--muted); font-family: inherit; font-size: 0.8rem; font-weight: 500; letter-spacing: -0.005em;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background 0.2s; }
+.rmg-confirm-chip:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.rmg-confirm-chip.on { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, transparent); }
+.rmg-confirm-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rmg-confirm-fields { display: flex; flex-wrap: wrap; gap: 8px; }
+.rmg-confirm-field { display: flex; align-items: center; gap: 8px; flex: 1 1 160px; min-width: 0;
+  border: 1px solid var(--hair); border-radius: 11px; padding: 7px 11px;
+  background: color-mix(in srgb, var(--surface) 50%, transparent); transition: border-color 0.2s; }
+.rmg-confirm-field:focus-within { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.rmg-confirm-flabel { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); white-space: nowrap; flex-shrink: 0; }
+.rmg-confirm-finput { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; padding: 0;
+  font-family: inherit; font-size: 0.92rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); caret-color: var(--accent); }
+.rmg-confirm-finput::placeholder { color: var(--faint); font-weight: 300; }
+.rmg-confirm-acts { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 2px; }
+.rmg-confirm-cancel { border: 0; background: none; font-family: inherit; font-size: 0.86rem; font-weight: 500;
+  color: var(--faint); cursor: pointer; padding: 8px 14px; border-radius: 10px; transition: color 0.2s, background 0.2s; }
+.rmg-confirm-cancel:hover { color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-confirm-ok { border: 0; font-family: inherit; font-size: 0.86rem; font-weight: 600; letter-spacing: -0.005em;
+  color: #141210; background: var(--accent); cursor: pointer; padding: 8px 18px; border-radius: 10px;
+  transition: transform 0.15s cubic-bezier(0.22,1,0.36,1), filter 0.2s; }
+.rmg-confirm-ok:hover { transform: translateY(-1px); filter: brightness(1.05); }
+.rmg-confirm-ok:active { transform: scale(0.97); }
+.rmg-confirm-cancel:focus-visible, .rmg-confirm-ok:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
+
 /* Ask Comein · 항상 보이는 주 입력 (문 + 명확한 필드 + 회전 예시) */
 .rmg-ask { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 20;
   display: flex; align-items: center; gap: 12px;
@@ -2064,66 +2065,6 @@ const CSS = `
 .rmg-a3 { animation: rmg-rise 0.62s cubic-bezier(0.22,1,0.36,1) 0.16s both; }
 .rmg-a4 { animation: rmg-rise 0.62s cubic-bezier(0.22,1,0.36,1) 0.22s both; }
 @keyframes rmg-rise { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-/* 가이드 — 좌상단 문에서 열리는 사용법·기능 (에디토리얼, 매뉴얼 아님) */
-.rmg-guide { max-width: 720px; margin: 0 auto; }
-
-/* Hero — 문 브랜드 + 리드 + CTA */
-.rmg-guide-hero { display: flex; flex-direction: column; align-items: flex-start; gap: 20px; padding-bottom: 40px; margin-bottom: 44px; border-bottom: 1px solid var(--hair); }
-.rmg-guide-herodoor { width: 34px; height: 44px; color: var(--ink); }
-.rmg-guide-herolead { margin: 0; font-size: clamp(1.35rem, 2.6vw, 1.72rem); font-weight: 300; line-height: 1.5; letter-spacing: -0.025em; color: var(--ink); }
-.rmg-guide-herolead b { font-weight: 500; }
-.rmg-guide-herocta { display: inline-flex; align-items: center; gap: 8px; margin-top: 4px; padding: 13px 24px; border: 0; border-radius: 13px; background: var(--ink); color: var(--paper); font-family: inherit; font-size: 0.98rem; font-weight: 500; letter-spacing: -0.01em; cursor: pointer; transition: transform 0.2s cubic-bezier(0.22,1,0.36,1); }
-.rmg-guide-herocta:hover { transform: translateY(-1px); }
-.rmg-guide-herocta:hover .rmg-gc-cta-ic { transform: translateX(3px); }
-
-.rmg-guide-sec { margin-bottom: 46px; }
-.rmg-guide-sec .rmg-eyebrow { margin-bottom: 18px; }
-
-/* 단계 — 카드로 명확히 구분 */
-.rmg-guide-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-.rmg-guide-step { display: flex; gap: 18px; align-items: flex-start; padding: 20px 22px; border: 1px solid var(--hair); border-radius: 16px; background: color-mix(in srgb, var(--surface) 45%, transparent); transition: border-color 0.25s, background 0.25s; }
-.rmg-guide-step:hover { border-color: color-mix(in srgb, var(--accent) 30%, var(--hair)); background: color-mix(in srgb, var(--surface) 72%, transparent); }
-.rmg-guide-n { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.9rem; font-weight: 600; color: var(--accent); flex-shrink: 0; line-height: 1.6; }
-.rmg-guide-t { margin: 0; font-size: 1.15rem; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); }
-.rmg-guide-d { margin: 6px 0 0; font-size: 1.02rem; font-weight: 300; line-height: 1.6; color: var(--muted); }
-.rmg-guide-d em { font-style: normal; color: var(--accent); }
-
-/* 차별점 */
-.rmg-guide-diffs { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 20px; }
-.rmg-guide-diff { display: flex; gap: 14px; align-items: flex-start; }
-.rmg-guide-diffdot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-top: 9px; flex-shrink: 0; box-shadow: 0 0 10px -1px var(--glow); }
-.rmg-guide-difft { margin: 0; font-size: 1.08rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
-.rmg-guide-diffd { margin: 5px 0 0; font-size: 1rem; font-weight: 300; line-height: 1.6; color: var(--muted); }
-
-/* 기능 — 아이콘 + 이름 + 설명 */
-.rmg-guide-feats { list-style: none; margin: 0; padding: 0; }
-.rmg-guide-feat { display: flex; align-items: center; gap: 15px; padding: 15px 0; border-top: 1px solid var(--hair); }
-.rmg-guide-feat:first-child { border-top: 0; }
-.rmg-guide-fic { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border-radius: 10px; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--hair); color: var(--accent); }
-.rmg-guide-fic-ic { width: 17px; height: 17px; stroke-width: 1.7; }
-.rmg-guide-fk { font-size: 1.02rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); min-width: 7.5em; flex-shrink: 0; }
-.rmg-guide-fd { font-size: 0.96rem; font-weight: 300; color: var(--muted); }
-.rmg-guide-foot { margin: 8px 0 0; font-size: 1rem; font-weight: 300; color: var(--faint); }
-
-/* Guide 전용 하단 — 질문 안내 + 예시칩 + 입력 + Workspace 시작 CTA (일반 Composer 대신) */
-.rmg-gc { max-width: 640px; margin: 40px auto 8px; padding-top: 30px; border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: 16px; }
-.rmg-gc-title { margin: 0; font-size: 1.05rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
-.rmg-gc-ex { display: flex; flex-wrap: wrap; gap: 8px; }
-.rmg-gc-chip { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font-family: inherit; font-size: 13px; font-weight: 400; letter-spacing: -0.005em; padding: 8px 14px; border-radius: 999px; cursor: pointer; transition: color 0.25s, border-color 0.25s, background 0.25s; }
-.rmg-gc-chip:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); background: color-mix(in srgb, var(--surface) 80%, transparent); }
-.rmg-gc-form { display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 18px; border: 1px solid var(--hair); border-radius: 16px; background: color-mix(in srgb, var(--surface) 60%, transparent); transition: border-color 0.25s, box-shadow 0.25s; }
-.rmg-gc-form:focus-within { border-color: color-mix(in srgb, var(--accent) 42%, var(--hair)); box-shadow: 0 0 0 3px var(--glow); }
-.rmg-gc-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; padding: 10px 0; font-family: inherit; font-size: 0.98rem; font-weight: 400; color: var(--ink); caret-color: var(--accent); }
-.rmg-gc-input::placeholder { color: var(--faint); }
-.rmg-gc-send { flex: 0 0 auto; display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 12px; background: var(--accent); color: #141210; cursor: pointer; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1), opacity 0.2s; }
-.rmg-gc-send:hover:not(:disabled) { transform: translateY(-1px); }
-.rmg-gc-send:disabled { opacity: 0.4; cursor: default; }
-.rmg-gc-cta { align-self: flex-start; display: inline-flex; align-items: center; gap: 8px; margin-top: 6px; padding: 12px 22px; border: 0; border-radius: 13px; background: var(--ink); color: var(--paper); font-family: inherit; font-size: 0.95rem; font-weight: 500; letter-spacing: -0.01em; cursor: pointer; transition: transform 0.2s cubic-bezier(0.22,1,0.36,1), opacity 0.2s; }
-.rmg-gc-cta:hover { transform: translateY(-1px); }
-.rmg-gc-cta:active { transform: translateY(0) scale(0.99); }
-.rmg-gc-cta-ic { width: 16px; height: 16px; stroke-width: 1.8; transition: transform 0.2s cubic-bezier(0.22,1,0.36,1); }
-.rmg-gc-cta:hover .rmg-gc-cta-ic { transform: translateX(3px); }
 
 @media (prefers-reduced-motion: reduce) {
   .rmg-a1,.rmg-a2,.rmg-a3,.rmg-a4,.rmg-thr,.rmg-thr.leaving,.rmg-phil-1,.rmg-phil-2,.rmg-thr-cta,.aidoor-svg { animation: none; }
