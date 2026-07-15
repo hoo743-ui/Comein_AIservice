@@ -342,6 +342,3 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((st) => ({ connections: { ...st.connections, [key]: value } })),
   addContact: (c) => set((st) => ({ contacts: [{ ...c, id: uid() }, ...st.contacts] })),
 }));
-
-/** 클라이언트 마운트 여부 (인메모리 스토어의 런타임 값 표시 전 깜빡임/불일치 방지) */
-export { useHydrated } from "@/lib/use-hydrated";
