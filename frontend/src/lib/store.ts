@@ -136,6 +136,7 @@ function interpret(text: string): Interpretation {
 // ── 설정 ──
 export type Language = "ko" | "en";
 export type Mode = "student" | "office" | "general";
+export type TextScale = "md" | "lg" | "xl"; // 글자 크기 — 보통 · 크게 · 더 크게
 
 export interface Settings {
   name: string;
@@ -144,6 +145,7 @@ export interface Settings {
   weekStart: "sun" | "mon";
   notifications: boolean;
   autoConfirm: boolean; // AI 제안 일정을 자동 확정할지
+  textScale: TextScale; // 전체 글자 크기 배율
 }
 
 // ── 스토어 ─────────────────────────────────────────────
@@ -217,7 +219,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   timetable: seedTimetable,
   contacts: seedContacts,
   connections: { googleCalendar: true, googleContacts: true, outlook: false },
-  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false },
+  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: "md" },
   commandOpen: false,
   dismissedNotifs: [],
 
@@ -340,6 +342,3 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((st) => ({ connections: { ...st.connections, [key]: value } })),
   addContact: (c) => set((st) => ({ contacts: [{ ...c, id: uid() }, ...st.contacts] })),
 }));
-
-/** 클라이언트 마운트 여부 (인메모리 스토어의 런타임 값 표시 전 깜빡임/불일치 방지) */
-export { useHydrated } from "@/lib/use-hydrated";

@@ -162,3 +162,19 @@
     background-size: 140px 140px;
   }
 }
+
+/*
+ * 라우트 전환 페이드 — 페이지 리디렉션이 툭 끊기지 않고 부드럽게 넘어가게.
+ * template.tsx 가 네비게이션마다 리마운트되며 이 애니메이션을 재생한다.
+ * position: fixed 페이지 레이아웃을 깨지 않도록 transform 없이 opacity 만 전환한다.
+ */
+.route-fade {
+  animation: route-fade-in 0.42s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+@keyframes route-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .route-fade { animation: none; }
+}

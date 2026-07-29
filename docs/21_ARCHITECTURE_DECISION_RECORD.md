@@ -1,6 +1,8 @@
 # 21. Architecture Decision Record (ADR)
 
 > 프론트엔드 진행 중 내린 주요 결정을 기록한다. 이 문서가 기준(source of truth)이며, CLAUDE.md와 상충하면 여기 기록된 최신 결정을 따른다.
+>
+> ⚠️ **ADR-010(디자인 랭귀지 전환 · 슬림 레일 채택)이 다음을 대체한다:** ADR-001(shadcn/ui 스타일)·ADR-003(연보라 액센트 톤)·ADR-004(입체 `.elevated` 시스템)·ADR-005(마크 스플래시/EnterReveal 진입 연출)·ADR-007(Fraunces 세리프)·ADR-009(전역 i18n `useT`). 아래 옛 항목은 **이력 보존용**이며, 현재 기준은 `22_DESIGN_LANGUAGE.md`와 ADR-010이다.
 
 ---
 
@@ -56,7 +58,18 @@
 - **문제**: 파이썬 패키징용 `lib/` 규칙이 `frontend/src/lib/` 전체를 무시 → utils(cn) 등 미커밋.
 - **결정**: `.gitignore`에 `!frontend/src/lib/` 예외 추가.
 
-## ADR-009 · 국제화(i18n)
+## ADR-009 · 국제화(i18n) — *(ADR-010에서 대체)*
 
 - **결정**: 경량 사전 방식(`src/lib/i18n.ts` `useT`) + `settings.language`(ko/en). 무거운 라이브러리 미도입.
 - **범위**: 현재 사이드바·랜딩·채팅·설정 등 크롬 위주. 기능 페이지 본문은 점진 확장.
+- **대체**: 3분할 셸 폐기와 함께 전역 `useT`/`i18n.ts` 제거. 워크스페이스는 **화면 로컬 언어 맵**(`L(lang)`)으로 ko/en 처리.
+
+## ADR-010 · reimagine 정식 채택 — 슬림 레일 + 단일 캔버스, 디자인 랭귀지 전환
+
+- **결정**: 프로토타입 `reimagine`을 **정식 틀로 채택**하고 최상위 라우트로 승격. 구 3분할 셸(사이드바·컨텍스트 패널·Chat 홈)과 그 크롬(shadcn 스타일 `ui/*`·`config/nav`·`layout/*`·`enter-transition`·`feature-mindmap`·`brand/*`·`theme-toggle`·전역 `i18n`)을 **삭제**.
+- **라우트**: `/`(Landing) · `/experience`(시네마틱 리빌 + 로그인) · `/enter`(간편 소셜 로그인) · `/workspace`(슬림 레일 + 단일 캔버스, 6뷰) · `/lab`(시그니처 비주얼).
+- **디자인 랭귀지**: 카드/글래스/입체 그림자/세리프를 버리고 **모노크롬 + 브랜드 퍼플 액센트 한 지점 · 블록 + 1px 헤어라인 · 세리프 없는 그로테스크**로 전환. 규격은 `22_DESIGN_LANGUAGE.md`, 여정은 `23_USER_JOURNEY.md`.
+- **UI 프레임워크**: shadcn/FullCalendar/dnd-kit/Recharts/Framer Motion/React Query **미사용**. 각 화면은 컴포넌트 로컬 `<style>` + CSS 토큰으로 자체 완결(lucide·next-themes·zustand만).
+- **연동 보존**: 구글 캘린더/연락처(`lib/google.ts`)·좌표/경로(`lib/geo.ts`)·카카오맵(`components/workspace/kakao-map.tsx`)은 **삭제하지 않고 보존** — 향후 워크스페이스에 이식.
+- **대체 대상**: ADR-001·003·004·005·007·009.
+- **이유**: 제품 북극성(§0)에 코드를 수렴. "일이 스스로 정리되게" — 대화가 아니라 워크플로우 중심.
