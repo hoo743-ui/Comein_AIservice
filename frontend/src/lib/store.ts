@@ -237,56 +237,99 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       conversations: st.conversations.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)),
     })),
 
-  sendMessage: (text) => {
+  sendMessage: async (text) => {
     const content = text.trim();
     if (!content) return;
     const st = get();
     let convId = st.activeConversationId;
-    // 활성 대화 없으면 생성
     if (!convId || !st.conversations.find((c) => c.id === convId)) {
       convId = get().newConversation();
     }
     const userMsg: Message = { id: uid(), role: "user", content, createdAt: nowISO() };
 
-    const res = interpret(content);
-    let card: Message["card"];
-
-    if (res.kind === "schedule") {
-      const start = new Date();
-      start.setDate(start.getDate() + 1);
-      start.setHours(15, 0, 0, 0);
-      const id = get().addSchedule({
-        title: res.title,
-        start: start.toISOString(),
-        end: new Date(+start + 60 * 60 * 1000).toISOString(),
-        status: get().settings.autoConfirm ? "confirmed" : "pending",
-      });
-      card = { kind: "schedule", id };
-    } else if (res.kind === "todo") {
-      const id = uid();
-      set((s) => ({ todos: [{ id, title: res.title, priority: "mid", status: "todo" }, ...s.todos] }));
-      card = { kind: "todo", id };
-    } else if (res.kind === "memo") {
-      const id = uid();
-      set((s) => ({
-        memos: [{ id, title: res.title || "메모", content, tags: ["AI"], createdAt: nowISO() }, ...s.memos],
-      }));
-      card = { kind: "memo", id };
-    }
-
-    const aiMsg: Message = { id: uid(), role: "ai", content: res.reply, createdAt: nowISO(), card };
-
+    // 1. 사용자 메시지 먼저 추가
     set((s) => ({
       conversations: s.conversations.map((c) =>
         c.id === convId
           ? {
               ...c,
               title: c.messages.length === 0 ? content.slice(0, 20) : c.title,
-              messages: [...c.messages, userMsg, aiMsg],
+              messages: [...c.messages, userMsg],
             }
           : c
       ),
     }));
+
+    try {
+      // 2. 🚀 진짜 백엔드 AI 통신 (FastAPI 연동)
+      const res = await fetch("http://localhost:8000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: content, conversation_id: convId }),
+      });
+      const data = await res.json();
+      
+      const items = data.items || [];
+      
+      // 3. 반환된 ParsedItem JSON 배열을 순회하며 스토어에 추가
+      for (const item of items) {
+        let card: Message["card"];
+        let reply = "처리되었습니다.";
+
+        if (item.category === "schedule" || item.category === "meeting") {
+          const id = get().addSchedule({
+            title: item.title || "새 일정",
+            start: item.start || new Date().toISOString(),
+            end: item.end || new Date(Date.now() + 3600000).toISOString(),
+            location: item.location,
+            status: get().settings.autoConfirm ? "confirmed" : "pending",
+          });
+          card = { kind: "schedule", id };
+          reply = `일정 '${item.title}'(을)를 추가했습니다.`;
+        } 
+        else if (item.category === "todo") {
+          const id = uid();
+          set((s) => ({ todos: [{ id, title: item.title || "새 할일", priority: item.priority || "mid", status: "todo", due: item.due }, ...s.todos] }));
+          card = { kind: "todo", id };
+          reply = `할 일 '${item.title}'(을)를 추가했습니다.`;
+        } 
+        else if (item.category === "memo") {
+          const id = uid();
+          set((s) => ({
+            memos: [{ id, title: item.title || "메모", content: item.content || "", tags: item.tags || ["AI"], createdAt: nowISO() }, ...s.memos],
+          }));
+          card = { kind: "memo", id };
+          reply = `메모를 저장했습니다.`;
+        }
+
+        // 각 아이템마다 AI 응답 메시지 카드 추가
+        const aiMsg: Message = { id: uid(), role: "ai", content: reply, createdAt: nowISO(), card };
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === convId ? { ...c, messages: [...c.messages, aiMsg] } : c
+          ),
+        }));
+      }
+      
+      // 파싱된 항목이 없으면 기본 응답
+      if (items.length === 0) {
+        const aiMsg: Message = { id: uid(), role: "ai", content: "일정이나 할 일을 찾지 못했어요. 다시 말씀해 주시겠어요?", createdAt: nowISO() };
+        set((s) => ({
+          conversations: s.conversations.map((c) =>
+            c.id === convId ? { ...c, messages: [...c.messages, aiMsg] } : c
+          ),
+        }));
+      }
+
+    } catch (error) {
+      console.error("AI API Error:", error);
+      const aiMsg: Message = { id: uid(), role: "ai", content: "앗, AI 서버와 연결할 수 없어요! 백엔드 서버가 켜져 있는지 확인해 주세요.", createdAt: nowISO() };
+      set((s) => ({
+        conversations: s.conversations.map((c) =>
+          c.id === convId ? { ...c, messages: [...c.messages, aiMsg] } : c
+        ),
+      }));
+    }
   },
 
   addSchedule: (s) => {

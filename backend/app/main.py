@@ -3,6 +3,9 @@
 API Gateway 역할: 클라이언트 요청을 받아 AI Workspace Engine(ai/)과
 Data Layer로 연결한다. 상세 설계: ../docs/06_BACKEND.md, ../docs/10_API.md
 """
+from dotenv import load_dotenv
+load_dotenv()  # 이 줄이 추가되면 .env 파일의 내용이 os.environ으로 싹 들어갑니다!
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

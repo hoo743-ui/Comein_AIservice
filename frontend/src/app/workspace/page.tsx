@@ -392,11 +392,49 @@ export default function Reimagine() {
     orgTimer.current = setTimeout(() => setOrganizing(false), 1600);
   }, []);
 
-  // 캡처 — 즉시 확정하지 않고, AI가 이해한 결과를 확인/정제 카드(pending)로 띄운다.
-  const capture = (v: string) => {
+  // 캡처 — 진짜 AI(백엔드)로 텍스트를 보내서 JSON 결과를 받아온다!
+  const capture = async (v: string) => {
     const t = v.trim();
     if (!t) return;
-    setDraft({ title: t, kind: classify(t), time: parseTime(t), note: "" });
+
+    // AI 통신 중 시각적 피드백(버튼 로딩 등)을 위해 organizing 켤 수도 있음
+    ignite(); 
+
+    try {
+      const res = await fetch("http://localhost:8000/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: t }),
+      });
+      const data = await res.json();
+      const items = data.items || [];
+
+      if (items.length > 0) {
+        const item = items[0];
+        
+        // 백엔드 AI의 category를 프론트엔드 kind로 매핑
+        let kind: Kind = "메모";
+        if (item.category === "schedule") kind = "일정";
+        else if (item.category === "meeting") kind = "회의";
+        else if (item.category === "todo") kind = "할 일";
+
+        // AI가 뽑아낸 시간을 포맷팅
+        let time = null;
+        if (item.start) {
+          const d = new Date(item.start);
+          const pad = (n: number) => String(n).padStart(2, "0");
+          time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+        }
+
+        setDraft({ title: item.title || t, kind, time, note: item.summary || "" });
+      } else {
+        setDraft({ title: t, kind: "메모", time: null, note: "" });
+      }
+    } catch (e) {
+      console.error("AI 연결 에러:", e);
+      // 서버가 죽어있으면 기존의 가짜 함수로 폴백
+      setDraft({ title: t, kind: classify(t), time: parseTime(t), note: "" });
+    }
   };
   // 확정(confirmed) — 카드에서 확정해야 목적지로 라우팅한 '영수증'을 남긴다.
   const commitDraft = (d: Draft) => {
