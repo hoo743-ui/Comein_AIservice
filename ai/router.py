@@ -6,25 +6,16 @@
 from typing import Any, Literal
 from pydantic import BaseModel
 import datetime
+import sys
+import os
 
+# 백엔드 스키마를 가져오기 위해 경로 추가
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend"))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
+
+from app.schemas.items import ParsedItem
 from ai.llm.factory import get_provider, Task
-
-Category = Literal["schedule", "todo", "memo", "meeting"]
-Priority = Literal["high", "mid", "low"]
-
-class ParsedItem(BaseModel):
-    category: Category
-    title: str | None = None
-    content: str | None = None
-    start: str | None = None
-    end: str | None = None
-    location: str | None = None
-    participants: list[str] | None = None
-    summary: str | None = None
-    notes: str | None = None
-    due: str | None = None
-    priority: Priority | None = None
-    tags: list[str] | None = None
 
 class ParseResponse(BaseModel):
     user_id: str
@@ -45,7 +36,15 @@ User Message: {message}
 If there is additional context, use it to resolve ambiguities:
 Context: {context or {}}
 
-Extract all relevant schedules, todos, memos, and meetings.
+Extract all relevant schedules, todos, memos, and meetings from the user message.
+If a single message contains multiple distinct items (e.g., a meeting and a todo), output multiple items in the `items` array.
+
+Required fields per category:
+- schedule: `title`, `start` (ISO datetime)
+- meeting: `title`, `start` (ISO datetime)
+- todo: `title`
+- memo: `content`
+
 Return the result strictly conforming to the requested JSON schema.
 For user_id, use exactly: "{user_id}"
 """
