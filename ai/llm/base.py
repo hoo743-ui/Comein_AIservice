@@ -4,7 +4,22 @@
 상세: ../../docs/07_AI_SYSTEM.md
 """
 from abc import ABC, abstractmethod
+from typing import TypeVar, Type
+from pydantic import BaseModel
 
+T = TypeVar('T', bound=BaseModel)
+
+class LLMError(Exception):
+    """LLM 관련 기본 예외"""
+    pass
+
+class LLMRateLimitError(LLMError):
+    """429 Rate Limit 등 쿼터 초과 예외"""
+    pass
+
+class LLMGenerationError(LLMError):
+    """생성/파싱 오류 예외"""
+    pass
 
 class LLMProvider(ABC):
     """모든 LLM Provider가 구현해야 하는 인터페이스."""
@@ -14,6 +29,11 @@ class LLMProvider(ABC):
     @abstractmethod
     async def generate(self, prompt: str, *, json_mode: bool = False) -> str:
         """프롬프트로부터 텍스트(또는 JSON 문자열)를 생성한다."""
+        raise NotImplementedError
+
+    @abstractmethod
+    async def generate_structured(self, prompt: str, schema: Type[T]) -> T:
+        """프롬프트와 Pydantic 모델을 받아 구조화된 데이터를 생성한다."""
         raise NotImplementedError
 
     @abstractmethod
