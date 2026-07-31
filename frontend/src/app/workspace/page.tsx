@@ -55,9 +55,9 @@ const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: s
 
 type Kind = "일정" | "회의" | "할 일" | "메모";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
-type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; note?: string; isAction?: boolean };
+type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; isAction?: boolean };
 // 초안(pending) — AI가 이해한 결과. 사용자가 확인/정제 후 확정(confirmed)하면 영수증이 된다.
-type Draft = { title: string; kind: Kind; time: string | null; note: string };
+type Draft = { title: string; kind: Kind; time: string | null; date?: Date; note: string };
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
   회의: { view: "meetings", label: "회의" },
@@ -365,7 +365,7 @@ export default function Reimagine() {
   const calItems = React.useMemo(() => {
     const b = now ?? new Date(2026, 6, 8);
     const arr: { date: Date; title: string; time: string }[] = schedules.map((s) => ({ date: new Date(s.start), title: s.title, time: fmtTime(s.start) }));
-    for (const r of receipts) if (!r.isAction && r.destView === "calendar") arr.push({ date: b, title: r.title, time: r.time ?? "미정" });
+    for (const r of receipts) if (!r.isAction && r.destView === "calendar") arr.push({ date: r.date ?? b, title: r.title, time: r.time ?? "미정" });
     return arr;
   }, [schedules, receipts, now]);
   const dayItems = React.useMemo(() => {
@@ -419,16 +419,19 @@ export default function Reimagine() {
         else if (item.category === "meeting") kind = "회의";
         
         let time = null;
+        let dateObj = undefined;
         if (item.start) {
           const d = new Date(item.start);
           const pad = (n: number) => String(n).padStart(2, "0");
           time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+          dateObj = d;
         }
         
         setDraft({ 
           title: item.title || t, 
           kind: kind, 
           time: time, 
+          date: dateObj,
           note: item.content || item.notes || item.summary || "" 
         });
       } else {
@@ -441,13 +444,12 @@ export default function Reimagine() {
       setDraft({ title: t, kind: classify(t), time: parseTime(t), note: "" });
     }
   };
-  // 확정(confirmed) — 카드에서 확정해야 목적지로 라우팅한 '영수증'을 남긴다.
   const commitDraft = (d: Draft) => {
     const t = d.title.trim();
     if (!t) return;
     const dest = DEST[d.kind];
     seq.current += 1;
-    setReceipts((prev) => [{ id: seq.current, at: Date.now(), title: t, kind: d.kind, destView: dest.view, destLabel: dest.label, time: d.time, note: d.note.trim() || undefined }, ...prev].slice(0, 8));
+    setReceipts((prev) => [{ id: seq.current, at: Date.now(), title: t, kind: d.kind, destView: dest.view, destLabel: dest.label, time: d.time, date: d.date, note: d.note.trim() || undefined }, ...prev].slice(0, 8));
     setDraft(null);
     ignite();
   };

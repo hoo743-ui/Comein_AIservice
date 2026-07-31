@@ -29,7 +29,15 @@ async def route(message: str, user_id: str = "default-user", context: dict[str, 
     
     prompt = f"""
 You are an intelligent workspace assistant. Extract information from the user's message and categorize it into actionable items.
-The current time is: {now}
+
+IMPORTANT DATE/TIME RULES:
+- The current absolute time is: {now} (ISO 8601 format). Use this as the baseline for "today".
+- When the user says "오늘" (today), use the exact date from the current time.
+- When the user says "내일" (tomorrow), add 1 day to the current date.
+- When the user says "모레" (day after tomorrow), add 2 days.
+- When the user says "글피" (two days after tomorrow), add 3 days.
+- When the user says "다음 주" (next week) or specific days (e.g. "다음 주 월요일"), calculate the exact date based on the current date.
+- ALWAYS return the parsed `start` and `end` times as a fully qualified ISO 8601 datetime string.
 
 User Message: {message}
 
