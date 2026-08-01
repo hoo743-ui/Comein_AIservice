@@ -58,7 +58,7 @@ const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: s
 
 type Kind = "일정" | "회의" | "할 일" | "메모";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
-type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority; isAction?: boolean };
+type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority };
 // AI가 이해한 한 건. 확인 단계 없이 그대로 목적지로 배정된다(= 영수증이 된다).
 type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string; priority?: TodoPriority };
 const DEST: Record<Kind, { view: View; label: string }> = {
@@ -224,7 +224,6 @@ function L(lang: Lang) {
     liveWorkspace: "Live workspace",
     placeholder: (v: View) => (en ? EN_PLACEHOLDER[v] : PLACEHOLDER[v]),
     hints: () => (en ? EN_HINTS : HINTS),
-    viewAI: (v: Exclude<View, "today">) => (en ? EN_VIEW_AI[v] : VIEW_AI[v]),
     priority: (p: string) => (en ? ({ high: "High", mid: "Mid", low: "Low" } as Record<string, string>)[p] : ({ high: "높음", mid: "보통", low: "낮음" } as Record<string, string>)[p]),
     emptyCal: en ? "Nothing scheduled." : "예정된 일정이 없어요.",
     emptyTasks: en ? "No tasks right now." : "지금은 할 일이 없어요.",
@@ -408,7 +407,7 @@ export default function Reimagine() {
   const calItems = React.useMemo(() => {
     const b = now ?? new Date(2026, 6, 8);
     const arr: { date: Date; title: string; time: string }[] = schedules.map((s) => ({ date: new Date(s.start), title: s.title, time: fmtTime(s.start) }));
-    for (const r of receipts) if (!r.isAction && r.destView === "calendar") arr.push({ date: r.date ?? b, title: r.title, time: r.time ?? "미정" });
+    for (const r of receipts) if (r.destView === "calendar") arr.push({ date: r.date ?? b, title: r.title, time: r.time ?? "미정" });
     return arr;
   }, [schedules, receipts, now]);
   const dayItems = React.useMemo(() => {
@@ -511,14 +510,6 @@ export default function Reimagine() {
     }
   };
 
-  // 뷰 안의 컨텍스트 AI 액션 — 실행 즉시 그 목적지 기준으로 영수증을 남긴다.
-  const aiAction = (label: string) => {
-    seq.current += 1;
-    const r: Receipt = { id: seq.current, at: Date.now(), title: label, kind: "메모", destView: view, destLabel: VIEW_LABEL[view], time: null, isAction: true };
-    setReceipts((prev) => [r, ...prev].slice(0, 8));
-    ignite();
-  };
-
   const undoReceipt = (id: number) => setReceipts((prev) => prev.filter((r) => r.id !== id));
 
   // ── Invisible AI · 조용한 비서 — 데이터가 아니라 '사람다운 한 문장'으로. ──
@@ -547,7 +538,7 @@ export default function Reimagine() {
     }
   })();
   const WeatherIcon = weather ? weatherIconOf(weather.condition) : Cloud;
-  const rc = (v: View) => receipts.filter((r) => !r.isAction && r.destView === v).length;
+  const rc = (v: View) => receipts.filter((r) => r.destView === v).length;
   const taskCount = openTodos.length + rc("tasks");
   const noteCount = memos.length + rc("notes");
   const paceLine = taskCount > 0 ? t.pace(taskCount, upcoming.length > 2) : t.paceEmpty;
@@ -751,7 +742,6 @@ export default function Reimagine() {
               mounted={mounted}
               receipts={receipts}
               now={now}
-              onAction={aiAction}
               onToggleTodo={(id) => { moveTodo(id, "done"); ignite(); }}
               onRemoveReceipt={undoReceipt}
             />
@@ -1009,23 +999,6 @@ function AiDoor({ active = false, className }: { active?: boolean; className?: s
 }
 
 // 뷰별 컨텍스트 AI — 제안(상단) + 행 액션(hover). "AI가 필요한 곳에 나타난다."
-const VIEW_AI: Record<Exclude<View, "today">, {
-  suggest: { text: string; action: string; done: string };
-  row: { label: string; done: (t: string) => string };
-}> = {
-  calendar: { suggest: { text: "이번 주 발표 준비 시간이 비어 있어요.", action: "시간 잡기", done: "발표 준비 시간을 캘린더에 잡았어요" }, row: { label: "이동시간", done: (t) => `${t}에 이동시간을 더했어요` } },
-  tasks: { suggest: { text: "마감이 가까운 일 두 가지가 있어요.", action: "오늘로 정리", done: "임박한 할 일을 오늘로 정리했어요" }, row: { label: "일정으로", done: (t) => `‘${t}’를 일정으로 옮겼어요` } },
-  notes: { suggest: { text: "이어질 수 있는 비슷한 메모가 있어요.", action: "연결", done: "관련 메모를 연결했어요" }, row: { label: "요약", done: (t) => `‘${t}’를 요약했어요` } },
-  meetings: { suggest: { text: "지난 회의의 액션아이템이 정리되지 않았어요.", action: "할 일로", done: "회의 액션아이템을 할 일로 옮겼어요" }, row: { label: "요약", done: (t) => `‘${t}’ 회의를 요약했어요` } },
-  people: { suggest: { text: "2주간 연락이 뜸한 분이 있어요.", action: "안부 남기기", done: "안부 리마인드를 만들었어요" }, row: { label: "미팅 제안", done: (t) => `${t}님과 미팅을 제안했어요` } },
-};
-const EN_VIEW_AI: typeof VIEW_AI = {
-  calendar: { suggest: { text: "There's an open slot to prep this week's talk.", action: "Hold time", done: "Held prep time on your calendar" }, row: { label: "Add travel", done: (t) => `Added travel time to ${t}` } },
-  tasks: { suggest: { text: "Two things are close to due.", action: "Bring to today", done: "Moved due-soon tasks to today" }, row: { label: "To event", done: (t) => `Moved ‘${t}’ to an event` } },
-  notes: { suggest: { text: "A similar note could connect.", action: "Link", done: "Linked related notes" }, row: { label: "Summarize", done: (t) => `Summarized ‘${t}’` } },
-  meetings: { suggest: { text: "Last meeting's action items aren't sorted.", action: "To tasks", done: "Moved action items to tasks" }, row: { label: "Summarize", done: (t) => `Summarized the ‘${t}’ meeting` } },
-  people: { suggest: { text: "Someone's been quiet for two weeks.", action: "Say hi", done: "Made a reminder to reach out" }, row: { label: "Suggest meeting", done: (t) => `Suggested a meeting with ${t}` } },
-};
 
 const AiTag = () => <span className="rmg-tag-ai" title="AI가 방금 추가했어요"><AiDoor className="rmg-tag-door" /></span>;
 
@@ -1271,12 +1244,11 @@ function CalSearch({ open, onClose, onJump, events, now, lang }: {
 function Feature(props: {
   view: View; lang: Lang; schedules: any[]; todos: any[]; memos: any[]; meetings: any[]; contacts: any[];
   mounted: boolean; receipts: Receipt[]; now: Date | null;
-  onAction: (label: string) => void; onToggleTodo: (id: string) => void; onRemoveReceipt: (id: number) => void;
+  onToggleTodo: (id: string) => void; onRemoveReceipt: (id: number) => void;
 }) {
-  const { view, lang, receipts, onAction } = props;
+  const { view, lang, receipts } = props;
   const t = L(lang);
-  const ai = view === "today" ? null : t.viewAI(view as Exclude<View, "today">);
-  const mine = receipts.filter((r) => !r.isAction && r.destView === view);
+  const mine = receipts.filter((r) => r.destView === view);
 
   return (
     <section className="rmg-a1">
@@ -1284,19 +1256,11 @@ function Feature(props: {
         <p className="rmg-feat-title">{t.viewLabel(view)}</p>
       </div>
 
-      {ai && (
-        <div className="rmg-suggest">
-          <AiDoor className="rmg-suggest-door" />
-          <span className="rmg-suggest-text">{ai.suggest.text}</span>
-          <button type="button" className="rmg-suggest-act" onClick={() => onAction(ai.suggest.done)}>{ai.suggest.action}</button>
-        </div>
-      )}
-
-      {view === "calendar" && <CalendarView {...props} mine={mine} ai={ai!} />}
-      {view === "tasks" && <TasksView {...props} mine={mine} ai={ai!} />}
-      {view === "notes" && <NotesView {...props} mine={mine} ai={ai!} />}
-      {view === "meetings" && <MeetingsView {...props} mine={mine} ai={ai!} />}
-      {view === "people" && <PeopleView {...props} ai={ai!} />}
+      {view === "calendar" && <CalendarView {...props} mine={mine} />}
+      {view === "tasks" && <TasksView {...props} mine={mine} />}
+      {view === "notes" && <NotesView {...props} mine={mine} />}
+      {view === "meetings" && <MeetingsView {...props} mine={mine} />}
+      {view === "people" && <PeopleView {...props} />}
     </section>
   );
 }
@@ -1313,7 +1277,7 @@ function dayLabel(d: Date, base: Date | null) {
 }
 
 /** Calendar — 날짜별 아젠다(익숙한 '일정' 뷰). */
-function CalendarView({ schedules, mounted, now, mine, ai, onAction, lang }: any) {
+function CalendarView({ schedules, mounted, now, mine, lang }: any) {
   const t = L(lang as Lang);
   const base = now as Date | null;
   const items = [
@@ -1342,7 +1306,6 @@ function CalendarView({ schedules, mounted, now, mine, ai, onAction, lang }: any
                 <span className="rmg-cal-bar" />
                 <span className="rmg-cal-title">{r.title}</span>
                 {r.ai && <AiTag />}
-                <button type="button" className="rmg-vact" onClick={() => onAction(ai.row.done(r.title))}>{ai.row.label}</button>
               </li>
             ))}
           </ul>
@@ -1353,7 +1316,7 @@ function CalendarView({ schedules, mounted, now, mine, ai, onAction, lang }: any
 }
 
 /** Tasks — 체크리스트(익숙한 '할 일'). 체크 시 완료. */
-function TasksView({ todos, mine, ai, onToggleTodo, onRemoveReceipt, onAction, lang }: any) {
+function TasksView({ todos, mine, onToggleTodo, onRemoveReceipt, lang }: any) {
   const t = L(lang as Lang);
   const rows = [
     // AI가 매긴 우선순위를 그대로 쓴다 — 예전엔 전부 mid 로 눌러버렸다.
@@ -1376,7 +1339,6 @@ function TasksView({ todos, mine, ai, onToggleTodo, onRemoveReceipt, onAction, l
           <span className="rmg-task-title">{r.title}</span>
           {r.rid && <AiTag />}
           <span className={`rmg-task-prio ${r.priority}`}>{t.priority(r.priority)}</span>
-          {!r.rid && <button type="button" className="rmg-vact" onClick={() => onAction(ai.row.done(r.title))}>{ai.row.label}</button>}
         </li>
       ))}
     </ul>
@@ -1384,7 +1346,7 @@ function TasksView({ todos, mine, ai, onToggleTodo, onRemoveReceipt, onAction, l
 }
 
 /** Notes — 노트 그리드(익숙한 '메모'). */
-function NotesView({ memos, mine, ai, onAction, lang }: any) {
+function NotesView({ memos, mine, lang }: any) {
   const tiles = [
     // 메모 본문(r.note)을 살린다 — 제목이 본문에서 잘려 나온 경우엔 중복이라 비운다.
     ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, title: r.title, content: r.note && r.note !== r.title ? r.note : "", tags: [], ai: true })),
@@ -1402,7 +1364,6 @@ function NotesView({ memos, mine, ai, onAction, lang }: any) {
           {t.content && <p className="rmg-note-body">{t.content}</p>}
           <div className="rmg-note-foot">
             {t.tags.slice(0, 3).map((x: string) => <span key={x} className="rmg-note-tag">#{x}</span>)}
-            <button type="button" className="rmg-vact rmg-note-act" onClick={() => onAction(ai.row.done(t.title))}>{ai.row.label}</button>
           </div>
         </div>
       ))}
@@ -1411,7 +1372,7 @@ function NotesView({ memos, mine, ai, onAction, lang }: any) {
 }
 
 /** Meetings — 회의 리스트(익숙한 '회의'). */
-function MeetingsView({ meetings, mounted, mine, ai, onAction, lang }: any) {
+function MeetingsView({ meetings, mounted, mine, lang }: any) {
   const t = L(lang as Lang);
   // AI가 회의로 정리한 건도 같은 목록에 얹는다 — 캘린더·할 일·메모 뷰와 동일한 규칙.
   const rows = [
@@ -1444,7 +1405,6 @@ function MeetingsView({ meetings, mounted, mine, ai, onAction, lang }: any) {
             </div>
           )}
           {m.summary && <p className="rmg-mtg-sum">{m.summary}</p>}
-          <button type="button" className="rmg-vact" onClick={() => onAction(ai.row.done(m.title))}>{ai.row.label}</button>
         </li>
       ))}
     </ul>
@@ -1452,7 +1412,7 @@ function MeetingsView({ meetings, mounted, mine, ai, onAction, lang }: any) {
 }
 
 /** People — 연락처(익숙한). */
-function PeopleView({ contacts, ai, onAction, lang }: any) {
+function PeopleView({ contacts, lang }: any) {
   if (contacts.length === 0) return <p className="rmg-empty">{L(lang as Lang).emptyPeople}</p>;
   return (
     <ul className="rmg-ppl-list">
@@ -1463,7 +1423,6 @@ function PeopleView({ contacts, ai, onAction, lang }: any) {
             <span className="rmg-ppl-name">{c.name}</span>
             {c.org && <span className="rmg-ppl-org">{c.org}</span>}
           </div>
-          <button type="button" className="rmg-vact" onClick={() => onAction(ai.row.done(c.name))}>{ai.row.label}</button>
         </li>
       ))}
     </ul>
@@ -1943,12 +1902,6 @@ const CSS = `
 .rmg-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.78rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 1px 6px; }
 
 /* facet 리스트 + 컨텍스트 AI */
-.rmg-suggest { display: flex; align-items: center; gap: 12px; margin: 0 0 10px; padding: 13px 16px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 55%, transparent); border: 1px solid var(--hair); }
-.rmg-suggest-door { width: 18px; height: 23px; flex-shrink: 0; }
-.rmg-suggest-text { flex: 1; font-size: 0.92rem; font-weight: 300; letter-spacing: -0.01em; color: var(--muted); }
-.rmg-suggest-act { border: 0; background: var(--ink); color: var(--paper); font-family: inherit; font-size: 0.8rem; font-weight: 600; padding: 8px 15px; border-radius: 999px; cursor: pointer; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1); white-space: nowrap; }
-.rmg-suggest-act:hover { transform: translateY(-1px); }
-.rmg-suggest-act:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
 .rmg-vlist { list-style: none; margin: 0; padding: 0; }
 .rmg-vrow { display: flex; align-items: center; gap: 14px; padding: 14px 0; border-bottom: 1px solid var(--hair); font-size: 1.1rem; font-weight: 300; letter-spacing: -0.02em; }
 .rmg-vrow:last-child { border-bottom: 0; }
@@ -1960,10 +1913,6 @@ const CSS = `
 .rmg-vai { display: inline-grid; place-items: center; width: 15px; color: var(--muted); flex-shrink: 0; }
 .rmg-vai-door { width: 12px; height: 15px; }
 .rmg-vtrail { font-size: 0.76rem; color: var(--faint); font-weight: 400; flex-shrink: 0; }
-.rmg-vact { opacity: 0; border: 1px solid var(--hair); background: none; color: var(--muted); font-family: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.02em; padding: 5px 11px; border-radius: 999px; cursor: pointer; white-space: nowrap; transition: opacity 0.25s, color 0.25s, border-color 0.25s; flex-shrink: 0; }
-.rmg-vrow:hover .rmg-vact, .rmg-cal-row:hover .rmg-vact, .rmg-task:hover .rmg-vact, .rmg-note:hover .rmg-vact, .rmg-mtg:hover .rmg-vact, .rmg-ppl:hover .rmg-vact, .rmg-vact:focus-visible { opacity: 1; }
-.rmg-vact:hover { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
-.rmg-vact:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; opacity: 1; }
 
 /* 공통 · 기능 헤더 · AI 귀속 태그 */
 .rmg-feat-head { margin-bottom: 22px; }

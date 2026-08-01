@@ -57,6 +57,33 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 
 ---
 
+## 🚀 실행 중인 환경
+
+| | 주소 | 비고 |
+|---|---|---|
+| 프론트 (Vercel) | `https://frontend-pied-one-74.vercel.app/workspace` | `main` 푸시 시 자동 배포 |
+| 백엔드 (Render) | `https://comein-aiservice.onrender.com/health` | 무료 티어 — 15분 무요청 시 슬립, 첫 요청 30초~1분 |
+| API 문서 | `https://comein-aiservice.onrender.com/docs` | Swagger UI |
+
+배포·환경변수·콜드스타트 대응은 [`docs/15_DEPLOY.md`](./docs/15_DEPLOY.md).
+
+### 로컬 실행
+
+```bash
+# 백엔드
+cd backend && python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements-dev.txt
+copy .env.example .env          # GEMINI_API_KEY / GROQ_API_KEY 채우기
+uvicorn app.main:app --reload   # http://localhost:8000
+
+# 프론트
+cd frontend && npm install
+copy .env.example .env.local    # NEXT_PUBLIC_API_BASE=http://localhost:8000
+npm run dev                     # http://localhost:3000/workspace
+```
+
+---
+
 ## 📁 프로젝트 구조
 
 ```
@@ -64,7 +91,9 @@ Comein_AIservice/
 ├── frontend/     # Next.js 웹 클라이언트
 ├── backend/      # FastAPI 서버
 ├── ai/           # AI Router · Agents · Prompt · Memory
-├── docs/         # 설계 문서 (00~21)
+├── docs/         # 설계 문서 (00~24)
+├── scripts/      # 손으로 돌려보는 확인용 스크립트
+├── render.yaml   # 백엔드 배포 정의 (Render Blueprint)
 ├── CLAUDE.md     # 프로젝트 전체 컨텍스트 문서 ⭐
 └── README.md
 ```

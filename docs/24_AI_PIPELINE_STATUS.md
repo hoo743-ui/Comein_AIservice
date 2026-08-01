@@ -172,3 +172,53 @@ DB 저장 (Schedule/Todo/Memo/Meeting) — ✅ 이미 완성·안정
 - 인증이 아직 없어 `POST /api/items`, `POST /api/chat`, 신규 `GET /api/schedules|todos|memos|meetings` 모두 `user_id`를 요청자가 직접 넘긴다(데모 단계에서는 의도된 설계 — `backend/app/api/endpoints/users.py` docstring에 명시).
 - `frontend/src/lib/api.ts`가 새로 추가된 상태(git status상 untracked)이나, 이번 작업 범위(`backend/`, `ai/`, `docs/`)에는 포함하지 않았다. 프론트-백엔드 연동 조사가 필요하면 별도로 진행 필요.
 - 이번 작업에서 `ai/agents/*`, `ai/router.py`는 의도적으로 건드리지 않았다(AI 팀 작업 중) — 3절의 내용은 여전히 유효하다.
+
+---
+
+## 8. 2차 갱신 (2026-08-02) — 프론트 연동 · 배포 · UX 결정
+
+> 이번 갱신 범위: `frontend/`, `render.yaml`, `docs/`, 배포 설정. `ai/agents/*` 는 여전히 미구현
+> 스켈레톤이고 `ai/router.py` 도 그대로다(3절 유효).
+
+### 8.1 배포가 실제로 붙었다
+
+| | 주소 |
+|---|---|
+| 백엔드 | `https://comein-aiservice.onrender.com` (Render, 무료) |
+| 프론트 | `https://frontend-pied-one-74.vercel.app` (Vercel) |
+
+- `backend/app/core/config.py` — `CORS_ORIGINS` 를 쉼표 구분 문자열로 받고(대시보드 입력 편의),
+  `CORS_ORIGIN_REGEX` 를 추가했다. `DATABASE_URL` 은 Supabase 형식(`postgresql://...?sslmode=require`)을
+  그대로 붙여넣어도 asyncpg 형태로 자동 보정한다.
+- `/health`(빠름) 와 `/health/db`(DB 왕복) 를 분리했다. 무료 티어 콜드스타트·Supabase 휴면 대응은
+  `docs/15_DEPLOY.md` §4.
+- **함정 기록**: Vercel 은 한 프로젝트에 주소를 여러 개 준다(프로덕션/브랜치/배포별). 하나만 허용해두면
+  다른 주소에서 CORS 로 막히는데, 프론트는 그걸 조용히 삼키고 로컬 규칙으로 폴백해서
+  "AI 가 갑자기 멍청해진 것"처럼 보인다. 원인 파악에 오래 걸렸다 — 정규식으로 한 번에 여는 게 낫다.
+
+### 8.2 프론트가 `/api/chat` 을 직접 쓴다
+
+- `frontend/src/app/workspace/page.tsx` 의 캡처바 → `POST /api/chat` → `items[]` 를 목적지 뷰
+  (캘린더·할 일·메모·회의)로 배정. 주소는 `NEXT_PUBLIC_API_BASE`(`src/lib/api.ts`).
+- `items` 를 **전부** 처리한다. 한 문장에서 회의+할 일이 나오면 두 건으로 나뉜다.
+- 백엔드 실패 시 로컬 키워드 규칙으로 폴백한다(입력을 삼키지 않기 위함). 다만 폴백이라는 사실이
+  화면에 드러나지 않아 오진하기 쉽다 — **표시 추가가 필요하다(미해결).**
+
+### 8.3 UX 결정 — 확인 단계 폐기
+
+- AI 결과를 확인/정제하는 카드(제목·시간·장소 입력 폼)를 **제거**했다. 사용자가 폼을 채우게 만드는 순간
+  "일이 스스로 정리된다"는 제품 전제가 깨진다(CLAUDE.md §0). 지금은 즉시 배정하고, 캡처바 위 한 줄이
+  6초간 떴다 사라지며 그 줄에서 되돌릴 수 있다.
+- 따라서 `docs/10_API.md` §1~§4 의 "일정은 `pending` 으로 만들고 사용자가 확정" 흐름은 **폐기**다.
+  5절의 "확인 후 저장 vs 바로 저장" 정책 결정도 이 방향(바로 저장 + 되돌리기)으로 정리됐다.
+- 처리 기록을 나열하던 목록도 없앴다. 기록을 진열하면 대시보드가 된다.
+- 각 뷰 상단의 AI 제안 배너와 행 액션은 **하드코딩된 가짜**였다(연락처를 보지도 않고 항상 같은 문구).
+  진짜 AI 가 붙은 시점에서는 신뢰를 깎기만 해서 제거했다. 다시 넣는다면 실제 데이터 기반이어야 한다.
+
+### 8.4 남은 것 (우선순위 순)
+
+1. **저장** — 여전히 `POST /api/items` 미연결. 새로고침하면 전부 사라진다. Supabase `DATABASE_URL`
+   등록 + `alembic upgrade head` + `/api/chat` → 저장 연결이 한 묶음이다. 체감상 가장 큰 구멍.
+2. **폴백 가시화** — 백엔드 실패를 사용자가 알 수 있게.
+3. **선제적 동작** — 충돌 감지("그 시간엔 이미 수업이 있어요"), 시간 미상 시 되묻기. 지금은 시키는 것만 한다.
+4. `ai/agents/*` 스켈레톤 구현 — 3절 그대로.

@@ -400,6 +400,7 @@ User ─┬─< Conversation ─< Message
 | 21_ARCHITECTURE_DECISION_RECORD.md | 기술 선택 ADR (무료 스택 등) | 전원 |
 | 22_DESIGN_LANGUAGE.md | **시각 언어 규격** — 토큰·타이포·색·여백·모션 ("feel expensive") | 풀스택 |
 | 23_USER_JOURNEY.md | **화면 여정·IA** — Landing→Experience→Enter→Workspace, 전환 | 기획 |
+| 24_AI_PIPELINE_STATUS.md | **현재 상태 로그** — 입력→AI→저장까지 어디까지 됐는지 (바뀔 때마다 갱신) | 전원 |
 
 ---
 

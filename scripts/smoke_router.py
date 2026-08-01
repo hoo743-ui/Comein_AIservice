@@ -2,12 +2,13 @@ import asyncio
 import os
 import sys
 
-# Add current directory to path
-sys.path.insert(0, os.path.abspath(os.path.dirname(__file__)))
+# 레포 루트를 import 경로에 올린다 (ai/ 패키지)
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, ROOT)
 
 # Load dotenv to get API keys for testing
 from dotenv import load_dotenv
-load_dotenv(os.path.join(os.path.dirname(__file__), "backend", ".env"))
+load_dotenv(os.path.join(ROOT, "backend", ".env"))
 
 from ai.router import route
 

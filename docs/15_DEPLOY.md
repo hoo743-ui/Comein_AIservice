@@ -11,6 +11,19 @@ GitHub 모노레포 1개
 git push main → 두 플랫폼이 각자 자기 폴더만 보고 병렬 자동 배포
 ```
 
+## 0. 지금 떠 있는 것 (2026-08-02)
+
+| | 주소 | 상태 |
+|---|---|---|
+| 백엔드 | `https://comein-aiservice.onrender.com` | ✅ Live (`/health` → `{"status":"ok","env":"production"}`) |
+| 프론트 | `https://frontend-pied-one-74.vercel.app` | ✅ Live (프로덕션 별칭) |
+| 프론트(브랜치) | `https://frontend-git-main-hoo743-uis-projects.vercel.app` | ✅ 같은 빌드 |
+| LLM | Gemini (Render 환경변수에 키 등록) | ✅ 실제 호출 확인 |
+| DB | Supabase 미연결 | ❌ `/health/db` → `db: down`, **저장 안 됨** |
+
+> Render 서비스 이름은 `comein-aiservice` 다 (`render.yaml` 의 `comein-api` 와 다름 —
+> 대시보드에서 손으로 만들었기 때문). Blueprint 로 다시 만들면 이름이 갈리니 주의.
+
 ---
 
 ## 1. Render 초기 세팅 (백엔드)
@@ -46,8 +59,20 @@ https://<서비스명>.onrender.com/health/db   → {"status":"ok","db":"ok"}  (
 |---|---|---|
 | `PYTHON_VERSION` | `3.12.7` | 런타임 고정 |
 | `ENV` | `production` | |
-| `CORS_ORIGINS` | `https://comein.vercel.app` | **쉼표 구분**. Vercel 도메인 확정 후 입력 |
-| `CORS_ORIGIN_REGEX` | `https://.*\.vercel\.app` | 프리뷰 배포까지 허용할 때만 (선택) |
+| `CORS_ORIGINS` | `https://a.vercel.app,https://b.vercel.app` | **쉼표 구분**(JSON 배열도 허용) |
+| `CORS_ORIGIN_REGEX` | `https://frontend-.*\.vercel\.app` | **실제로 쓰는 값.** 아래 주의 참고 |
+
+> ⚠️ **Vercel 은 한 프로젝트에 주소를 여러 개 준다** — 프로덕션 별칭, 브랜치 별칭
+> (`...-git-main-...`), 배포별 고유 URL. 하나만 `CORS_ORIGINS` 에 넣으면 나머지 주소로
+> 접속했을 때 전부 차단되고, 프론트는 그걸 조용히 삼킨 뒤 로컬 규칙으로 폴백한다
+> (= "AI 가 멍청해졌다"처럼 보인다). 정규식 하나로 프로젝트 주소를 통째로 여는 게 안전하다.
+> 값에 따옴표·공백을 넣지 말 것. 확인은 아래 프리플라이트로.
+>
+> ```bash
+> curl -i -X OPTIONS https://comein-aiservice.onrender.com/api/chat \
+>   -H "Origin: https://<확인할-도메인>" -H "Access-Control-Request-Method: POST" \
+>   | grep -i access-control-allow-origin      # 헤더가 나오면 허용된 것
+> ```
 | `DATABASE_URL` | Supabase Connection string | 아래 2절 |
 | `REDIS_URL` | Upstash URL | 아직 미사용 — 비워도 됨 |
 | `JWT_SECRET` | Render 자동 생성 | 직접 넣지 말 것 |
@@ -123,10 +148,11 @@ npm run dev
 
 ## 6. 체크리스트
 
-- [ ] Render Blueprint 적용 → `/health` 200
+- [x] Render 서비스 생성 → `/health` 200
+- [x] Vercel `NEXT_PUBLIC_API_BASE` 설정 → 재배포
+- [x] Render `CORS_ORIGIN_REGEX` 로 Vercel 도메인 허용 (프리플라이트로 확인)
+- [x] LLM 키 입력 → `/api/chat` 실제 파싱 확인
 - [ ] Supabase 프로젝트 생성 → `DATABASE_URL` 입력 → `alembic upgrade head`
 - [ ] `/health/db` 가 `db: ok`
-- [ ] Vercel `NEXT_PUBLIC_API_BASE` 설정 → 재배포
-- [ ] Render `CORS_ORIGINS` 에 Vercel 도메인 추가
+- [ ] `/api/chat` 결과를 `POST /api/items` 로 저장 연결 (지금은 화면 상태에만 존재)
 - [ ] keep-alive cron 등록 (`/health/db`, 10분)
-- [ ] LLM 키 입력 (AI 확정 후)

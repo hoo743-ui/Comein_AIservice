@@ -3,11 +3,11 @@ import urllib.request
 import json
 from dotenv import load_dotenv
 
-load_dotenv(".env")
+load_dotenv(os.path.join(os.path.dirname(__file__), "..", "backend", ".env"))
 api_key = os.getenv("GEMINI_API_KEY")
 
 if not api_key:
-    print("Error: GEMINI_API_KEY not found in .env")
+    print("Error: GEMINI_API_KEY not found in backend/.env")
     exit(1)
 
 url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
