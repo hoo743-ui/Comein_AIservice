@@ -1293,7 +1293,8 @@ function CalendarView({ schedules, mounted, now, mine, ai, onAction, lang }: any
   const base = now as Date | null;
   const items = [
     ...schedules.map((s: any) => ({ id: s.id, date: new Date(s.start), title: s.title, ai: false })),
-    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, date: base ?? new Date(2026, 6, 8), title: r.title, time: r.time, ai: true })),
+    // AI가 뽑은 날짜(r.date)를 우선 — 없을 때만 오늘로 둔다. 예전엔 항상 오늘로 들어갔다.
+    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, date: r.date ?? base ?? new Date(2026, 6, 8), title: r.title, time: r.time, ai: true })),
   ];
   const groups = new Map<string, { date: Date; rows: any[] }>();
   for (const it of items) {
@@ -1383,17 +1384,34 @@ function NotesView({ memos, mine, ai, onAction, lang }: any) {
 }
 
 /** Meetings — 회의 리스트(익숙한 '회의'). */
-function MeetingsView({ meetings, mounted, ai, onAction, lang }: any) {
-  if (!meetings || meetings.length === 0) return <p className="rmg-empty">{L(lang as Lang).emptyMeetings}</p>;
+function MeetingsView({ meetings, mounted, mine, ai, onAction, lang }: any) {
+  const t = L(lang as Lang);
+  // AI가 회의로 정리한 건도 같은 목록에 얹는다 — 캘린더·할 일·메모 뷰와 동일한 규칙.
+  const rows = [
+    ...mine.map((r: Receipt) => ({
+      id: `r-${r.id}`, title: r.title, date: r.date ?? null, time: r.time,
+      participants: r.note ? [r.note] : [], summary: "", ai: true,
+    })),
+    ...(meetings ?? []).map((m: any) => ({
+      id: m.id, title: m.title, date: new Date(m.start), time: null as string | null,
+      participants: m.participants ?? [], summary: m.summary ?? "", ai: false,
+    })),
+  ];
+  if (rows.length === 0) return <p className="rmg-empty">{t.emptyMeetings}</p>;
   return (
     <ul className="rmg-mtg-list">
-      {meetings.map((m: any) => (
+      {rows.map((m) => (
         <li key={m.id} className="rmg-mtg">
           <div className="rmg-mtg-top">
             <span className="rmg-mtg-title">{m.title}</span>
-            <span className="rmg-mtg-time">{mounted ? fmtDate(new Date(m.start)) : ""} · {mounted ? fmtTime(m.start) : ""}</span>
+            {m.ai && <AiTag />}
+            <span className="rmg-mtg-time">
+              {mounted && m.date
+                ? `${fmtDate(m.date)} · ${m.time ?? fmtTime(m.date)}`
+                : (m.time ?? (lang === "en" ? "TBD" : "미정"))}
+            </span>
           </div>
-          {m.participants?.length > 0 && (
+          {m.participants.length > 0 && (
             <div className="rmg-mtg-people">
               {m.participants.map((p: string) => <span key={p} className="rmg-mtg-chip">{p}</span>)}
             </div>
@@ -1510,6 +1528,7 @@ type SettingsPanelProps = { name: string; language: "ko" | "en"; mode: "student"
 const CSS = `
 .rmg {
   --paper: #141210; --surface: #1B1813; --ink: #F2F0EC; --muted: #98938A; --faint: #5E574C; --hair: #262019; --accent: #9B8E86; --glow: rgba(155,142,134,0.16);
+  --rail-w: 64px;  /* 레일 폭 — fixed 로 떠 있는 캡처바가 캔버스 기준으로 가운데를 잡는 데 쓴다 */
   position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr);
   height: 100vh; height: 100dvh; color: var(--ink);
   background:
@@ -1524,7 +1543,8 @@ const CSS = `
   /* 레일 확장은 첫 컬럼 트랙만 넓혀 콘텐츠를 함께 밀어낸다(오버레이 아님·reflow). 사이드바+콘텐츠가 하나의 모션. */
   transition: grid-template-columns 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
-.rmg.rail-open { grid-template-columns: 236px minmax(0, 1fr); }
+/* 그리드 값은 리터럴로 둔다 — custom property 는 보간되지 않아 레일 확장 모션이 끊긴다. */
+.rmg.rail-open { --rail-w: 236px; grid-template-columns: 236px minmax(0, 1fr); }
 @media (prefers-reduced-motion: reduce) { .rmg { transition: none; } }
 :root:not(.dark) .rmg { --paper: #F7F6F3; --surface: #FCFBF9; --ink: #26221D; --muted: #6E675C; --faint: #A9A294; --hair: #E7E2D8; --accent: #8C7E6E; --glow: rgba(140,126,110,0.16); }
 /* 배경 — flat white 금지. 웜 오프화이트 위에 대형 확산광 + 은은한 건축 그림자(창빛·커튼). 느끼되 알아채지 못하게.
@@ -1853,13 +1873,16 @@ const CSS = `
 
 
 /* Ask Comein · 항상 보이는 주 입력 (문 + 명확한 필드 + 회전 예시) */
-.rmg-ask { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 20;
+/* 캡처바는 캔버스 스크롤과 무관하게 항상 같은 자리에 있어야 한다.
+   (absolute 였을 때는 스크롤 컨테이너의 '콘텐츠 바닥'에 붙어 목록 위로 겹쳐 올라왔다.)
+   fixed + 레일 폭만큼 left 를 밀어 캔버스 기준으로 가운데. 레일이 열리면 같이 미끄러진다. */
+.rmg-ask { position: fixed; bottom: 26px; left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 20;
   display: flex; align-items: center; gap: 12px;
   width: min(560px, calc(100% - 48px));
   padding: 9px 12px 9px 16px; border-radius: 16px;
   background: color-mix(in srgb, var(--surface) 84%, transparent); border: 1px solid var(--hair);
   backdrop-filter: blur(12px); box-shadow: 0 14px 42px -18px rgba(0,0,0,0.6);
-  transition: border-color 0.3s, box-shadow 0.3s; }
+  transition: border-color 0.3s, box-shadow 0.3s, left 280ms cubic-bezier(0.22, 1, 0.36, 1); }
 .rmg-ask.focus { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); box-shadow: 0 16px 46px -18px rgba(0,0,0,0.65), 0 0 0 3px var(--glow); }
 .rmg-ask-door { display: grid; place-items: center; width: 24px; flex-shrink: 0; }
 .rmg-ask-doormark { width: 19px; height: 25px; }
