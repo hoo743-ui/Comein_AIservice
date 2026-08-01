@@ -1,0 +1,37 @@
+# Render Blueprint — Comein 백엔드(FastAPI) 배포 정의
+# 대시보드에서 New → Blueprint → 이 레포 선택하면 아래 설정대로 서비스가 만들어진다.
+# 상세 절차·주의점: docs/15_DEPLOY.md
+services:
+  - type: web
+    name: comein-api
+    runtime: python
+    plan: free            # 15분 무요청 시 슬립 → keep-alive 는 docs/15_DEPLOY.md 참고
+    region: singapore     # 한국에서 가장 가까운 무료 리전
+    rootDir: backend      # 모노레포 — 이 폴더만 보고 빌드
+    branch: main
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.7
+      - key: ENV
+        value: production
+      # 쉼표 구분. 예) https://comein.vercel.app,https://comein.com
+      - key: CORS_ORIGINS
+        sync: false
+      # Vercel 프리뷰 도메인 허용이 필요할 때만. 예) https://.*\.vercel\.app
+      - key: CORS_ORIGIN_REGEX
+        sync: false
+      # Supabase → Project Settings → Database → Connection string (URI)
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true   # Render 가 임의 값 생성 (직접 넣지 말 것)
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: GROQ_API_KEY
+        sync: false

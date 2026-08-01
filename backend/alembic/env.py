@@ -20,9 +20,9 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# .env(app.core.config.settings)의 DATABASE_URL을 그대로 사용 — alembic.ini의
-# sqlalchemy.url은 플레이스홀더로 둔다.
-config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+# .env(app.core.config.settings)의 DATABASE_URL을 사용 — alembic.ini의 sqlalchemy.url은
+# 플레이스홀더로 둔다. `%`는 configparser 보간 문자라 이스케이프(비밀번호에 섞일 수 있음).
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
@@ -73,6 +73,7 @@ async def run_async_migrations() -> None:
         config.get_section(config.config_ini_section, {}),
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=settings.db_connect_args,  # URL에서 걷어낸 sslmode 등 복원
     )
 
     async with connectable.connect() as connection:

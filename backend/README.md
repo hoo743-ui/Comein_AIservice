@@ -29,4 +29,9 @@ uvicorn app.main:app --reload
 ```
 
 - API 문서: http://localhost:8000/docs
-- 헬스체크: http://localhost:8000/health
+- 헬스체크: http://localhost:8000/health (DB 포함: `/health/db`)
+
+## 배포
+
+Render(무료 티어)에 배포한다. 서비스 정의는 레포 루트 [`render.yaml`](../render.yaml),
+절차·환경변수·콜드스타트 대응은 [`../docs/15_DEPLOY.md`](../docs/15_DEPLOY.md).
