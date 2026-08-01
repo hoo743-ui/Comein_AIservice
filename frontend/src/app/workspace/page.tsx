@@ -58,8 +58,8 @@ const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: s
 type Kind = "일정" | "회의" | "할 일" | "메모";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
 type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; isAction?: boolean };
-// 초안(pending) — AI가 이해한 결과. 사용자가 확인/정제 후 확정(confirmed)하면 영수증이 된다.
-type Draft = { title: string; kind: Kind; time: string | null; date?: Date; note: string };
+// AI가 이해한 한 건. 확인 단계 없이 그대로 목적지로 배정된다(= 영수증이 된다).
+type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string };
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
   회의: { view: "meetings", label: "회의" },
@@ -68,6 +68,38 @@ const DEST: Record<Kind, { view: View; label: string }> = {
 };
 const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", tasks: "할 일", notes: "메모", meetings: "회의", people: "사람" };
 const pad = (n: number | string) => String(n).padStart(2, "0");
+
+/** 백엔드(`/api/chat`)의 item 하나 → 화면이 쓰는 Parsed.
+ *  모르는 필드는 버리고, 없으면 입력 원문으로 메꾼다 — AI가 흔들려도 화면은 안 흔들린다. */
+function toParsed(raw: unknown, fallbackTitle: string): Parsed {
+  const it = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
+
+  const kind: Kind =
+    it.category === "schedule" ? "일정"
+    : it.category === "todo" ? "할 일"
+    : it.category === "meeting" ? "회의"
+    : "메모";
+
+  let time: string | null = null;
+  let date: Date | undefined;
+  const when = str(it.start) ?? str(it.due);
+  if (when) {
+    const d = new Date(when);
+    if (!Number.isNaN(d.getTime())) {
+      date = d;
+      time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    }
+  }
+
+  return {
+    title: str(it.title) ?? fallbackTitle,
+    kind,
+    time,
+    date,
+    note: str(it.location) ?? str(it.content) ?? str(it.notes) ?? str(it.summary) ?? "",
+  };
+}
 
 function classify(text: string): Kind {
   if (/회의|미팅/.test(text)) return "회의";
@@ -251,7 +283,7 @@ export default function Reimagine() {
   const [shownView, setShownView] = React.useState<View>("today"); // 실제 렌더 중인 뷰 — 전환 시 이전 뷰를 잠깐 더 붙잡아 크로스페이드
   const [flowExit, setFlowExit] = React.useState(false); // 탭 전환: 이전 내용 페이드아웃 단계
   const [receipts, setReceipts] = React.useState<Receipt[]>([]);
-  const [draft, setDraft] = React.useState<Draft | null>(null); // 확인/정제 카드 — 캡처 후 확정 전 pending 상태
+  const [reply, setReply] = React.useState<string | null>(null); // AI가 방금 한 말 — 조용히 한 줄
   const [organizing, setOrganizing] = React.useState(false);
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
   const [calDay, setCalDay] = React.useState<Date | null>(null);
@@ -394,66 +426,58 @@ export default function Reimagine() {
     orgTimer.current = setTimeout(() => setOrganizing(false), 1600);
   }, []);
 
-  // 캡처 — 진짜 AI(백엔드)로 텍스트를 보내서 JSON 결과를 받아온다!
+  // 캡처 — 확인 단계 없이 바로 정리한다.
+  // "나는 아무것도 정리하지 않았는데, 알아서 정리되어 있었다" (CLAUDE.md) — 사용자에게
+  // 폼을 내밀지 않는다. AI가 이해한 결과를 즉시 목적지로 보내고, 자취(영수증)만 남긴다.
+  // 틀렸을 때의 안전장치는 확인 버튼이 아니라 영수증의 [되돌리기]다.
+  const file = React.useCallback((items: Parsed[]) => {
+    const fresh = items.filter((p) => p.title.trim());
+    if (!fresh.length) return;
+    const at = Date.now();
+    const rows: Receipt[] = fresh.map((p) => {
+      seq.current += 1;
+      const dest = DEST[p.kind];
+      return {
+        id: seq.current, at, title: p.title.trim(), kind: p.kind,
+        destView: dest.view, destLabel: dest.label,
+        time: p.time, date: p.date, note: p.note.trim() || undefined,
+      };
+    });
+    setReceipts((prev) => [...rows.reverse(), ...prev].slice(0, 8));
+  }, []);
+
   const capture = async (v: string) => {
     const t = v.trim();
     if (!t) return;
-    
-    ignite(); 
+
+    // 응답이 올 때까지 '정리 중' 상태를 유지한다 (콜드스타트면 수십 초가 걸릴 수 있다).
+    if (orgTimer.current) clearTimeout(orgTimer.current);
+    setOrganizing(true);
+    setReply(null);
 
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: t })
+        body: JSON.stringify({ message: t }),
       });
-      
+      if (!res.ok) throw new Error(`API ${res.status}`);
+
       const data = await res.json();
-      const items = data.items || [];
-      
-      if (items.length > 0) {
-        // 첫 번째 항목을 기반으로 Draft(확인/정제 카드) 생성
-        const item = items[0];
-        
-        let kind: Kind = "메모";
-        if (item.category === "schedule") kind = "일정";
-        else if (item.category === "todo") kind = "할 일";
-        else if (item.category === "meeting") kind = "회의";
-        
-        let time = null;
-        let dateObj = undefined;
-        if (item.start) {
-          const d = new Date(item.start);
-          const pad = (n: number) => String(n).padStart(2, "0");
-          time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
-          dateObj = d;
-        }
-        
-        setDraft({ 
-          title: item.title || t, 
-          kind: kind, 
-          time: time, 
-          date: dateObj,
-          note: item.content || item.notes || item.summary || "" 
-        });
-      } else {
-        setDraft({ title: t, kind: "메모", time: null, note: "" });
-      }
-      
+      const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+
+      // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
+      // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
+      const parsed = items.slice(0, 4).map((raw) => toParsed(raw, t));
+      file(parsed.length ? parsed : [{ title: t, kind: "메모", time: null, note: "" }]);
+      if (typeof data.reply === "string" && data.reply.trim()) setReply(data.reply.trim());
     } catch (err) {
-      console.error("AI 파싱 에러:", err);
-      // 에러 발생 시 원래 로컬 더미 함수로 폴백
-      setDraft({ title: t, kind: classify(t), time: parseTime(t), note: "" });
+      // 백엔드가 자거나 죽어도 입력은 삼키지 않는다 — 로컬 규칙으로라도 정리한다.
+      console.error("AI 파싱 실패 → 로컬 폴백:", err);
+      file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
+    } finally {
+      ignite();
     }
-  };
-  const commitDraft = (d: Draft) => {
-    const t = d.title.trim();
-    if (!t) return;
-    const dest = DEST[d.kind];
-    seq.current += 1;
-    setReceipts((prev) => [{ id: seq.current, at: Date.now(), title: t, kind: d.kind, destView: dest.view, destLabel: dest.label, time: d.time, date: d.date, note: d.note.trim() || undefined }, ...prev].slice(0, 8));
-    setDraft(null);
-    ignite();
   };
 
   // 뷰 안의 컨텍스트 AI 액션 — 실행 즉시 그 목적지 기준으로 영수증을 남긴다.
@@ -706,6 +730,7 @@ export default function Reimagine() {
             /* REVIEW — AI가 방금 한 일: 무엇 + 어디 + [열기]/[되돌리기] (영수증) */
             <section className="rmg-review rmg-a4">
               <p className="rmg-eyebrow">{t.justOrganized} {organizing && <span className="rmg-org">· {t.organizing}</span>}</p>
+              {reply && !organizing && <p className="rmg-reply">{reply}</p>}
               {receipts.length > 0 ? (
                 <ul className="rmg-rcpt-list">
                   {receipts.map((r) => (
@@ -736,11 +761,8 @@ export default function Reimagine() {
 
         {/* 앰비언트 AI — 상주 챗박스가 아니라, 필요할 때만 펼쳐지는 떠다니는 문 (⌘K).
             전체 패널(캘린더·설정·가이드)이 열리면 컴포저는 물러난다(⌘K 충돌 방지).
-            초안(pending)이 있으면 컴포저 대신 확인/정제 카드를 그 자리에 띄운다. */}
-        {!panel && !draft && <DoorInvoke view={view} lang={lang} organizing={organizing} onSubmit={capture} />}
-        {!panel && draft && (
-          <ConfirmCard draft={draft} lang={lang} onConfirm={commitDraft} onCancel={() => setDraft(null)} />
-        )}
+            입력하면 확인 절차 없이 바로 정리된다 — 결과는 위 영수증에 남는다. */}
+        {!panel && <DoorInvoke view={view} lang={lang} organizing={organizing} onSubmit={capture} />}
 
         {/* 가로 옵션에서 여는 전체 화면 란 — 캘린더 전체 / 설정 (모달 아님, 캔버스 위 큰 판) */}
         {panel && mounted && (
@@ -890,102 +912,6 @@ function DoorInvoke({ view, lang, organizing, onSubmit }: { view: View; lang: La
         <span className="rmg-ask-kbd">⌘K</span>
       )}
     </form>
-  );
-}
-
-/** 확인/정제 카드 — 캡처 직후, AI가 이해한 결과(pending)를 조용히 제시하고 살짝 손보게 한다.
- *  폼을 채우는 게 아니라 'AI가 채운 걸 사용자가 끄덕이는' 경험. 확정하면 목적지로 배정된다. */
-function ConfirmCard({ draft, lang, onConfirm, onCancel }: {
-  draft: Draft; lang: Lang; onConfirm: (d: Draft) => void; onCancel: () => void;
-}) {
-  const t = L(lang);
-  const en = lang === "en";
-  const [d, setD] = React.useState<Draft>(draft);
-  const titleRef = React.useRef<HTMLInputElement>(null);
-  React.useEffect(() => { setD(draft); }, [draft]);
-  React.useEffect(() => { titleRef.current?.focus(); titleRef.current?.select(); }, []);
-  React.useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") { e.preventDefault(); onCancel(); }
-      else if ((e.metaKey || e.ctrlKey) && e.key === "Enter") { e.preventDefault(); onConfirm({ ...d, time: d.time?.trim() || null }); }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [d, onConfirm, onCancel]);
-
-  const KINDS: Kind[] = ["일정", "회의", "할 일", "메모"];
-  const kindLabel: Record<Kind, string> = en
-    ? { 일정: "Event", 회의: "Meeting", "할 일": "Task", 메모: "Note" }
-    : { 일정: "일정", 회의: "회의", "할 일": "할 일", 메모: "메모" };
-  const dest = DEST[d.kind];
-  const noteLabel = d.kind === "회의" ? (en ? "Participants" : "참석자")
-    : d.kind === "일정" ? (en ? "Location" : "장소")
-    : d.kind === "할 일" ? (en ? "Detail" : "메모")
-    : (en ? "Tags" : "태그");
-  const notePlaceholder = d.kind === "회의" ? (en ? "e.g. Prof. Kim" : "예: 김 교수님")
-    : d.kind === "일정" ? (en ? "e.g. Room 401" : "예: 401호")
-    : (en ? "optional" : "선택");
-
-  return (
-    <div className="rmg-confirm" role="dialog" aria-label={en ? "Confirm capture" : "입력 확인"}>
-      <div className="rmg-confirm-head">
-        <span className="rmg-confirm-mark" aria-hidden><AiDoor active className="rmg-confirm-door" /></span>
-        <span className="rmg-confirm-eye">{en ? "Comein understood" : "Comein이 이해했어요"}</span>
-        <span className="rmg-confirm-dest">→ {t.viewLabel(dest.view)}</span>
-      </div>
-
-      <input
-        ref={titleRef}
-        className="rmg-confirm-title"
-        value={d.title}
-        onChange={(e) => setD((s) => ({ ...s, title: e.target.value }))}
-        aria-label={en ? "Title" : "제목"}
-      />
-
-      <div className="rmg-confirm-chips" role="group" aria-label={en ? "Type" : "종류"}>
-        {KINDS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            className={`rmg-confirm-chip ${d.kind === k ? "on" : ""}`}
-            onClick={() => setD((s) => ({ ...s, kind: k }))}
-            aria-pressed={d.kind === k}
-          >
-            {kindLabel[k]}
-          </button>
-        ))}
-      </div>
-
-      <div className="rmg-confirm-fields">
-        <label className="rmg-confirm-field">
-          <span className="rmg-confirm-flabel">{en ? "Time" : "시간"}</span>
-          <input
-            className="rmg-confirm-finput"
-            value={d.time ?? ""}
-            placeholder={en ? "e.g. 15:00" : "예: 15:00"}
-            onChange={(e) => setD((s) => ({ ...s, time: e.target.value }))}
-          />
-        </label>
-        {d.kind !== "메모" && (
-          <label className="rmg-confirm-field">
-            <span className="rmg-confirm-flabel">{noteLabel}</span>
-            <input
-              className="rmg-confirm-finput"
-              value={d.note}
-              placeholder={notePlaceholder}
-              onChange={(e) => setD((s) => ({ ...s, note: e.target.value }))}
-            />
-          </label>
-        )}
-      </div>
-
-      <div className="rmg-confirm-acts">
-        <button type="button" className="rmg-confirm-cancel" onClick={onCancel}>{en ? "Cancel" : "취소"}</button>
-        <button type="button" className="rmg-confirm-ok" onClick={() => onConfirm({ ...d, time: d.time?.trim() || null })}>
-          {en ? "Confirm" : "확정"}
-        </button>
-      </div>
-    </div>
   );
 }
 
@@ -1625,6 +1551,9 @@ const CSS = `
 @keyframes rmg-arrive-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rmg-arrive { display: none; } }
 .rmg-eyebrow { margin: 0 0 18px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+/* AI가 방금 한 말 — 말풍선이 아니라 한 줄. 읽히되 붙잡지 않는다. */
+.rmg-reply { margin: -10px 0 16px; font-size: 0.92rem; font-weight: 300; letter-spacing: -0.01em;
+  line-height: 1.5; color: var(--muted); animation: rmg-rise 0.4s cubic-bezier(0.22,1,0.36,1) both; }
 .rmg-org { color: var(--accent); font-weight: 600; }
 
 /* AiDoor */
@@ -1922,49 +1851,6 @@ const CSS = `
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
 .rmg-ctx-reflect { color: var(--muted); }
 
-/* 확인/정제 카드 — 캡처 후 확정 전(pending). 폼이 아니라 'AI가 채운 걸 끄덕이는' 카드. */
-.rmg-confirm { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 21;
-  display: flex; flex-direction: column; gap: 12px;
-  width: min(520px, calc(100% - 48px));
-  padding: 16px 18px 15px; border-radius: 18px;
-  background: color-mix(in srgb, var(--surface) 94%, transparent); border: 1px solid var(--hair);
-  backdrop-filter: blur(16px); box-shadow: 0 24px 60px -22px rgba(0,0,0,0.7), 0 0 0 3px var(--glow);
-  animation: rmg-rise 0.28s cubic-bezier(0.22,1,0.36,1) both; }
-.rmg-confirm-head { display: flex; align-items: center; gap: 9px; }
-.rmg-confirm-mark { display: grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--accent); }
-.rmg-confirm-door { width: 13px; height: 17px; }
-.rmg-confirm-eye { font-size: 0.72rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
-.rmg-confirm-dest { margin-left: auto; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.02em; color: var(--accent); }
-.rmg-confirm-title { width: 100%; background: transparent; border: 0; outline: none; padding: 2px 0;
-  font-family: inherit; font-size: 1.18rem; font-weight: 400; letter-spacing: -0.015em; color: var(--ink); caret-color: var(--accent); }
-.rmg-confirm-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.rmg-confirm-chip { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent);
-  color: var(--muted); font-family: inherit; font-size: 0.8rem; font-weight: 500; letter-spacing: -0.005em;
-  padding: 5px 12px; border-radius: 999px; cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background 0.2s; }
-.rmg-confirm-chip:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
-.rmg-confirm-chip.on { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 55%, transparent);
-  background: color-mix(in srgb, var(--accent) 13%, transparent); }
-.rmg-confirm-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
-.rmg-confirm-fields { display: flex; flex-wrap: wrap; gap: 8px; }
-.rmg-confirm-field { display: flex; align-items: center; gap: 8px; flex: 1 1 160px; min-width: 0;
-  border: 1px solid var(--hair); border-radius: 11px; padding: 7px 11px;
-  background: color-mix(in srgb, var(--surface) 50%, transparent); transition: border-color 0.2s; }
-.rmg-confirm-field:focus-within { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
-.rmg-confirm-flabel { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); white-space: nowrap; flex-shrink: 0; }
-.rmg-confirm-finput { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; padding: 0;
-  font-family: inherit; font-size: 0.92rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); caret-color: var(--accent); }
-.rmg-confirm-finput::placeholder { color: var(--faint); font-weight: 300; }
-.rmg-confirm-acts { display: flex; justify-content: flex-end; align-items: center; gap: 6px; margin-top: 2px; }
-.rmg-confirm-cancel { border: 0; background: none; font-family: inherit; font-size: 0.86rem; font-weight: 500;
-  color: var(--faint); cursor: pointer; padding: 8px 14px; border-radius: 10px; transition: color 0.2s, background 0.2s; }
-.rmg-confirm-cancel:hover { color: var(--muted); background: color-mix(in srgb, var(--ink) 6%, transparent); }
-.rmg-confirm-ok { border: 0; font-family: inherit; font-size: 0.86rem; font-weight: 600; letter-spacing: -0.005em;
-  color: #141210; background: var(--accent); cursor: pointer; padding: 8px 18px; border-radius: 10px;
-  transition: transform 0.15s cubic-bezier(0.22,1,0.36,1), filter 0.2s; }
-.rmg-confirm-ok:hover { transform: translateY(-1px); filter: brightness(1.05); }
-.rmg-confirm-ok:active { transform: scale(0.97); }
-.rmg-confirm-cancel:focus-visible, .rmg-confirm-ok:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
 
 /* Ask Comein · 항상 보이는 주 입력 (문 + 명확한 필드 + 회전 예시) */
 .rmg-ask { position: absolute; bottom: 26px; left: 50%; transform: translateX(-50%); z-index: 20;
