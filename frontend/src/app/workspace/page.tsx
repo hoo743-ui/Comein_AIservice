@@ -211,13 +211,9 @@ function L(lang: Lang) {
     paceEmpty: en ? "Nothing today — feels light" : "오늘은 비어 있어요 — 마음이 가볍네요",
     reflect: (c: string | null) => (en ? reflectEn(c) : reflection(c)),
     todaysContextEye: en ? "Today’s context" : "오늘의 맥락",
-    justOrganized: en ? "Just organized" : "방금 정리한 것",
-    organizing: en ? "organizing" : "정리 중",
+    organizing: en ? "Organizing" : "정리 중",
     open: en ? "Open" : "열기",
     undo: en ? "Undo" : "되돌리기",
-    captureHint: en
-      ? (<>Write anything with <kbd className="rmg-kbd">⌘K</kbd> — Comein files it in the right place and notes <b>where it went</b> here.</>)
-      : (<><kbd className="rmg-kbd">⌘K</kbd>로 무엇이든 적으면 — AI가 알맞은 곳에 넣고, 여기에 <b>어디에 뒀는지</b> 남깁니다.</>),
     notif: en ? "Notifications" : "알림",
     startingSoon: en ? "Starting soon" : "곧 시작하는 일정",
     importantTask: en ? "Important task" : "중요한 할 일",
@@ -293,7 +289,9 @@ export default function Reimagine() {
   const [shownView, setShownView] = React.useState<View>("today"); // 실제 렌더 중인 뷰 — 전환 시 이전 뷰를 잠깐 더 붙잡아 크로스페이드
   const [flowExit, setFlowExit] = React.useState(false); // 탭 전환: 이전 내용 페이드아웃 단계
   const [receipts, setReceipts] = React.useState<Receipt[]>([]);
-  const [reply, setReply] = React.useState<string | null>(null); // AI가 방금 한 말 — 조용히 한 줄
+  // 방금 정리한 한 건 — 목록으로 쌓지 않고 잠깐 스쳤다 사라진다(자취는 목적지 뷰에 남는다).
+  const [flash, setFlash] = React.useState<{ text: string; dest: View | null; ids: number[] } | null>(null);
+  const [flashOut, setFlashOut] = React.useState(false);
   const [organizing, setOrganizing] = React.useState(false);
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
   const [calDay, setCalDay] = React.useState<Date | null>(null);
@@ -311,6 +309,7 @@ export default function Reimagine() {
 
   const seq = React.useRef(0);
   const orgTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   const railTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 레일 확장: 호버 인텐트(살짝 지연 → 툴팁이 먼저 뜨고, 머무르면 열림). 첫실행 자동안내 중엔 무시.
@@ -438,11 +437,11 @@ export default function Reimagine() {
 
   // 캡처 — 확인 단계 없이 바로 정리한다.
   // "나는 아무것도 정리하지 않았는데, 알아서 정리되어 있었다" (CLAUDE.md) — 사용자에게
-  // 폼을 내밀지 않는다. AI가 이해한 결과를 즉시 목적지로 보내고, 자취(영수증)만 남긴다.
-  // 틀렸을 때의 안전장치는 확인 버튼이 아니라 영수증의 [되돌리기]다.
-  const file = React.useCallback((items: Parsed[]) => {
+  // 폼도, 쌓이는 로그도 내밀지 않는다. 결과는 목적지 뷰에 조용히 놓이고,
+  // 방금 한 일만 잠깐 스쳤다 사라진다(아래 flash).
+  const file = React.useCallback((items: Parsed[]): Receipt[] => {
     const fresh = items.filter((p) => p.title.trim());
-    if (!fresh.length) return;
+    if (!fresh.length) return [];
     const at = Date.now();
     const rows: Receipt[] = fresh.map((p) => {
       seq.current += 1;
@@ -454,7 +453,26 @@ export default function Reimagine() {
         priority: p.priority,
       };
     });
-    setReceipts((prev) => [...rows.reverse(), ...prev].slice(0, 8));
+    setReceipts((prev) => [...[...rows].reverse(), ...prev].slice(0, 12));
+    return rows;
+  }, []);
+
+  // 스침 — 6초 뒤 옅어지고 6.5초 뒤 사라진다. 화면에 남지 않는 게 요점.
+  const showFlash = React.useCallback((rows: Receipt[], text?: string) => {
+    if (!rows.length) return;
+    for (const timer of flashTimers.current) clearTimeout(timer);
+    const head = rows[0];
+    const more = rows.length > 1 ? ` 외 ${rows.length - 1}건` : "";
+    setFlashOut(false);
+    setFlash({
+      text: text || `${head.title}${more} · ${head.destLabel}`,
+      dest: head.destView,
+      ids: rows.map((r) => r.id),
+    });
+    flashTimers.current = [
+      setTimeout(() => setFlashOut(true), 6000),
+      setTimeout(() => setFlash(null), 6500),
+    ];
   }, []);
 
   const capture = async (v: string) => {
@@ -463,8 +481,9 @@ export default function Reimagine() {
 
     // 응답이 올 때까지 '정리 중' 상태를 유지한다 (콜드스타트면 수십 초가 걸릴 수 있다).
     if (orgTimer.current) clearTimeout(orgTimer.current);
+    for (const timer of flashTimers.current) clearTimeout(timer);
     setOrganizing(true);
-    setReply(null);
+    setFlash(null);
 
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
@@ -480,12 +499,13 @@ export default function Reimagine() {
       // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
       // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
       const parsed = items.slice(0, 4).map((raw) => toParsed(raw, t));
-      file(parsed.length ? parsed : [{ title: t, kind: "메모", time: null, note: "" }]);
-      if (typeof data.reply === "string" && data.reply.trim()) setReply(data.reply.trim());
+      const rows = file(parsed.length ? parsed : [{ title: t, kind: "메모", time: null, note: "" }]);
+      const said = typeof data.reply === "string" ? data.reply.trim() : "";
+      showFlash(rows, said || undefined);
     } catch (err) {
       // 백엔드가 자거나 죽어도 입력은 삼키지 않는다 — 로컬 규칙으로라도 정리한다.
       console.error("AI 파싱 실패 → 로컬 폴백:", err);
-      file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
+      showFlash(file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]));
     } finally {
       ignite();
     }
@@ -737,38 +757,32 @@ export default function Reimagine() {
             />
           )}
 
-          {shownView === "today" && (
-            /* REVIEW — AI가 방금 한 일: 무엇 + 어디 + [열기]/[되돌리기] (영수증) */
-            <section className="rmg-review rmg-a4">
-              <p className="rmg-eyebrow">{t.justOrganized} {organizing && <span className="rmg-org">· {t.organizing}</span>}</p>
-              {reply && !organizing && <p className="rmg-reply">{reply}</p>}
-              {receipts.length > 0 ? (
-                <ul className="rmg-rcpt-list">
-                  {receipts.map((r) => (
-                    <li key={r.id} className="rmg-rcpt">
-                      <span className="rmg-rcpt-time">{mounted ? fmtTime(new Date(r.at)) : ""}</span>
-                      <span className="rmg-rcpt-body">
-                        <span className="rmg-rcpt-mark"><AiDoor className="rmg-rcpt-door" /></span>
-                        <span className="rmg-rcpt-desc">
-                          <b className="rmg-rcpt-title">{r.title}</b>
-                          <span className="rmg-rcpt-dest">{t.viewLabel(r.destView)}{r.time ? ` · ${r.time}` : ""}{r.note ? ` · ${r.note}` : ""}</span>
-                        </span>
-                      </span>
-                      <span className="rmg-rcpt-acts">
-                        {!r.isAction && (
-                          <button type="button" className="rmg-rcpt-open" onClick={() => setView(r.destView)}>{t.open}</button>
-                        )}
-                        <button type="button" className="rmg-rcpt-undo" onClick={() => undoReceipt(r.id)}>{t.undo}</button>
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="rmg-empty">{t.captureHint}</p>
-              )}
-            </section>
-          )}
         </div>
+
+        {/* 스침 — 정리된 결과는 목적지 뷰에 놓이고, 여기엔 방금 한 일만 잠깐 머물다 사라진다.
+            기록을 쌓아 보여주면 대시보드가 된다. Comein은 자취를 남기되 진열하지 않는다. */}
+        {!panel && (organizing || flash) && (
+          <div className={`rmg-flash ${flashOut ? "out" : ""}`} role="status" aria-live="polite">
+            <AiDoor active className="rmg-flash-door" />
+            {organizing ? (
+              <span className="rmg-flash-text">{t.organizing}…</span>
+            ) : flash ? (
+              <>
+                <span className="rmg-flash-text">{flash.text}</span>
+                {flash.dest && (
+                  <button type="button" className="rmg-flash-act" onClick={() => { setView(flash.dest!); setFlash(null); }}>{t.open}</button>
+                )}
+                <button
+                  type="button"
+                  className="rmg-flash-act"
+                  onClick={() => { flash.ids.forEach(undoReceipt); setFlash(null); }}
+                >
+                  {t.undo}
+                </button>
+              </>
+            ) : null}
+          </div>
+        )}
 
         {/* 앰비언트 AI — 상주 챗박스가 아니라, 필요할 때만 펼쳐지는 떠다니는 문 (⌘K).
             전체 패널(캘린더·설정·가이드)이 열리면 컴포저는 물러난다(⌘K 충돌 방지).
@@ -1584,10 +1598,25 @@ const CSS = `
 @keyframes rmg-arrive-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rmg-arrive { display: none; } }
 .rmg-eyebrow { margin: 0 0 18px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
-/* AI가 방금 한 말 — 말풍선이 아니라 한 줄. 읽히되 붙잡지 않는다. */
-.rmg-reply { margin: -10px 0 16px; font-size: 0.92rem; font-weight: 300; letter-spacing: -0.01em;
-  line-height: 1.5; color: var(--muted); animation: rmg-rise 0.4s cubic-bezier(0.22,1,0.36,1) both; }
-.rmg-org { color: var(--accent); font-weight: 600; }
+
+/* 스침 — 캡처바 바로 위, 한 줄. 6초 뒤 스스로 옅어진다. 카드도 목록도 아니다. */
+.rmg-flash { position: fixed; bottom: 92px; left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 19;
+  display: flex; align-items: center; gap: 10px;
+  width: min(560px, calc(100% - 48px)); padding: 9px 14px; border-radius: 13px;
+  background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--hair);
+  backdrop-filter: blur(12px); box-shadow: 0 10px 30px -16px rgba(0,0,0,0.55);
+  animation: rmg-rise 0.34s cubic-bezier(0.22,1,0.36,1) both;
+  transition: opacity 0.5s ease, transform 0.5s cubic-bezier(0.22,1,0.36,1), left 280ms cubic-bezier(0.22,1,0.36,1); }
+.rmg-flash.out { opacity: 0; transform: translateY(4px); }
+.rmg-flash-door { width: 13px; height: 17px; color: var(--accent); flex-shrink: 0; }
+.rmg-flash-text { flex: 1; min-width: 0; font-size: 0.9rem; font-weight: 300; letter-spacing: -0.01em;
+  color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmg-flash-act { border: 0; background: none; font-family: inherit; font-size: 0.82rem; font-weight: 500;
+  color: var(--faint); padding: 3px 7px; border-radius: 7px; cursor: pointer; flex-shrink: 0;
+  transition: color 0.2s, background 0.2s; }
+.rmg-flash-act:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.rmg-flash-act:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .rmg-flash { animation: none; transition: opacity 0.5s ease; } }
 
 /* AiDoor */
 .aidoor { position: relative; display: inline-grid; place-items: center; }
@@ -1908,24 +1937,7 @@ const CSS = `
 .rmg-ask-send:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 3px; }
 
 /* REVIEW · 영수증 (무엇 + 어디 + 열기/되돌리기) */
-.rmg-rcpt-list { list-style: none; margin: 0; padding: 0; }
 /* 타임라인 — 시간(좌) · 커넥터 · 동작 설명 · 액션(우) */
-.rmg-rcpt { display: grid; grid-template-columns: 3.6em 1fr auto; align-items: center; gap: 14px; padding: 13px 0; border-bottom: 1px solid var(--hair); }
-.rmg-rcpt:last-child { border-bottom: 0; }
-.rmg-rcpt-time { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-size: 0.82rem; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); white-space: nowrap; }
-.rmg-rcpt-body { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.rmg-rcpt-mark { display: grid; place-items: center; width: 16px; flex-shrink: 0; color: var(--muted); }
-.rmg-rcpt-door { width: 13px; height: 17px; }
-.rmg-rcpt-desc { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-.rmg-rcpt-title { font-size: 0.96rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.rmg-rcpt-dest { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--faint); }
-.rmg-rcpt-acts { display: flex; align-items: center; gap: 2px; }
-.rmg-rcpt-open, .rmg-rcpt-undo { border: 0; background: none; font-family: inherit; font-size: 0.78rem; font-weight: 600; cursor: pointer; padding: 4px 8px; border-radius: 8px; white-space: nowrap; transition: color 0.2s, background 0.2s; }
-.rmg-rcpt-open { color: var(--ink); }
-.rmg-rcpt-open:hover { background: color-mix(in srgb, var(--ink) 8%, transparent); }
-.rmg-rcpt-undo { color: var(--faint); }
-.rmg-rcpt-undo:hover { color: var(--muted); }
-.rmg-rcpt-open:focus-visible, .rmg-rcpt-undo:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
 .rmg-empty { margin: 0; font-size: 0.92rem; font-weight: 300; color: var(--muted); line-height: 1.7; }
 .rmg-empty b { color: var(--ink); font-weight: 500; }
 .rmg-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.78rem; font-weight: 600; color: var(--ink); background: var(--surface); border: 1px solid var(--hair); border-radius: 6px; padding: 1px 6px; }
