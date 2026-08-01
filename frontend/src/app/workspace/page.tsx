@@ -13,6 +13,7 @@ import { useWorkspace } from "@/lib/store";
 import { fmtTime, fmtDate } from "@/lib/format";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
+import type { TodoPriority } from "@/lib/types";
 
 /**
  * Comein · Reimagined Workspace — 대시보드가 아니라 '살아있는 편집적 워크스페이스'.
@@ -57,9 +58,9 @@ const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: s
 
 type Kind = "일정" | "회의" | "할 일" | "메모";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
-type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; isAction?: boolean };
+type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority; isAction?: boolean };
 // AI가 이해한 한 건. 확인 단계 없이 그대로 목적지로 배정된다(= 영수증이 된다).
-type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string };
+type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string; priority?: TodoPriority };
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
   회의: { view: "meetings", label: "회의" },
@@ -92,12 +93,21 @@ function toParsed(raw: unknown, fallbackTitle: string): Parsed {
     }
   }
 
+  // 메모는 백엔드가 title 없이 content 만 주는 경우가 많다 → 본문 첫 줄을 제목으로 세운다.
+  const body = str(it.content) ?? str(it.notes) ?? str(it.summary);
+  const title = str(it.title) ?? (body ? body.split("\n")[0].slice(0, 40) : null) ?? fallbackTitle;
+  const priority = it.priority === "high" || it.priority === "low" || it.priority === "mid"
+    ? (it.priority as TodoPriority)
+    : undefined;
+
   return {
-    title: str(it.title) ?? fallbackTitle,
+    title,
     kind,
     time,
     date,
-    note: str(it.location) ?? str(it.content) ?? str(it.notes) ?? str(it.summary) ?? "",
+    // 일정·회의는 장소가, 메모·할 일은 본문이 부가 정보다.
+    note: (kind === "일정" || kind === "회의" ? str(it.location) : null) ?? body ?? str(it.location) ?? "",
+    priority,
   };
 }
 
@@ -441,6 +451,7 @@ export default function Reimagine() {
         id: seq.current, at, title: p.title.trim(), kind: p.kind,
         destView: dest.view, destLabel: dest.label,
         time: p.time, date: p.date, note: p.note.trim() || undefined,
+        priority: p.priority,
       };
     });
     setReceipts((prev) => [...rows.reverse(), ...prev].slice(0, 8));
@@ -1331,7 +1342,8 @@ function CalendarView({ schedules, mounted, now, mine, ai, onAction, lang }: any
 function TasksView({ todos, mine, ai, onToggleTodo, onRemoveReceipt, onAction, lang }: any) {
   const t = L(lang as Lang);
   const rows = [
-    ...mine.map((r: Receipt) => ({ id: r.id, rid: true, title: r.title, priority: "mid" })),
+    // AI가 매긴 우선순위를 그대로 쓴다 — 예전엔 전부 mid 로 눌러버렸다.
+    ...mine.map((r: Receipt) => ({ id: r.id, rid: true, title: r.title, priority: r.priority ?? "mid" })),
     ...todos.map((td: any) => ({ id: td.id, rid: false, title: td.title, priority: td.priority })),
   ];
   if (rows.length === 0) return <p className="rmg-empty">{t.emptyTasks}</p>;
@@ -1360,7 +1372,8 @@ function TasksView({ todos, mine, ai, onToggleTodo, onRemoveReceipt, onAction, l
 /** Notes — 노트 그리드(익숙한 '메모'). */
 function NotesView({ memos, mine, ai, onAction, lang }: any) {
   const tiles = [
-    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, title: r.title, content: "", tags: [], ai: true })),
+    // 메모 본문(r.note)을 살린다 — 제목이 본문에서 잘려 나온 경우엔 중복이라 비운다.
+    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, title: r.title, content: r.note && r.note !== r.title ? r.note : "", tags: [], ai: true })),
     ...memos.map((m: any) => ({ id: m.id, title: m.title, content: m.content ?? "", tags: m.tags ?? [], ai: false })),
   ];
   if (tiles.length === 0) return <p className="rmg-empty">{L(lang as Lang).emptyNotes}</p>;
