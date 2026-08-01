@@ -11,6 +11,8 @@ import {
 
 import { useWorkspace } from "@/lib/store";
 import { fmtTime, fmtDate } from "@/lib/format";
+// 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
+import { API_BASE } from "@/lib/api";
 
 /**
  * Comein · Reimagined Workspace — 대시보드가 아니라 '살아있는 편집적 워크스페이스'.
@@ -400,7 +402,7 @@ export default function Reimagine() {
     ignite(); 
 
     try {
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: t })
