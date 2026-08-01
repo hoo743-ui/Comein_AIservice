@@ -4,10 +4,14 @@
 """
 from fastapi import APIRouter
 
-from app.api.endpoints import chat, items
+from app.api.endpoints import chat, items, memos, meetings, schedules, todos
 
 api_router = APIRouter()
 api_router.include_router(chat.router, prefix="/chat", tags=["chat"])
 api_router.include_router(items.router, prefix="/items", tags=["items"])
+api_router.include_router(schedules.router, prefix="/schedules", tags=["schedules"])
+api_router.include_router(todos.router, prefix="/todos", tags=["todos"])
+api_router.include_router(memos.router, prefix="/memos", tags=["memos"])
+api_router.include_router(meetings.router, prefix="/meetings", tags=["meetings"])
 
-# TODO: schedules, todos, memos, meetings 개별 조회/수정 라우터 추가 (docs/10_API.md)
+# TODO: schedules, todos, memos, meetings 개별 수정(PATCH)/단건 조회 라우터 (docs/10_API.md)

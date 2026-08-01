@@ -6,6 +6,10 @@ Data Layer로 연결한다. 상세 설계: ../docs/06_BACKEND.md, ../docs/10_API
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 
+from dotenv import load_dotenv
+
+load_dotenv()  # .env 값을 os.environ 으로 — ai/ 쪽이 환경변수를 직접 읽는다
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 

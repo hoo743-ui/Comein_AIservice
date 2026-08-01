@@ -2,7 +2,44 @@
 
 > "AI ↔ 경계는 API JSON Schema로 고정"(CLAUDE.md §협업). 프론트는 이 계약의 **결과(JSON)를 렌더·조작**만 하고, 파싱/추론은 AI 파트가 담당한다. 현재는 프론트에 **목업 seam**이 있으며(ADR-006), 실제 API가 나오면 seam 내부 호출만 교체한다.
 
-## 현재 상태(목업)
+## 0. 실제 백엔드 계약 (현재 구현 기준)
+
+> 아래 §1~§4는 프론트 목업(`src/lib/store.ts`) 시절에 정의한 **예정 계약**이며, 실제 FastAPI 백엔드가 구현한 계약과 필드가 다르다. 프론트를 실제 백엔드에 연결할 때는 아래 절을 기준으로 하고, 필요하면 §1~§4를 갱신하거나 이 절로 통합한다. 상세 파이프라인 현황은 `docs/24_AI_PIPELINE_STATUS.md` 참고.
+
+### `POST /api/chat`
+
+요청:
+
+```jsonc
+{ "message": "다음 주 화요일 3시에 교수님 미팅", "conversation_id": "user-uuid-or-null" }
+```
+
+응답(`AiResult` — `backend/app/schemas/ai_result.py`):
+
+```jsonc
+{
+  "intent": "schedule",           // "schedule" | "todo" | "memo" | "meeting" | "chat"
+  "reply": "일정(으)로 정리했어요.",
+  "items": [                       // ParsedItem[] — backend/app/schemas/items.py, POST /api/items와 동일 스키마
+    { "category": "schedule", "title": "교수님 미팅", "start": "2026-08-04T15:00:00" }
+  ]
+}
+```
+
+- `ai.router.route()`(AI 파트, 형태 미확정)의 결과를 `chat.py`가 `ParsedItem`으로 검증한 뒤 감싼다. 검증 실패/예외 시 `intent: "chat"`, 정해진 안내 문구, `items: []`로 폴백한다(`docs/24_AI_PIPELINE_STATUS.md` §5).
+- **저장은 별도 호출**: `/api/chat`은 저장하지 않는다. 반환된 `items`를 확인 후 `POST /api/items`를 호출해야 DB에 반영된다.
+
+### `POST /api/items`
+
+`backend/app/schemas/items.py`의 `ItemsCreateRequest`/`ItemsCreateResponse` 그대로 — 5절 참고 문서 없이 코드가 단일 기준(주석에 필드 설명 포함).
+
+### `GET /api/schedules|todos|memos|meetings`
+
+`user_id` 쿼리 파라미터 기준 목록 조회(스키마는 `backend/app/schemas/{schedules,todos,memos,meetings}.py`). 상세는 `docs/06_BACKEND.md` "엔드포인트 현황" 표 참고.
+
+---
+
+## 현재 상태(목업, 프론트 §1~§4 — 실제 백엔드와 필드가 다름)
 
 - 위치: `src/lib/store.ts`의 `interpret(text)` — 키워드 기반으로 `schedule/todo/memo/chat` 판별 후 엔티티 생성 + 응답 문구 반환.
 - 채팅 흐름: `sendMessage(text)` → 사용자 메시지 push → `interpret()` → 엔티티 생성(일정은 pending) → AI 메시지 + 카드(`message.card`).

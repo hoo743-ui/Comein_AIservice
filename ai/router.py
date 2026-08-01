@@ -1,24 +1,63 @@
 """AI Router — Chat 입력의 진입점.
 
-1) Intent Classifier로 의도 파악  2) 적절한 Agent로 라우팅
-3) Agent 결과를 자연어 + 인라인 카드로 반환
-상세: ../docs/07_AI_SYSTEM.md
+단일 Pydantic 스키마(ParseResponse)를 이용해
+사용자의 자연어를 완벽한 JSON 배열 형식으로 파싱하여 반환한다.
 """
-from typing import Any
+from typing import Any, Literal
+from pydantic import BaseModel
+import datetime
+import sys
+import os
 
-from ai.agents.base import AgentResult
+# 백엔드 스키마를 가져오기 위해 경로 추가
+backend_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "../backend"))
+if backend_dir not in sys.path:
+    sys.path.insert(0, backend_dir)
 
-# MVP 필수 Agent: intent, parser, schedule, todo, memo
-AGENT_REGISTRY: dict[str, str] = {
-    "schedule": "ai.agents.schedule.ScheduleAgent",
-    "todo": "ai.agents.todo.TodoAgent",
-    "memo": "ai.agents.memo.MemoAgent",
-}
+from app.schemas.items import ParsedItem
+from ai.llm.factory import get_provider, Task
 
+class ParseResponse(BaseModel):
+    user_id: str
+    items: list[ParsedItem]
 
-async def route(message: str, context: dict[str, Any] | None = None) -> AgentResult:
-    """자연어 메시지를 의도에 맞는 Agent로 라우팅한다.
+async def route(message: str, user_id: str = "default-user", context: dict[str, Any] | None = None) -> dict:
+    """자연어 메시지를 파싱하여 ParseResponse 규격의 딕셔너리로 반환한다."""
+    provider = get_provider(Task.GENERATE)
+    
+    now = datetime.datetime.now().isoformat()
+    
+    prompt = f"""
+You are an intelligent workspace assistant. Extract information from the user's message and categorize it into actionable items.
 
-    TODO: IntentAgent로 intent 분류 → AGENT_REGISTRY에서 Agent 선택 → run().
-    """
-    raise NotImplementedError("Intent 분류 + Agent 연결 필요 — docs/08_AI_AGENTS.md")
+IMPORTANT DATE/TIME RULES:
+- The current absolute time is: {now} (ISO 8601 format). Use this as the baseline for "today".
+- When the user says "오늘" (today), use the exact date from the current time.
+- When the user says "내일" (tomorrow), add 1 day to the current date.
+- When the user says "모레" (day after tomorrow), add 2 days.
+- When the user says "글피" (two days after tomorrow), add 3 days.
+- When the user says "다음 주" (next week) or specific days (e.g. "다음 주 월요일"), calculate the exact date based on the current date.
+- ALWAYS return the parsed `start` and `end` times as a fully qualified ISO 8601 datetime string.
+
+User Message: {message}
+
+If there is additional context, use it to resolve ambiguities:
+Context: {context or {}}
+
+Extract all relevant schedules, todos, memos, and meetings from the user message.
+If a single message contains multiple distinct items (e.g., a meeting and a todo), output multiple items in the `items` array.
+
+Required fields per category:
+- schedule: `title`, `start` (ISO datetime)
+- meeting: `title`, `start` (ISO datetime)
+- todo: `title`
+- memo: `content`
+
+Return the result strictly conforming to the requested JSON schema.
+For user_id, use exactly: "{user_id}"
+"""
+    
+    # generate_structured 호출 시 완벽한 ParseResponse Pydantic 모델 반환 보장
+    response_obj = await provider.generate_structured(prompt, ParseResponse)
+    
+    return response_obj.model_dump(exclude_none=True)
