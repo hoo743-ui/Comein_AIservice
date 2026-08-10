@@ -76,11 +76,9 @@ export default function Opening() {
   /** 건너뛰기 — 인트로만 넘긴다. 다른 페이지로 내보내지 않고, 이 화면의 로그인 카드로 바로 간다.
    *  이미 들어와 있으면 그대로 통과. */
   const skip = React.useCallback(() => {
-    void (async () => {
-      const uid = await refreshSession();
-      if (uid) { cross(); return; }
-      setPhase("auth");
-    })();
+    // 먼저 반응하고 나서 확인한다 — 세션 조회(네트워크)를 기다리면 누른 게 씹힌 것처럼 느껴진다.
+    setPhase("auth");
+    void refreshSession().then((uid) => { if (uid) cross(); });
   }, [cross]);
 
   const social = async (p: Provider) => {

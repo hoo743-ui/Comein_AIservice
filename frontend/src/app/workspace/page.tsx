@@ -414,7 +414,8 @@ export default function Reimagine() {
   const calItems = React.useMemo(() => {
     const b = now ?? new Date(2026, 6, 8);
     const arr: { date: Date; title: string; time: string }[] = schedules.map((s) => ({ date: new Date(s.start), title: s.title, time: fmtTime(s.start) }));
-    for (const r of receipts) if (r.destView === "calendar") arr.push({ date: r.date ?? b, title: r.title, time: r.time ?? "미정" });
+    // 영수증은 '방금 한 일'을 한 줄 스치게 하는 용도일 뿐, 캘린더에 얹지 않는다.
+    // 시각이 있는 항목은 이미 진짜 일정(addSchedule)으로 서 있어서 얹으면 같은 게 두 번 보인다.
     return arr;
   }, [schedules, receipts, now]);
   const dayItems = React.useMemo(() => {

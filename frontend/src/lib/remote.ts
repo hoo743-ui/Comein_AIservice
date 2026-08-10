@@ -47,6 +47,36 @@ async function ensureUid(): Promise<string | null> {
   return uid;
 }
 
+/** PostgREST 직접 호출 — 사용자 토큰을 손으로 실어 보낸다.
+ *  supabase-js 클라이언트를 통하면 세션이 있는데도 요청이 anon 키로 나가는 일이 있었다.
+ *  그러면 서버의 auth.uid() 가 null 이 되어 RLS 가 쓰기를 전부 막는다
+ *  (읽기는 통과하므로 조용히 저장만 안 되는, 알아채기 어려운 형태로 나타난다). */
+async function rest(path: string, init: RequestInit & { prefer?: string } = {}) {
+  const sb = getSupabase();
+  if (!sb) return null;
+  const { data } = await sb.auth.getSession();
+  const token = data.session?.access_token;
+  if (!token) return null;
+  const anon = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "";
+  const base = process.env.NEXT_PUBLIC_SUPABASE_URL ?? "";
+  const res = await fetch(`${base}/rest/v1/${path}`, {
+    ...init,
+    headers: {
+      apikey: anon,
+      Authorization: `Bearer ${token}`,
+      "Content-Type": "application/json",
+      ...(init.prefer ? { Prefer: init.prefer } : {}),
+      ...(init.headers ?? {}),
+    },
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`${res.status} ${body.slice(0, 200)}`);
+  }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
 const toLocalUser = (uid: string | null | undefined): ID => (uid && uid === myUidOf() ? ME_ID : String(uid ?? ""));
 const toRemoteUser = (id: ID): string | null => (id === ME_ID ? myUidOf() : id);
 
@@ -162,24 +192,24 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
 // 모두 "실패해도 화면은 막지 않는다". 저장이 안 되면 로그만 남기고 지역 상태로 계속 간다.
 
 export async function pushEvent(s: Schedule): Promise<string | null> {
-  const sb = getSupabase();
-  const uid = await ensureUid();   // 토큰이 실린 뒤에 쓴다
-  if (!sb || !uid) return null;
-  const { data, error } = await sb
-    .from("events")
-    .insert({
-      title: s.title,
-      start_at: s.start,
-      end_at: s.end ?? null,
-      location: s.location ?? null,
-      description: s.description ?? null,
-      status: s.status,
-      owner_id: uid,
-    })
-    .select("id")
-    .single();
-  if (error) { console.error("일정 저장 실패:", error.message); return null; }
-  return data?.id ?? null;
+  const uid = await ensureUid();
+  if (!uid) return null;
+  try {
+    const rows = await rest("events", {
+      method: "POST",
+      prefer: "return=representation",
+      body: JSON.stringify({
+        title: s.title,
+        start_at: s.start,
+        end_at: s.end ?? null,
+        location: s.location ?? null,
+        description: s.description ?? null,
+        status: s.status,
+        owner_id: uid,
+      }),
+    });
+    return rows?.[0]?.id ?? null;
+  } catch (e: any) { console.error("일정 저장 실패:", e?.message); return null; }
 }
 
 export async function pushParticipant(eventId: ID, userId: ID) {

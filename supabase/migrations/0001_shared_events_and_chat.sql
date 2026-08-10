@@ -169,9 +169,13 @@ alter table public.chat_room_members  enable row level security;
 alter table public.chat_messages      enable row level security;
 
 -- events — 참여한 일정만 보인다. 고치고 지우는 건 주최자만.
+-- 주인은 참여자 표를 거치지 않고도 자기 일정을 본다.
+-- (참여자 행은 AFTER INSERT 트리거가 만든다 → 방금 넣은 행을 RETURNING 으로 돌려받는
+--  순간에는 아직 없다. owner_id 조건이 없으면 자기가 만든 행이 자기 눈에 안 보여
+--  INSERT ... RETURNING 이 42501 로 튕긴다.)
 drop policy if exists events_select on public.events;
 create policy events_select on public.events for select
-  using (public.is_event_participant(id));
+  using (owner_id = auth.uid() or public.is_event_participant(id));
 
 drop policy if exists events_insert on public.events;
 create policy events_insert on public.events for insert
