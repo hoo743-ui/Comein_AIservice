@@ -259,6 +259,11 @@ export default function Reimagine() {
   // 공유 일정 — 하나의 일정이 캘린더·24시간 원·사람·대화에서 같은 데이터로 쓰인다.
   const eventParticipants = useWorkspace((s) => s.eventParticipants);
   const chatMessages = useWorkspace((s) => s.chatMessages);
+  const chatRooms = useWorkspace((s) => s.chatRooms);
+  // 읽지 않은 말 — 방마다 몇 개가 쌓였는가.
+  const unread = useWorkspace((s) => s.unread);
+  const bumpUnread = useWorkspace((s) => s.bumpUnread);
+  const markRoomRead = useWorkspace((s) => s.markRoomRead);
   const sharedEventsWith = useWorkspace((s) => s.sharedEventsWith);
   const participantsOf = useWorkspace((s) => s.participantsOf);
   // 사람 찾기·잇기 — 지어낸 이름이 아니라 실재하는 Comein 계정을 고른다.
@@ -573,7 +578,44 @@ export default function Reimagine() {
   }, []);
 
   // 서버와의 연결 — 한 번만 건다(자식에서 또 걸면 Realtime 소켓이 두 개 열린다).
-  const remote = useRemoteSync();
+  // 새 말이 들어오면: 지금 보고 있는 방이면 그냥 화면에 얹히고(이미 보였다),
+  // 다른 방이면 세어 둔다. 큰 팝업으로 가로막지 않는다 — 표식 하나면 충분하다.
+  const remote = useRemoteSync({
+    onIncoming: (m) => {
+      if (m.senderId === ME_ID) return;
+      const openRoomId = openEventId ? chatRooms.find((r) => r.eventId === openEventId)?.id : null;
+      const openDmId = personId ? chatRooms.find((r) => r.peerId === personId)?.id : null;
+      if (m.roomId === openRoomId || m.roomId === openDmId) return;
+      bumpUnread(m.roomId);
+    },
+  });
+
+  // 방을 열면 그 방의 셈은 지운다. 열어 둔 채로 말이 와도 마찬가지다.
+  React.useEffect(() => {
+    const ids = [
+      openEventId ? chatRooms.find((r) => r.eventId === openEventId)?.id : null,
+      personId ? chatRooms.find((r) => r.peerId === personId)?.id : null,
+    ].filter(Boolean) as string[];
+    for (const id of ids) markRoomRead(id);
+  }, [openEventId, personId, chatRooms, chatMessages.length, markRoomRead]);
+
+  /** 그 사람과 관련된 읽지 않은 말의 수 — 둘만의 방 + 함께 있는 일정의 방을 합친다.
+   *  사람 탭에서는 '이 사람에게 무언가 와 있다'만 알면 되므로 방을 따로 세지 않는다. */
+  const unreadOf = React.useCallback((personId: string) => {
+    let n = 0;
+    for (const r of chatRooms) {
+      const c = unread[r.id] ?? 0;
+      if (!c) continue;
+      if (r.peerId === personId) { n += c; continue; }
+      if (r.eventId && eventParticipants.some((p) => p.eventId === r.eventId && p.userId === personId)) n += c;
+    }
+    return n;
+  }, [chatRooms, unread, eventParticipants]);
+
+  const unreadTotal = React.useMemo(
+    () => Object.values(unread).reduce((a, b) => a + b, 0),
+    [unread],
+  );
   // 나가는 중 — 로그아웃과 화면 전환이 겹치지 않게 잡아 두는 빗장.
   // (위쪽 leaving 은 '들어올 때 문이 열리는' 연출이라 뜻이 다르다. 같은 이름을 쓰지 않는다.)
   const [exiting, setExiting] = React.useState(false);
@@ -663,6 +705,39 @@ export default function Reimagine() {
     })();
   }, [sendEventMessage, proposeTime, remote.signedIn]);
 
+  // ── 대화 요약 ──
+  // 말이 쌓이면 뒤늦게 들어온 사람이 처음부터 읽어야 한다. 그걸 대신 읽어 준다.
+  // 자동으로 계속 고쳐 쓰지는 않는다 — 요약이 스스로 움직이면 대화를 방해한다.
+  const [summaries, setSummaries] = React.useState<Record<string, string>>({});
+  const [summaryBusy, setSummaryBusy] = React.useState(false);
+
+  const summarizeEvent = React.useCallback(async (eventId: string) => {
+    const st = useWorkspace.getState();
+    const ev = st.schedules.find((s) => s.id === eventId);
+    const msgs = st.messagesOf(eventId);
+    if (msgs.length === 0) return;
+    const nameOf = (uid: string) =>
+      uid === ME_ID ? (st.settings.name || "나") : (st.contacts.find((c) => c.id === uid)?.name ?? "누군가");
+    // 뒤쪽 40 개만 넘긴다 — 오래된 말까지 다 보내면 요약이 지금 이야기를 놓친다.
+    const transcript = msgs.slice(-40).map((m) => `${nameOf(m.senderId)}: ${m.content}`).join("\n");
+
+    setSummaryBusy(true);
+    try {
+      // /api/chat 이 아니라 /api/summary 다. 그쪽은 한 마디를 항목으로 가르는 파서라
+      // 대화를 통째로 넣으면 요약 대신 "N건을 정리했어요" 가 돌아온다(실제로 그랬다).
+      const res = await fetch(`${API_BASE}/api/summary`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ transcript, title: ev?.title ?? null, lang: st.settings.language }),
+      });
+      if (!res.ok) return;
+      const data = await res.json();
+      const lines: string[] = Array.isArray(data?.lines) ? data.lines.filter((l: unknown) => typeof l === "string" && l.trim()) : [];
+      if (lines.length) setSummaries((m) => ({ ...m, [eventId]: lines.join("\n") }));
+    } catch { /* 닿지 않으면 조용히 둔다 — 요약은 없어도 대화는 그대로다 */ }
+    finally { setSummaryBusy(false); }
+  }, []);
+
   /** 문을 연다 — 문짝이 열리는 동안 기다렸다가 가이드를 시작한다.
    *  문과 미리보기 카드가 같은 자리를 여는 것이므로 손잡이도 하나만 둔다. */
   const openGuideDoor = React.useCallback(() => {
@@ -672,12 +747,27 @@ export default function Reimagine() {
   }, [doorOpening]);
 
   const person = personId ? contacts.find((c: any) => c.id === personId) ?? null : null;
+  /** 방 id 는 반드시 방 목록에서 찾는다.
+   *  `dm_${peerId}` · `room_${eventId}` 는 서버가 없을 때 스토어가 붙이는 임시 이름일 뿐이고,
+   *  서버에 붙으면 진짜 uuid 로 바뀐다. 규칙을 화면에서 다시 지어내면 서버에서 온 말이
+   *  영영 안 맞는다 — 실제로 그랬다(대화는 저장돼 있는데 화면에는 "아직 대화가 없어요").
+   *  fallback 을 남기는 이유: 로그인 전에는 여전히 임시 이름으로 도는 방이 있다. */
+  const roomIdOfPeer = React.useCallback(
+    (pid: string) => chatRooms.find((r) => r.peerId === pid)?.id ?? `dm_${pid}`,
+    [chatRooms],
+  );
+  const roomIdOfEvent = React.useCallback(
+    (eid: string) => chatRooms.find((r) => r.eventId === eid)?.id ?? `room_${eid}`,
+    [chatRooms],
+  );
+
   const personMsgs = React.useMemo(() => {
     if (!personId) return [];
+    const rid = roomIdOfPeer(personId);
     return chatMessages
-      .filter((m) => m.roomId === `dm_${personId}`)
+      .filter((m) => m.roomId === rid)
       .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-  }, [chatMessages, personId]);
+  }, [chatMessages, personId, roomIdOfPeer]);
   const personEvents = personId ? sharedEventsWith(personId) : [];
 
   const openEventData = openEventId ? schedules.find((s) => s.id === openEventId) ?? null : null;
@@ -685,10 +775,11 @@ export default function Reimagine() {
   // 메시지는 스토어의 chatMessages 를 직접 읽어 파생시킨다 — 화면이 따로 사본을 갖지 않는다.
   const openEventMsgs = React.useMemo(() => {
     if (!openEventId) return [];
+    const rid = roomIdOfEvent(openEventId);
     return chatMessages
-      .filter((m) => m.roomId === `room_${openEventId}`)
+      .filter((m) => m.roomId === rid)
       .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-  }, [chatMessages, openEventId]);
+  }, [chatMessages, openEventId, roomIdOfEvent]);
 
   // 타임테이블에서 직접 적어 넣은 한 줄 — 캡처바를 거치지 않는 유일한 입력이라 AI 표식을 달지 않는다.
   const addScheduleAt = React.useCallback((title: string, start: Date) => {
@@ -888,6 +979,9 @@ export default function Reimagine() {
           focusChat={chatFocus}
           proposal={proposals[openEventData.id] ?? null}
           proposalBusy={proposalBusy}
+          summary={summaries[openEventData.id] ?? null}
+          summaryBusy={summaryBusy}
+          onSummarize={() => void summarizeEvent(openEventData.id)}
           onAnswerProposal={(r) => {
             const p = proposals[openEventData.id];
             if (!p) return;
@@ -1042,6 +1136,12 @@ export default function Reimagine() {
                 >
                   <n.icon className="rmg-railicon" />
                   <span className="rmg-raillabel">{t.viewLabel(n.key)}</span>
+                  {/* 다른 화면에 있을 때만 — 사람 탭을 보고 있으면 목록이 이미 말해 준다.
+                      숫자를 달지 않는다. 몇 개인지는 들어가서 알면 되고,
+                      여기서 필요한 건 '무언가 와 있다' 하나뿐이다. */}
+                  {n.key === "people" && unreadTotal > 0 && shownView !== "people" && (
+                    <span className="rmg-raildot" aria-label={lang === "en" ? "New messages" : "새 메시지"} />
+                  )}
                 </button>
               );
             })}
@@ -1216,6 +1316,7 @@ export default function Reimagine() {
                   onNewRoom={() => { selectPerson(null); setNewRoom(true); }}
                   onFind={findPeople}
                   onConnect={connectPerson}
+                  unreadOf={unreadOf}
                 />
               )}
             </div>
@@ -2377,7 +2478,7 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, onAnswer }: 
   );
 }
 
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", proposal, proposalBusy, onAnswerProposal, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack }: {
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", proposal, proposalBusy, onAnswerProposal, summary, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -2391,6 +2492,10 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   proposal?: ScheduleProposal | null;
   proposalBusy?: boolean;
   onAnswerProposal?: (r: "accepted" | "declined") => void;
+  /** 대화 요약 — 스스로 갱신하지 않는다. 사람이 부를 때만 다시 읽는다. */
+  summary?: string | null;
+  summaryBusy?: boolean;
+  onSummarize?: () => void;
   onClose: () => void;
   onSend: (text: string) => void;
   onAddParticipant: (userId: string) => void;
@@ -2540,7 +2645,26 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
       </div>
 
       <div className="rmg-drawer-chat">
-        <p className="rmg-eyebrow rmg-drawer-eye">{en ? "Conversation" : "이 일정의 대화"}</p>
+        <div className="rmg-drawer-chathead">
+          <p className="rmg-eyebrow rmg-drawer-eye">{en ? "Conversation" : "이 일정의 대화"}</p>
+          {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다. */}
+          {onSummarize && messages.length >= 4 && (
+            <button type="button" className="rmg-ppl-act" disabled={summaryBusy} onClick={onSummarize}>
+              {summaryBusy ? (en ? "Reading…" : "읽는 중…") : summary ? (en ? "Update" : "다시 정리") : (en ? "Summarize" : "요약")}
+            </button>
+          )}
+        </div>
+
+        {/* AI 요약 — 대화를 밀어내지 않게 작게, 위에 한 겹만. 스스로 갱신하지 않는다. */}
+        {summary && (
+          <div className="rmg-sum">
+            <p className="rmg-eyebrow rmg-sum-eye">{en ? "AI summary" : "AI 요약"}</p>
+            {summary.split("\n").filter((l) => l.trim()).map((line, i) => (
+              <p key={i} className="rmg-sum-line">{line.replace(/^[•\-*]\s*/, "")}</p>
+            ))}
+          </div>
+        )}
+
         <div className="rmg-drawer-msgs">
           {messages.length === 0 ? (
             <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
@@ -2868,7 +2992,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onConnect }: any) {
+function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onConnect, unreadOf }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   const q = (query as string).trim().toLowerCase();
@@ -2953,14 +3077,17 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
           {shown.map((c: any) => {
             const on = personId === c.id;
             const n = (sharedEventsWith(c.id) as any[]).length;
+            const nu = unreadOf ? unreadOf(c.id) : 0;
             return (
               <li key={c.id} className={`rmg-ppl ${on ? "on" : ""}`}>
                 <button type="button" className="rmg-ppl-head" aria-current={on} onClick={() => onSelectPerson(on ? null : c.id)}>
                   <span className="rmg-ppl-av">{c.name?.slice(0, 1) ?? "·"}</span>
                   <span className="rmg-ppl-txt">
-                    <span className="rmg-ppl-name">{c.name}</span>
-                    {c.org && <span className="rmg-ppl-org">{c.org}</span>}
+                    <span className={`rmg-ppl-name ${nu > 0 ? "unread" : ""}`}>{c.name}</span>
+                    {(c.handle || c.org) && <span className="rmg-ppl-org">{c.org ?? `@${c.handle}`}</span>}
                   </span>
+                  {/* 읽지 않은 말이 있으면 점 하나. 숫자를 매달면 목록이 알림판이 된다. */}
+                  {nu > 0 && <span className="rmg-ppl-dot" aria-label={en ? "New" : "새 메시지"} />}
                   {/* 함께하는 일정이 몇 개인지만 조용히 — 이게 이 사람과 나의 접점이다. */}
                   {n > 0 && <span className="rmg-ppl-n">{en ? `${n}` : `일정 ${n}`}</span>}
                 </button>
@@ -4234,6 +4361,28 @@ const CSS = `
 .rmg-ppl-blank { padding: var(--sp-4) 8px; }
 .rmg-ppl-blank-t { margin: 0 0 6px; font-size: 0.98rem; font-weight: 500; color: var(--ink); }
 .rmg-ppl-blank-b { margin: 0; font-size: 0.88rem; font-weight: 400; line-height: 1.65; color: color-mix(in srgb, var(--ink) 66%, transparent); }
+
+/* ── AI 대화 요약 ──
+   대화를 밀어내지 않는 크기로. 카드처럼 띄우지 않고 한 겹 옅은 바탕만 깔아
+   '이건 사람이 한 말이 아니다' 만 구분한다. */
+.rmg-drawer-chathead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.rmg-drawer-chathead .rmg-ppl-act { font-size: 0.76rem; padding: 4px 10px; }
+.rmg-sum { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-1) 10px;
+  border-left: 2px solid color-mix(in srgb, var(--ink) 18%, var(--hair));
+  background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
+.rmg-sum-eye { margin: 0 0 2px; }
+.rmg-sum-line { margin: 0; font-size: 0.84rem; line-height: 1.6; color: color-mix(in srgb, var(--ink) 76%, transparent); }
+.rmg-sum-line::before { content: "· "; color: var(--faint); }
+
+/* ── 읽지 않은 말 ──
+   배지도 숫자도 두지 않는다. 여기서 필요한 건 '무언가 와 있다' 하나뿐이고,
+   몇 개인지는 들어가서 알면 된다. 숫자를 매달면 목록이 알림판이 된다. */
+.rmg-raildot { position: absolute; top: 9px; right: 9px; width: 5px; height: 5px; border-radius: 50%;
+  background: color-mix(in srgb, var(--accent) 78%, transparent); }
+.rmg-ppl-dot { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
+  background: color-mix(in srgb, var(--accent) 78%, transparent); }
+/* 읽지 않은 사람의 이름만 한 단계 또렷하게 — 색을 더 쓰지 않고 무게로 말한다. */
+.rmg-ppl-name.unread { font-weight: 600; color: var(--ink); }
 
 /* ── AI 일정 제안 ──
    대화 위에 잠깐 놓이는 한 칸. 카드처럼 띄우지 않고 이 화면의 재질로 눕힌다
