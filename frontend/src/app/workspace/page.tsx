@@ -5,8 +5,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
-  ArrowUp, Bell, CalendarDays, Check, Cloud, CloudRain, CloudSnow,
-  ChevronDown, LogOut, MessagesSquare, Search, Settings as SettingsIcon, Sparkles, StickyNote, Sun, Users, X,
+  ArrowUp, CalendarDays, Cloud, CloudRain, CloudSnow,
+  ChevronDown, LogOut, Search, Settings as SettingsIcon, Sparkles, Sun, Users, X,
 } from "lucide-react";
 
 import { useWorkspace } from "@/lib/store";
@@ -22,52 +22,26 @@ import type { TodoPriority } from "@/lib/types";
  * 보라색은 오직 AI 활동의 언어. 배경은 아주 옅게 숨쉰다(래디얼·그레인·미세 입자). 구조는 타이포·여백으로.
  */
 
-// 할 일(Tasks) 레일 아이콘 — 원 안의 리스트(사용자 지정 이미지 기준). lucide와 동일한 stroke 규격.
-function TaskListIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      className={className}
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden
-    >
-      <circle cx="12" cy="12" r="9.25" />
-      <circle cx="8.7" cy="9" r="1" />
-      <circle cx="8.7" cy="12" r="1" />
-      <circle cx="8.7" cy="15" r="1" />
-      <line x1="11.7" y1="9" x2="16.3" y2="9" />
-      <line x1="11.7" y1="12" x2="16.3" y2="12" />
-      <line x1="11.7" y1="15" x2="16.3" y2="15" />
-    </svg>
-  );
-}
-
-type View = "today" | "calendar" | "tasks" | "notes" | "meetings" | "people";
+type View = "today" | "calendar" | "people";
 const NAV: { key: View; label: string; icon: React.ComponentType<{ className?: string }> }[] = [
   { key: "today", label: "Today", icon: Sparkles },
   { key: "calendar", label: "Calendar", icon: CalendarDays },
-  { key: "tasks", label: "Tasks", icon: TaskListIcon },
-  { key: "notes", label: "Notes", icon: StickyNote },
-  { key: "meetings", label: "Meetings", icon: MessagesSquare },
   { key: "people", label: "People", icon: Users },
 ];
 
-type Kind = "일정" | "회의" | "할 일" | "메모";
+// AI는 두 갈래로만 정리한다 — 시간 위의 일(일정) · 시간 밖의 일(할 일).
+// 회의·메모 분류는 걷어냈다: 갈래가 적을수록 사용자가 분류를 의식하지 않는다.
+type Kind = "일정" | "할 일";
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
 type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority };
 // AI가 이해한 한 건. 확인 단계 없이 그대로 목적지로 배정된다(= 영수증이 된다).
 type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string; priority?: TodoPriority };
+// 할 일 뷰를 걷어냈으므로 시간 밖의 일은 '오늘'로 모인다 — 오늘 화면의 할 일 수에 그대로 반영된다.
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
-  회의: { view: "meetings", label: "회의" },
-  "할 일": { view: "tasks", label: "할 일" },
-  메모: { view: "notes", label: "메모" },
+  "할 일": { view: "today", label: "오늘" },
 };
-const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", tasks: "할 일", notes: "메모", meetings: "회의", people: "사람" };
+const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", people: "사람" };
 const pad = (n: number | string) => String(n).padStart(2, "0");
 
 /** 백엔드(`/api/chat`)의 item 하나 → 화면이 쓰는 Parsed.
@@ -76,11 +50,10 @@ function toParsed(raw: unknown, fallbackTitle: string): Parsed {
   const it = (raw ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
+  // 백엔드는 아직 네 갈래(schedule/meeting/todo/memo)로 준다 → 화면의 두 갈래로 접는다.
+  // 시각이 있는 것(일정·회의)은 캘린더로, 시각 밖의 것(할 일·메모)은 할 일로.
   const kind: Kind =
-    it.category === "schedule" ? "일정"
-    : it.category === "todo" ? "할 일"
-    : it.category === "meeting" ? "회의"
-    : "메모";
+    it.category === "schedule" || it.category === "meeting" ? "일정" : "할 일";
 
   let time: string | null = null;
   let date: Date | undefined;
@@ -93,7 +66,7 @@ function toParsed(raw: unknown, fallbackTitle: string): Parsed {
     }
   }
 
-  // 메모는 백엔드가 title 없이 content 만 주는 경우가 많다 → 본문 첫 줄을 제목으로 세운다.
+  // 메모류는 백엔드가 title 없이 content 만 주는 경우가 많다 → 본문 첫 줄을 제목으로 세운다.
   const body = str(it.content) ?? str(it.notes) ?? str(it.summary);
   const title = str(it.title) ?? (body ? body.split("\n")[0].slice(0, 40) : null) ?? fallbackTitle;
   const priority = it.priority === "high" || it.priority === "low" || it.priority === "mid"
@@ -105,17 +78,16 @@ function toParsed(raw: unknown, fallbackTitle: string): Parsed {
     kind,
     time,
     date,
-    // 일정·회의는 장소가, 메모·할 일은 본문이 부가 정보다.
-    note: (kind === "일정" || kind === "회의" ? str(it.location) : null) ?? body ?? str(it.location) ?? "",
+    // 일정은 장소가, 할 일은 본문이 부가 정보다.
+    note: (kind === "일정" ? str(it.location) : null) ?? body ?? str(it.location) ?? "",
     priority,
   };
 }
 
+// 백엔드가 잠들었을 때만 쓰는 로컬 폴백. 시각·약속의 낌새가 있으면 일정, 아니면 전부 할 일.
 function classify(text: string): Kind {
-  if (/회의|미팅/.test(text)) return "회의";
-  if (/\d\s*시|\d:\d|내일|오늘|모레|다음\s*주|요일|약속|일정/.test(text)) return "일정";
-  if (/해야|하기|사기|제출|끝내|마감|todo|할\s*일|처리|보내/.test(text)) return "할 일";
-  return "메모";
+  if (/회의|미팅|\d\s*시|\d:\d|내일|오늘|모레|다음\s*주|요일|약속|일정/.test(text)) return "일정";
+  return "할 일";
 }
 function parseTime(text: string): string | null {
   const hm = text.match(/(\d{1,2}):(\d{2})/);
@@ -184,16 +156,13 @@ function reflectEn(c: string | null) {
 
 // ── reimagine 전용 번역 레이어 (settings.language 에 연결) ──
 type Lang = "ko" | "en";
-const EN_VIEW: Record<View, string> = { today: "Today", calendar: "Calendar", tasks: "Tasks", notes: "Notes", meetings: "Meetings", people: "People" };
+const EN_VIEW: Record<View, string> = { today: "Today", calendar: "Calendar", people: "People" };
 const EN_PLACEHOLDER: Record<View, string> = {
   today: "Write anything — I'll tidy the rest",
   calendar: "Say a new event — e.g. Meeting tomorrow 3pm",
-  tasks: "Add a task — e.g. Prepare the deck",
-  notes: "Leave a passing thought",
-  meetings: "Schedule or wrap up a meeting",
   people: "Who should we connect with?",
 };
-const EN_HINTS = ["Ask Comein…", "Meet the professor tomorrow 3pm", "Prep the deck — as a task", "Note a meeting idea", "Organize this week"];
+const EN_HINTS = ["Ask Comein…", "Meet the professor tomorrow 3pm", "Prep the deck — as a task", "Organize this week"];
 
 function L(lang: Lang) {
   const en = lang === "en";
@@ -201,8 +170,8 @@ function L(lang: Lang) {
     place: en ? "Seongnam" : "성남",
     viewLabel: (v: View) => (en ? EN_VIEW[v] : VIEW_LABEL[v]),
     navDesc: (v: View) => (en
-      ? ({ today: "Today's flow", calendar: "Events & conflicts", tasks: "Tasks & priority", notes: "Notes & ideas", meetings: "Meetings & summaries", people: "People & contacts" } as Record<View, string>)[v]
-      : ({ today: "오늘의 흐름", calendar: "일정과 충돌", tasks: "할 일과 우선순위", notes: "생각을 메모로", meetings: "회의와 요약", people: "연결된 사람" } as Record<View, string>)[v]),
+      ? ({ today: "Today's flow", calendar: "Events & conflicts", people: "People & contacts" } as Record<View, string>)[v]
+      : ({ today: "오늘의 흐름", calendar: "일정과 충돌", people: "연결된 사람" } as Record<View, string>)[v]),
     upNext: en ? "Up next" : "다가오는 순간",
     todayFlow: en ? "Today's flow" : "오늘의 흐름",
     aiThought: en ? "Today's Insight" : "오늘의 브리핑",
@@ -214,7 +183,6 @@ function L(lang: Lang) {
     organizing: en ? "Organizing" : "정리 중",
     open: en ? "Open" : "열기",
     undo: en ? "Undo" : "되돌리기",
-    notif: en ? "Notifications" : "알림",
     startingSoon: en ? "Starting soon" : "곧 시작하는 일정",
     importantTask: en ? "Important task" : "중요한 할 일",
     noNotif: en ? "No new notifications." : "새로운 알림이 없어요.",
@@ -226,9 +194,6 @@ function L(lang: Lang) {
     hints: () => (en ? EN_HINTS : HINTS),
     priority: (p: string) => (en ? ({ high: "High", mid: "Mid", low: "Low" } as Record<string, string>)[p] : ({ high: "높음", mid: "보통", low: "낮음" } as Record<string, string>)[p]),
     emptyCal: en ? "Nothing scheduled." : "예정된 일정이 없어요.",
-    emptyTasks: en ? "No tasks right now." : "지금은 할 일이 없어요.",
-    emptyNotes: en ? "No thoughts saved yet." : "아직 담아둔 생각이 없어요.",
-    emptyMeetings: en ? "No meetings scheduled." : "예정된 회의가 없어요.",
     emptyPeople: en ? "No one connected yet." : "연결된 사람이 없어요.",
     dayLabel: (d: Date, base: Date | null) => {
       if (base) {
@@ -273,10 +238,8 @@ export default function Reimagine() {
   const { resolvedTheme, setTheme } = useTheme();
   const schedules = useWorkspace((s) => s.schedules);
   const todos = useWorkspace((s) => s.todos);
-  const memos = useWorkspace((s) => s.memos);
-  const meetings = useWorkspace((s) => s.meetings);
   const contacts = useWorkspace((s) => s.contacts);
-  const moveTodo = useWorkspace((s) => s.moveTodo);
+  const addSchedule = useWorkspace((s) => s.addSchedule);
   const settings = useWorkspace((s) => s.settings);
   const updateSettings = useWorkspace((s) => s.updateSettings);
   const lang: Lang = settings.language;
@@ -294,7 +257,6 @@ export default function Reimagine() {
   const [organizing, setOrganizing] = React.useState(false);
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
   const [calDay, setCalDay] = React.useState<Date | null>(null);
-  const [notifOpen, setNotifOpen] = React.useState(false);
   const [panel, setPanel] = React.useState<null | "calendar" | "settings">(null);
   const [entered, setEntered] = React.useState(false);
   const [leaving, setLeaving] = React.useState(false);
@@ -418,16 +380,6 @@ export default function Reimagine() {
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [calItems, calDay]);
 
-  // 알림 — 다가오는 일정 + 중요 할 일
-  const notifs = React.useMemo(() => {
-    if (!now) return [] as { id: string; title: string; detail: string }[];
-    const tl = L(lang);
-    const list: { id: string; title: string; detail: string }[] = [];
-    for (const s of upcoming.slice(0, 3)) list.push({ id: `s${s.id}`, title: tl.startingSoon, detail: `${fmtTime(s.start)} · ${s.title}` });
-    for (const td of openTodos.filter((x) => x.priority === "high").slice(0, 2)) list.push({ id: `t${td.id}`, title: tl.importantTask, detail: td.title });
-    return list;
-  }, [upcoming, openTodos, now, lang]);
-
   const ignite = React.useCallback(() => {
     if (orgTimer.current) clearTimeout(orgTimer.current);
     setOrganizing(true);
@@ -498,7 +450,7 @@ export default function Reimagine() {
       // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
       // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
       const parsed = items.slice(0, 4).map((raw) => toParsed(raw, t));
-      const rows = file(parsed.length ? parsed : [{ title: t, kind: "메모", time: null, note: "" }]);
+      const rows = file(parsed.length ? parsed : [{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
       const said = typeof data.reply === "string" ? data.reply.trim() : "";
       showFlash(rows, said || undefined);
 
@@ -515,6 +467,12 @@ export default function Reimagine() {
   };
 
   const undoReceipt = (id: number) => setReceipts((prev) => prev.filter((r) => r.id !== id));
+
+  // 타임테이블에서 직접 적어 넣은 한 줄 — 캡처바를 거치지 않는 유일한 입력이라 AI 표식을 달지 않는다.
+  const addScheduleAt = React.useCallback((title: string, start: Date) => {
+    addSchedule({ title, start: start.toISOString(), end: new Date(+start + 3_600_000).toISOString(), status: "confirmed" });
+    ignite();
+  }, [addSchedule]);
 
   // ── Invisible AI · 조용한 비서 — 데이터가 아니라 '사람다운 한 문장'으로. ──
   const h = now?.getHours() ?? 9;
@@ -534,17 +492,14 @@ export default function Reimagine() {
     switch (view) {
       case "today": return en ? `${greetingFor(h)} · Workspace ready` : `${greetingFor(h)} · 오늘도 준비됐어요`;
       case "calendar": return en ? `${upcoming.length} coming up` : `다가오는 일정 ${upcoming.length}개`;
-      case "tasks": return en ? `${hiTasks} high priority` : `우선순위 높은 작업 ${hiTasks}개`;
-      case "notes": return en ? `${memos.length} notes` : `메모 ${memos.length}개`;
-      case "meetings": return en ? `${meetings.length} meetings today` : `오늘 회의 ${meetings.length}개`;
       case "people": return en ? `${followUp} to follow up` : `오늘 확인할 사람 ${followUp}명`;
       default: return null;
     }
   })();
   const WeatherIcon = weather ? weatherIconOf(weather.condition) : Cloud;
   const rc = (v: View) => receipts.filter((r) => r.destView === v).length;
-  const taskCount = openTodos.length + rc("tasks");
-  const noteCount = memos.length + rc("notes");
+  const taskCount = openTodos.length + rc("today");
+  const eventCount = upcoming.length + rc("calendar");
   const paceLine = taskCount > 0 ? t.pace(taskCount, upcoming.length > 2) : t.paceEmpty;
 
   const textScale = ({ md: 1, lg: 1.12, xl: 1.24 } as const)[settings.textScale] ?? 1;
@@ -560,11 +515,11 @@ export default function Reimagine() {
 
   // 레일 활성 인디케이터 위치 — 캘린더 패널이면 캘린더 칸, 패널 없으면 현재 뷰 칸. 설정/가이드(패널)일 땐 숨김(위치는 마지막 뷰 유지 → 튐 없이 페이드).
   const navViewIndex = NAV.findIndex((n) => n.key === view);
-  const navActive = panel === "calendar" ? NAV.findIndex((n) => n.key === "calendar") : panel === null ? navViewIndex : -1;
+  const navActive = panel === null ? navViewIndex : -1;
   const navIndPos = navActive >= 0 ? navActive : navViewIndex;
 
   return (
-    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""}`} style={{ ["--rmg-fs" as string]: String(textScale) } as React.CSSProperties}>
+    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""} view-${shownView}`} style={{ ["--rmg-fs" as string]: String(textScale) } as React.CSSProperties}>
       <style>{CSS}</style>
       {arriving && <div className="rmg-arrive" aria-hidden />}
 
@@ -594,11 +549,11 @@ export default function Reimagine() {
           <nav className="rmg-rail-nav" style={{ ["--active" as string]: String(navIndPos) } as React.CSSProperties}>
             <span className="rmg-rail-ind" aria-hidden data-hidden={navActive < 0} />
             {NAV.map((n, i) => {
-              const on = n.key === "calendar" ? panel === "calendar" : panel === null && view === n.key;
+              const on = panel === null && view === n.key;
               return (
                 <button
                   key={n.key}
-                  onClick={() => (n.key === "calendar" ? setPanel("calendar") : (setPanel(null), setView(n.key)))}
+                  onClick={() => { setPanel(null); setView(n.key); }}
                   className={`rmg-railbtn ${on ? "on" : ""}`}
                   style={{ ["--i" as string]: i } as React.CSSProperties}
                   aria-label={t.viewLabel(n.key)}
@@ -641,45 +596,24 @@ export default function Reimagine() {
           {mounted && headerCtx && <span key={headerCtx} className="rmg-topctx">{headerCtx}</span>}
         </header>
 
-        {/* Workspace Status — 시간 · 알림 · 문(브랜드) · 오늘의 상태를 하나의 우측 영역으로 */}
+        {/* Workspace Status — 우측 상단은 시각만 남긴다(알림 벨은 걷어냈다). */}
         <div className="rmg-status">
           <StatusTime lang={lang} />
-          <div className="rmg-notif">
-            <button type="button" className={`rmg-notif-btn ${notifOpen ? "on" : ""}`} onClick={() => setNotifOpen((o) => !o)} aria-label={lang === "en" ? `${notifs.length} notifications` : `알림 ${notifs.length}건`}>
-              <Bell className="rmg-notif-ic" />
-              {notifs.length > 0 && <span className="rmg-notif-badge">{notifs.length}</span>}
-            </button>
-            {notifOpen && (
-              <>
-                <div className="rmg-notif-scrim" onClick={() => setNotifOpen(false)} aria-hidden />
-                <div className="rmg-notif-panel">
-                  <p className="rmg-notif-head">{t.notif}</p>
-                  {notifs.length > 0 ? (
-                    <ul className="rmg-notif-list">
-                      {notifs.map((n) => (
-                        <li key={n.id} className="rmg-notif-row">
-                          <span className="rmg-notif-dot" />
-                          <div>
-                            <p className="rmg-notif-title">{n.title}</p>
-                            <p className="rmg-notif-detail">{n.detail}</p>
-                          </div>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="rmg-notif-empty">{t.noNotif}</p>
-                  )}
-                </div>
-              </>
-            )}
-          </div>
         </div>
 
-        {/* 왼쪽 여백의 상시 캘린더 — 모든 화면에서 시간 맥락. */}
-        <aside className="rmg-calrail" aria-label={t.topCalendar}>
-          {mounted && calDay && now && (
+        {/* 왼쪽 여백의 상시 캘린더 — 모든 화면에서 시간 맥락.
+            단, 캘린더 뷰에서는 같은 달력이 캔버스 한복판에 있으므로 비운다(두 번 보여주지 않는다). */}
+        <aside className="rmg-calrail" aria-label={t.topCalendar} data-hidden={shownView === "calendar"}>
+          {mounted && calDay && now && shownView !== "calendar" && (
             <>
-              <MonthCalendar base={now} events={calItems.map((i) => i.date)} selected={calDay} onSelect={setCalDay} lang={lang} />
+              {/* 날짜를 누르면 그 날을 고른 채 캘린더로 건너간다 — 이 달력은 장식이 아니라 입구다. */}
+              <MonthCalendar
+                base={now}
+                events={calItems.map((i) => i.date)}
+                selected={calDay}
+                onSelect={(d) => { setCalDay(d); setPanel(null); setView("calendar"); }}
+                lang={lang}
+              />
               <div className="rmg-calday">
                 <p className="rmg-calday-date">{fmtDate(calDay)}</p>
                 <ul className="rmg-calday-list">
@@ -696,6 +630,7 @@ export default function Reimagine() {
           )}
         </aside>
 
+        {/* 캘린더만 넓게 — 달력과 24시간 원이 나란히 서려면 600px로는 좁다(좌측 상시 달력을 비운 자리를 쓴다). */}
         <div className={`rmg-flow ${flowExit ? "flow-exit" : ""}`} key={shownView}>
           {shownView === "today" ? (
             <>
@@ -709,9 +644,8 @@ export default function Reimagine() {
                   {mounted ? ` ${weatherWord(weather?.condition ?? null, lang === "en")} · ${t.place}${weather ? ` · ${weather.temp}°C` : ""}` : ""}
                 </p>
                 <div className="rmg-counts">
-                  <span className="rmg-count"><b className="rmg-count-n">{meetings.length}</b><span className="rmg-count-l">{lang === "en" ? "Meetings" : "회의"}</span></span>
+                  <span className="rmg-count"><b className="rmg-count-n">{eventCount}</b><span className="rmg-count-l">{lang === "en" ? "Events" : "일정"}</span></span>
                   <span className="rmg-count"><b className="rmg-count-n">{taskCount}</b><span className="rmg-count-l">{lang === "en" ? "Tasks" : "할 일"}</span></span>
-                  <span className="rmg-count"><b className="rmg-count-n">{noteCount}</b><span className="rmg-count-l">{lang === "en" ? "Notes" : "메모"}</span></span>
                 </div>
               </section>
 
@@ -740,14 +674,14 @@ export default function Reimagine() {
               lang={lang}
               schedules={schedules}
               todos={openTodos}
-              memos={memos}
-              meetings={meetings}
               contacts={contacts}
               mounted={mounted}
               receipts={receipts}
               now={now}
-              onToggleTodo={(id) => { moveTodo(id, "done"); ignite(); }}
               onRemoveReceipt={undoReceipt}
+              onAddSchedule={addScheduleAt}
+              selectedDay={calDay}
+              onSelectDay={setCalDay}
             />
           )}
 
@@ -866,9 +800,6 @@ export default function Reimagine() {
 const PLACEHOLDER: Record<View, string> = {
   today: "무엇이든 적어보세요 — 나머지는 정리해 둘게요",
   calendar: "새 일정을 말해보세요 — 예: 내일 3시 미팅",
-  tasks: "할 일을 적어보세요 — 예: 발표 자료 준비",
-  notes: "떠오른 생각을 남겨보세요",
-  meetings: "회의를 잡거나 정리해보세요",
   people: "누구를 연결할까요?",
 };
 // 회전하는 예시 — 무엇을 할 수 있는지 조용히 가르친다.
@@ -876,7 +807,6 @@ const HINTS = [
   "Ask Comein…",
   "내일 3시 교수님 미팅 잡아줘",
   "발표 자료 준비 — 할 일로",
-  "회의 아이디어 메모해줘",
   "이번 주 일정 정리해줘",
 ];
 
@@ -1246,9 +1176,11 @@ function CalSearch({ open, onClose, onJump, events, now, lang }: {
 
 // 각 기능은 '익숙한' 인터페이스로 — AI는 강화만. (제안 배너 + 귀속 마크 + 행 액션)
 function Feature(props: {
-  view: View; lang: Lang; schedules: any[]; todos: any[]; memos: any[]; meetings: any[]; contacts: any[];
+  view: View; lang: Lang; schedules: any[]; todos: any[]; contacts: any[];
   mounted: boolean; receipts: Receipt[]; now: Date | null;
-  onToggleTodo: (id: string) => void; onRemoveReceipt: (id: number) => void;
+  onRemoveReceipt: (id: number) => void;
+  onAddSchedule: (title: string, start: Date) => void;
+  selectedDay: Date | null; onSelectDay: (d: Date) => void;
 }) {
   const { view, lang, receipts } = props;
   const t = L(lang);
@@ -1261,9 +1193,6 @@ function Feature(props: {
       </div>
 
       {view === "calendar" && <CalendarView {...props} mine={mine} />}
-      {view === "tasks" && <TasksView {...props} mine={mine} />}
-      {view === "notes" && <NotesView {...props} mine={mine} />}
-      {view === "meetings" && <MeetingsView {...props} mine={mine} />}
       {view === "people" && <PeopleView {...props} />}
     </section>
   );
@@ -1280,138 +1209,358 @@ function dayLabel(d: Date, base: Date | null) {
   return fmtDate(d);
 }
 
-/** Calendar — 날짜별 아젠다(익숙한 '일정' 뷰). */
-function CalendarView({ schedules, mounted, now, mine, lang }: any) {
-  const t = L(lang as Lang);
-  const base = now as Date | null;
-  const items = [
-    ...schedules.map((s: any) => ({ id: s.id, date: new Date(s.start), title: s.title, ai: false })),
-    // AI가 뽑은 날짜(r.date)를 우선 — 없을 때만 오늘로 둔다. 예전엔 항상 오늘로 들어갔다.
-    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, date: r.date ?? base ?? new Date(2026, 6, 8), title: r.title, time: r.time, ai: true })),
-  ];
-  const groups = new Map<string, { date: Date; rows: any[] }>();
-  for (const it of items) {
-    const k = dayKey(it.date);
-    if (!groups.has(k)) groups.set(k, { date: it.date, rows: [] });
-    groups.get(k)!.rows.push(it);
+/** 하루의 일정을 그 날짜 안의 분(分) 구간으로 — 스케줄과 AI 영수증을 한 모양으로 합친다.
+ *
+ *  자정 넘김(23:00~01:00)은 날짜마다 걸치는 부분만 잘라 담는다 → 그 일정은 두 날 모두에 나타난다.
+ *  종일(24시간 이상)은 특정 시간대의 arc 로 그리면 거짓말이 되므로 따로 표시한다(allDay).
+ *  시각은 모두 사용자의 로컬 시간 — Date 의 getHours 계열이 곧 로컬 기준이다. */
+type Span = {
+  id: string; title: string;
+  from: number; to: number;      // 그 날 자정으로부터의 분. 0 ≤ from < to ≤ 1440
+  pending: boolean; allDay: boolean;
+  startAt: Date; endAt: Date;    // 원래의 시각(잘리기 전) — 툴팁은 이걸 보여준다
+  cutStart: boolean; cutEnd: boolean; // 전날/다음날에서 이어지는가
+};
+const MIN_ARC = 6; // 아주 짧은 일정도 원 위에서 사라지지 않을 최소 폭(분)
+
+function spansOf(day: Date, schedules: any[], mine: Receipt[], base: Date | null): Span[] {
+  const d0 = new Date(day); d0.setHours(0, 0, 0, 0);
+  const dayStart = +d0, dayEnd = dayStart + 86_400_000;
+  const out: Span[] = [];
+
+  const add = (id: string, title: string, st: Date, en: Date, pending: boolean) => {
+    if (!(+st < dayEnd && +en > dayStart)) return; // 이 날에 걸치지 않음
+    const allDay = +en - +st >= 86_400_000;
+    const from = Math.max(0, Math.round((+st - dayStart) / 60_000));
+    const rawTo = Math.min(1440, Math.round((+en - dayStart) / 60_000));
+    out.push({
+      id, title, from, to: Math.max(rawTo, Math.min(1440, from + MIN_ARC)),
+      pending, allDay, startAt: st, endAt: en,
+      cutStart: +st < dayStart, cutEnd: +en > dayEnd,
+    });
+  };
+
+  for (const s of schedules) {
+    const st = new Date(s.start);
+    if (Number.isNaN(+st)) continue;
+    // 종료가 없으면 1시간으로 본다 — 원도 표도 '면적'이 있어야 보인다.
+    const en = s.end ? new Date(s.end) : new Date(+st + 3_600_000);
+    add(String(s.id), s.title, st, Number.isNaN(+en) || +en <= +st ? new Date(+st + 3_600_000) : en, s.status === "pending");
   }
-  const ordered = [...groups.values()].sort((a, b) => +a.date - +b.date);
-
-  if (items.length === 0) return <p className="rmg-empty">{t.emptyCal}</p>;
-  return (
-    <div className="rmg-cal">
-      {ordered.map((g) => (
-        <div key={dayKey(g.date)} className="rmg-cal-day">
-          <p className="rmg-cal-date">{mounted ? t.dayLabel(g.date, base) : ""}</p>
-          <ul className="rmg-cal-list">
-            {g.rows.map((r: any) => (
-              <li key={r.id} className="rmg-cal-row">
-                <span className="rmg-cal-time">{r.ai ? (r.time ?? (lang === "en" ? "TBD" : "미정")) : (mounted ? fmtTime(r.date) : "")}</span>
-                <span className="rmg-cal-bar" />
-                <span className="rmg-cal-title">{r.title}</span>
-                {r.ai && <AiTag />}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ))}
-    </div>
-  );
+  for (const r of mine) {
+    const d = r.date ?? base;
+    // 시각을 모르면 원 위에 놓을 자리가 없다 — 시간 없는 건은 원에서 빠진다.
+    if (!d || !r.time) continue;
+    const [hh, mm] = r.time.split(":").map(Number);
+    const st = new Date(d); st.setHours(hh, mm, 0, 0);
+    add(`r-${r.id}`, r.title, st, new Date(+st + 3_600_000), true);
+  }
+  return out.sort((a, b) => a.from - b.from || a.to - b.to);
 }
 
-/** Tasks — 체크리스트(익숙한 '할 일'). 체크 시 완료. */
-function TasksView({ todos, mine, onToggleTodo, onRemoveReceipt, lang }: any) {
+const hhmm = (d: Date) => `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+/** 툴팁에 쓸 시간 범위. 자정을 넘겼으면 어느 쪽으로 이어지는지 함께 알린다. */
+function spanRange(s: Span, lang: Lang): string {
+  if (s.allDay) return lang === "en" ? "All day" : "종일";
+  const a = hhmm(s.startAt), b = hhmm(s.endAt);
+  if (s.cutStart) return `${lang === "en" ? "from prev. day" : "전날부터"} · ${a} – ${b}`;
+  if (s.cutEnd) return `${a} – ${b} ${lang === "en" ? "(next day)" : "(다음 날)"}`;
+  return `${a} – ${b}`;
+}
+
+/** Calendar — 월(月)과 그날의 24시간 원이 나란히. 날짜를 고르면 화면은 그대로 두고 오른쪽 원만 바뀐다.
+ *  타임테이블(표)은 화면을 갈아치우는 일이므로 사용자가 스스로 눌렀을 때만 연다. */
+function CalendarView({ schedules, mounted, now, mine, lang, onAddSchedule, selectedDay, onSelectDay }: any) {
   const t = L(lang as Lang);
-  const rows = [
-    // AI가 매긴 우선순위를 그대로 쓴다 — 예전엔 전부 mid 로 눌러버렸다.
-    ...mine.map((r: Receipt) => ({ id: r.id, rid: true, title: r.title, priority: r.priority ?? "mid" })),
-    ...todos.map((td: any) => ({ id: td.id, rid: false, title: td.title, priority: td.priority })),
+  const base = (now as Date | null) ?? null;
+  // 선택 날짜는 워크스페이스가 쥔다 — 왼쪽 상시 달력·가운데 큰 달력·오른쪽 24시간 원이 같은 하루를 본다.
+  const setSelected = onSelectDay as (d: Date) => void;
+  const [timetable, setTimetable] = React.useState(false);
+
+  if (!mounted || !base) return null;
+  const day = (selectedDay as Date | null) ?? base;
+
+  const allDates = [
+    ...schedules.map((s: any) => new Date(s.start)),
+    ...mine.map((r: Receipt) => r.date ?? base),
   ];
-  if (rows.length === 0) return <p className="rmg-empty">{t.emptyTasks}</p>;
-  return (
-    <ul className="rmg-task-list">
-      {rows.map((r: any) => (
-        <li key={`${r.rid ? "r" : "t"}-${r.id}`} className="rmg-task">
-          <button
-            type="button"
-            className="rmg-task-box"
-            aria-label={lang === "en" ? "Done" : "완료"}
-            onClick={() => (r.rid ? onRemoveReceipt(r.id) : onToggleTodo(r.id))}
-          >
-            <Check className="rmg-task-check" />
+  const spans = spansOf(day, schedules, mine, base);
+  const isToday = dayKey(day) === dayKey(base);
+  const dayLabel = isToday ? (lang === "en" ? "Today" : "오늘") : fmtDate(day);
+
+  // ── 타임테이블(표) — '시간표로 보기'를 눌렀을 때만 ──
+  if (timetable) {
+    return (
+      <div className="rmg-cv" key="timetable">
+        <div className="rmg-cv-head">
+          <button type="button" className="rmg-cv-back" onClick={() => setTimetable(false)}>
+            ‹ {t.topCalendar}
           </button>
-          <span className="rmg-task-title">{r.title}</span>
-          {r.rid && <AiTag />}
-          <span className={`rmg-task-prio ${r.priority}`}>{t.priority(r.priority)}</span>
-        </li>
-      ))}
-    </ul>
-  );
-}
+          <p className="rmg-cv-title">{fmtDate(day)}</p>
+          <span className="rmg-cv-spacer" />
+        </div>
+        <DayTimetable day={day} spans={spans} now={base} lang={lang} onAdd={onAddSchedule} />
+      </div>
+    );
+  }
 
-/** Notes — 노트 그리드(익숙한 '메모'). */
-function NotesView({ memos, mine, lang }: any) {
-  const tiles = [
-    // 메모 본문(r.note)을 살린다 — 제목이 본문에서 잘려 나온 경우엔 중복이라 비운다.
-    ...mine.map((r: Receipt) => ({ id: `r-${r.id}`, title: r.title, content: r.note && r.note !== r.title ? r.note : "", tags: [], ai: true })),
-    ...memos.map((m: any) => ({ id: m.id, title: m.title, content: m.content ?? "", tags: m.tags ?? [], ai: false })),
-  ];
-  if (tiles.length === 0) return <p className="rmg-empty">{L(lang as Lang).emptyNotes}</p>;
+  // ── 월(月) 화면 — 왼쪽은 '어느 날', 오른쪽은 '그 하루의 모양'. ──
+  const upcoming = [...schedules]
+    .map((s: any) => ({ id: String(s.id), date: new Date(s.start), title: s.title }))
+    .filter((s) => +s.date >= +base - 3_600_000)
+    .sort((a, b) => +a.date - +b.date)
+    .slice(0, 4);
+
   return (
-    <div className="rmg-notes">
-      {tiles.map((t: any) => (
-        <div key={t.id} className="rmg-note">
-          <div className="rmg-note-top">
-            <span className="rmg-note-title">{t.title}</span>
-            {t.ai && <AiTag />}
-          </div>
-          {t.content && <p className="rmg-note-body">{t.content}</p>}
-          <div className="rmg-note-foot">
-            {t.tags.slice(0, 3).map((x: string) => <span key={x} className="rmg-note-tag">#{x}</span>)}
+    <div className="rmg-cv" key="month">
+      <p className="rmg-cv-eyebrow">
+        {lang === "en"
+          ? "Pick a day — its 24 hours fill in on the right · press it again for the timetable"
+          : "날짜를 누르면 오른쪽 24시간이 그 날로 바뀌어요 · 한 번 더 누르면 시간표"}
+      </p>
+      <div className="rmg-cv-split">
+        <div className="rmg-cv-col">
+          <MonthCalendar
+            big
+            base={base}
+            events={allDates}
+            selected={day}
+            /* 고른 날을 다시 누르면 그 날 안으로 들어간다 — 선택과 진입을 한 손짓으로 잇는다. */
+            onSelect={(d: Date) => (dayKey(d) === dayKey(day) ? setTimetable(true) : setSelected(d))}
+            lang={lang}
+          />
+          <div className="rmg-cv-up">
+            <p className="rmg-cv-eyebrow">{t.upNext}</p>
+            <ul className="rmg-cv-uplist">
+              {upcoming.length ? upcoming.map((s) => (
+                <li key={s.id} className="rmg-cv-uprow" onClick={() => { setSelected(s.date); setTimetable(true); }}>
+                  <span className="rmg-cv-uptime">{fmtTime(s.date)}</span>
+                  <span className="rmg-cv-uptitle">{s.title}</span>
+                </li>
+              )) : <li className="rmg-cv-upempty">{t.noUpcoming}</li>}
+            </ul>
           </div>
         </div>
-      ))}
+        <div className="rmg-cv-col">
+          <div className="rmg-cv-ringhead">
+            <p className="rmg-cv-eyebrow">{dayLabel} · {lang === "en" ? "24 hours" : "24시간"}</p>
+            <button type="button" className="rmg-cv-tolist" onClick={() => setTimetable(true)}>
+              {lang === "en" ? "Timetable" : "시간표로 보기"}
+            </button>
+          </div>
+          <DayDial spans={spans} day={day} now={base} lang={lang} />
+        </div>
+      </div>
     </div>
   );
 }
 
-/** Meetings — 회의 리스트(익숙한 '회의'). */
-function MeetingsView({ meetings, mounted, mine, lang }: any) {
-  const t = L(lang as Lang);
-  // AI가 회의로 정리한 건도 같은 목록에 얹는다 — 캘린더·할 일·메모 뷰와 동일한 규칙.
-  const rows = [
-    ...mine.map((r: Receipt) => ({
-      id: `r-${r.id}`, title: r.title, date: r.date ?? null, time: r.time,
-      participants: r.note ? [r.note] : [], summary: "", ai: true,
-    })),
-    ...(meetings ?? []).map((m: any) => ({
-      id: m.id, title: m.title, date: new Date(m.start), time: null as string | null,
-      participants: m.participants ?? [], summary: m.summary ?? "", ai: false,
-    })),
-  ];
-  if (rows.length === 0) return <p className="rmg-empty">{t.emptyMeetings}</p>;
+/** 24시간 원 — 초등학교 생활계획표의 그 원. 0시가 위, 시계 방향. 하루의 밀도를 한눈에 보는 시간 지도.
+ *  색으로 구분하지 않는다(모노크롬 원칙) — 액센트 한 색의 농도 계단으로 인접 구간을 가른다. */
+function DayDial({ spans, day, now, lang }: { spans: Span[]; day: Date; now: Date; lang: Lang }) {
+  const R = 96, RI = 46, C = 110;   // 바깥/안쪽 반지름, 중심
+  const RING = R + 7;               // 종일 일정을 얹는 바깥 링
+  // hover 는 스쳐 지나가고, click 은 붙잡는다. 붙잡힌 게 있으면 그게 우선.
+  const [hover, setHover] = React.useState<string | null>(null);
+  const [pinned, setPinned] = React.useState<string | null>(null);
+  const activeId = pinned ?? hover;
+  React.useEffect(() => { setPinned(null); setHover(null); }, [day]);
+
+  const pt = (min: number, r: number) => {
+    const a = (min / 1440) * 2 * Math.PI - Math.PI / 2; // 0시 = 12시 방향
+    return [C + r * Math.cos(a), C + r * Math.sin(a)];
+  };
+  const sector = (from: number, to: number, rOut: number, rIn: number) => {
+    const [x1, y1] = pt(from, rOut), [x2, y2] = pt(to, rOut);
+    const [x3, y3] = pt(to, rIn), [x4, y4] = pt(from, rIn);
+    const large = to - from > 720 ? 1 : 0;
+    return `M${x1} ${y1}A${rOut} ${rOut} 0 ${large} 1 ${x2} ${y2}L${x3} ${y3}A${rIn} ${rIn} 0 ${large} 0 ${x4} ${y4}Z`;
+  };
+
+  // 겹치는 일정은 같은 자리를 다투므로 안쪽으로 한 겹씩 물린다 — 서로를 덮지 않게.
+  const timed = spans.filter((s) => !s.allDay);
+  const allDay = spans.filter((s) => s.allDay);
+  const lanes: number[] = [];       // lane 별 마지막 끝 시각
+  const laneOf = new Map<string, number>();
+  for (const s of timed) {
+    let ln = lanes.findIndex((end) => end <= s.from);
+    if (ln === -1) { ln = lanes.length; lanes.push(0); }
+    lanes[ln] = s.to;
+    laneOf.set(s.id, Math.min(ln, 2)); // 3겹까지만 — 그 이상은 같은 겹에 얹는다
+  }
+  const band = (R - RI) / (Math.min(lanes.length, 3) || 1);
+
+  // 지금 바늘은 '오늘'일 때만 — 다른 날 원에 현재 시각을 그리면 거짓말이 된다.
+  const isToday = dayKey(day) === dayKey(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  const [nx, ny] = pt(nowMin, R - 4);
+
+  const active = spans.find((s) => s.id === activeId) ?? null;
+  // 툴팁은 그 구간의 한가운데(반지름 중간)에 붙는다 — viewBox 좌표를 %로 환산.
+  const tipAt = active
+    ? pt(active.allDay ? 0 : (active.from + active.to) / 2, active.allDay ? RING : (R + RI) / 2)
+    : null;
+
   return (
-    <ul className="rmg-mtg-list">
-      {rows.map((m) => (
-        <li key={m.id} className="rmg-mtg">
-          <div className="rmg-mtg-top">
-            <span className="rmg-mtg-title">{m.title}</span>
-            {m.ai && <AiTag />}
-            <span className="rmg-mtg-time">
-              {mounted && m.date
-                ? `${fmtDate(m.date)} · ${m.time ?? fmtTime(m.date)}`
-                : (m.time ?? (lang === "en" ? "TBD" : "미정"))}
-            </span>
-          </div>
-          {m.participants.length > 0 && (
-            <div className="rmg-mtg-people">
-              {m.participants.map((p: string) => <span key={p} className="rmg-mtg-chip">{p}</span>)}
-            </div>
+    <div className="rmg-dial">
+      <div className="rmg-dial-stage">
+        <svg viewBox="0 0 220 220" className="rmg-dial-svg"
+          aria-label={lang === "en" ? "24-hour plan" : "24시간 계획"}
+          onMouseLeave={() => setHover(null)}
+        >
+          <circle cx={C} cy={C} r={R} className="rmg-dial-ring" />
+          <circle cx={C} cy={C} r={RI} className="rmg-dial-ring" />
+          {/* 시각 눈금 — 3시간마다 숫자, 나머지는 짧은 선 */}
+          {Array.from({ length: 24 }, (_, hh) => {
+            const [ax, ay] = pt(hh * 60, R);
+            const [bx, by] = pt(hh * 60, hh % 3 === 0 ? RI : R - 6);
+            const [lx, ly] = pt(hh * 60, R + 13);
+            return (
+              <g key={hh}>
+                <line x1={ax} y1={ay} x2={bx} y2={by} className={`rmg-dial-tick ${hh % 3 === 0 ? "major" : ""}`} />
+                {hh % 3 === 0 && <text x={lx} y={ly} className="rmg-dial-num">{hh}</text>}
+              </g>
+            );
+          })}
+
+          {/* 종일 — 시간대가 없으므로 바깥을 한 바퀴 두르는 얇은 띠로. */}
+          {allDay.map((s, i) => (
+            <circle
+              key={s.id} cx={C} cy={C} r={RING + i * 4}
+              className={`rmg-dial-allday ${activeId === s.id ? "on" : ""}`}
+              onMouseEnter={() => setHover(s.id)}
+              onClick={() => setPinned((p) => (p === s.id ? null : s.id))}
+            />
+          ))}
+
+          {timed.map((s, i) => {
+            const ln = laneOf.get(s.id) ?? 0;
+            const rOut = R - ln * band, rIn = rOut - band;
+            return (
+              <path
+                key={s.id}
+                d={sector(s.from, s.to, rOut, rIn)}
+                className={`rmg-dial-slice ${s.pending ? "pending" : ""} ${activeId === s.id ? "on" : ""} ${activeId && activeId !== s.id ? "dim" : ""}`}
+                style={{ ["--step" as string]: String(i % 3) } as React.CSSProperties}
+                onMouseEnter={() => setHover(s.id)}
+                onClick={() => setPinned((p) => (p === s.id ? null : s.id))}
+              />
+            );
+          })}
+
+          {/* 바늘은 항상 arc 위에 — 일정 한가운데를 지나도 가려지지 않게 밑선을 깔아준다. */}
+          {isToday && (
+            <>
+              <line x1={C} y1={C} x2={nx} y2={ny} className="rmg-dial-hand-halo" />
+              <line x1={C} y1={C} x2={nx} y2={ny} className="rmg-dial-hand" />
+            </>
           )}
-          {m.summary && <p className="rmg-mtg-sum">{m.summary}</p>}
-        </li>
-      ))}
-    </ul>
+          <circle cx={C} cy={C} r={3.5} className="rmg-dial-hub" />
+        </svg>
+
+        {active && tipAt && (
+          <div
+            className={`rmg-dial-tip ${pinned ? "pinned" : ""}`}
+            style={{ left: `${(tipAt[0] / 220) * 100}%`, top: `${(tipAt[1] / 220) * 100}%` }}
+            role="status"
+          >
+            <span className="rmg-dial-tip-t">{active.title}</span>
+            <span className="rmg-dial-tip-r">{spanRange(active, lang)}</span>
+          </div>
+        )}
+      </div>
+
+      {spans.length === 0 ? (
+        <p className="rmg-dial-empty">{lang === "en" ? "Nothing planned." : "이 날은 비어 있어요."}</p>
+      ) : (
+        <ul className="rmg-dial-key">
+          {spans.map((s, i) => (
+            <li
+              key={s.id}
+              className={`rmg-dial-keyrow ${activeId === s.id ? "on" : ""}`}
+              onMouseEnter={() => setHover(s.id)}
+              onMouseLeave={() => setHover(null)}
+              onClick={() => setPinned((p) => (p === s.id ? null : s.id))}
+            >
+              <span className={`rmg-dial-chip ${s.pending ? "pending" : ""} ${s.allDay ? "allday" : ""}`} style={{ ["--step" as string]: String(i % 3) } as React.CSSProperties} />
+              <span className="rmg-dial-keytime">{s.allDay ? (lang === "en" ? "All day" : "종일") : hhmm(s.startAt)}</span>
+              <span className="rmg-dial-keytitle">{s.title}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+const TT_FROM = 6, TT_TO = 24, TT_ROW = 52; // 06:00 ~ 23:00, 한 시간 = 52px
+
+/** 하루 타임테이블 — 시간이 아래로 흐르는 표. 빈 행을 누르면 그 시각에 바로 한 줄 적어 넣는다. */
+function DayTimetable({ day, spans, now, lang, onAdd }: {
+  day: Date; spans: Span[]; now: Date; lang: Lang; onAdd?: (title: string, start: Date) => void;
+}) {
+  const [openHour, setOpenHour] = React.useState<number | null>(null);
+  const [draft, setDraft] = React.useState("");
+  const inputRef = React.useRef<HTMLInputElement>(null);
+  React.useEffect(() => { if (openHour !== null) inputRef.current?.focus(); }, [openHour]);
+
+  const hours = Array.from({ length: TT_TO - TT_FROM }, (_, i) => i + TT_FROM);
+  const top = TT_FROM * 60;
+
+  const submit = (h: number) => {
+    const title = draft.trim();
+    setOpenHour(null);
+    setDraft("");
+    if (!title || !onAdd) return;
+    const start = new Date(day);
+    start.setHours(h, 0, 0, 0);
+    onAdd(title, start);
+  };
+
+  return (
+    <div className="rmg-tt" style={{ ["--row" as string]: `${TT_ROW}px` } as React.CSSProperties}>
+      <div className="rmg-tt-rows">
+        {hours.map((h) => {
+          const isNow = dayKey(now) === dayKey(day) && now.getHours() === h;
+          return (
+            <div key={h} className={`rmg-tt-row ${isNow ? "now" : ""}`} onClick={() => onAdd && setOpenHour(h)}>
+              <span className="rmg-tt-hour">{pad(h)}:00</span>
+              <div className="rmg-tt-cell">
+                {openHour === h && (
+                  <input
+                    ref={inputRef}
+                    className="rmg-tt-input"
+                    value={draft}
+                    placeholder={lang === "en" ? "Title, then Enter" : "제목 입력 후 Enter"}
+                    onClick={(e) => e.stopPropagation()}
+                    onChange={(e) => setDraft(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") submit(h);
+                      if (e.key === "Escape") { setOpenHour(null); setDraft(""); }
+                    }}
+                    onBlur={() => submit(h)}
+                  />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      <div className="rmg-tt-blocks">
+        {spans.map((s) => (
+          <div
+            key={s.id}
+            className={`rmg-tt-block ${s.pending ? "pending" : ""}`}
+            style={{
+              top: `calc(${s.from - top} / 60 * var(--row))`,
+              height: `calc(${s.to - s.from} / 60 * var(--row))`,
+            }}
+          >
+            <span className="rmg-tt-block-title">{s.title}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 
@@ -1519,6 +1668,30 @@ const CSS = `
 .rmg {
   --paper: #141210; --surface: #1B1813; --ink: #F2F0EC; --muted: #98938A; --faint: #5E574C; --hair: #262019; --accent: #9B8E86; --glow: rgba(155,142,134,0.16);
   --rail-w: 64px;  /* 레일 폭 — fixed 로 떠 있는 캡처바가 캔버스 기준으로 가운데를 잡는 데 쓴다 */
+
+  /* ── 간격 체계 — 8px 배수 하나로 통일. 임의값을 쓰지 않는다. ── */
+  --sp-1: 8px; --sp-2: 16px; --sp-3: 24px; --sp-4: 32px; --sp-5: 40px; --sp-6: 48px;
+  /* 모서리도 토큰으로 — 컴포넌트마다 다른 반경을 쓰지 않는다. */
+  --r-sm: 8px; --r: 12px; --r-lg: 16px;
+  /* 화면 가장자리 여백 — 넓어질수록 함께 자라되 88px 에서 멈춘다. */
+  --gutter: clamp(32px, 4vw, 88px);
+  /* 본문 기준 폭. 뷰마다 하나만 정하고, 시계·상단 문구·캡처바·배경 문양이 전부 이 폭에 맞춰 선다. */
+  --content: 640px;                     /* 글이 중심인 뷰 — 읽기 좋은 한 칸 */
+  /* 캘린더는 작업대다. 화면을 따라 넓어지되 1440px 에서 멈춘다(그 이상은 눈이 따라가기 어렵다).
+     64px 은 레일 폭 — 캔버스가 쓰는 실제 가로를 계산에 반영한다. */
+  --content-wide: min(1440px, calc(100vw - 64px - 2 * var(--gutter)));
+  --ring-gap: clamp(32px, 3vw, 72px);   /* 달력과 링 사이 */
+  --dial-w: 400px;                      /* 원의 최대 지름 — 컬럼이 넓어져도 원은 여기서 멈추고 가운데 선다 */
+  --measure: var(--content);
+  /* 캔버스 오른쪽 끝에서 본문 컬럼 오른쪽 끝까지의 거리. 화면이 좁으면 최소 여백으로 떨어진다. */
+  --edge: max(var(--gutter), calc((100% - var(--measure)) / 2));
+  --flow-top: clamp(56px, 7vh, 88px);
+  /* 캡처바(높이 61 + bottom 32)가 콘텐츠를 가리지 않을 만큼만. 예전 160px 은 하단을 과하게 비웠다. */
+  --flow-bottom: 128px;
+  /* 섹션 사이 — 화면이 높아지면 조금 벌어지되 72px 에서 멈춘다(무한정 늘어나지 않게). */
+  --flow-gap: clamp(48px, 5vh, 72px);
+  --heart-w: clamp(112px, 12vw, 176px);
+
   position: relative; display: grid; grid-template-columns: 64px minmax(0, 1fr);
   height: 100vh; height: 100dvh; color: var(--ink);
   background:
@@ -1534,7 +1707,11 @@ const CSS = `
   transition: grid-template-columns 280ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 /* 그리드 값은 리터럴로 둔다 — custom property 는 보간되지 않아 레일 확장 모션이 끊긴다. */
-.rmg.rail-open { --rail-w: 236px; grid-template-columns: 236px minmax(0, 1fr); }
+.rmg.rail-open { --rail-w: 216px; grid-template-columns: 216px minmax(0, 1fr); }
+/* 캘린더 뷰만 본문 기준 폭이 넓다 — 파생되는 모든 정렬(시계·문양·상단 문구)이 함께 따라간다. */
+.rmg.view-calendar { --measure: var(--content-wide); }
+/* 사람은 '목록'이다 — 항목이 적어도 화면 한가운데로 내려앉지 않고 위에서부터 읽힌다. */
+.rmg.view-people .rmg-flow { justify-content: safe start; }
 @media (prefers-reduced-motion: reduce) { .rmg { transition: none; } }
 :root:not(.dark) .rmg { --paper: #F7F6F3; --surface: #FCFBF9; --ink: #26221D; --muted: #6E675C; --faint: #A9A294; --hair: #E7E2D8; --accent: #8C7E6E; --glow: rgba(140,126,110,0.16); }
 /* 배경 — flat white 금지. 웜 오프화이트 위에 대형 확산광 + 은은한 건축 그림자(창빛·커튼). 느끼되 알아채지 못하게.
@@ -1560,12 +1737,12 @@ const CSS = `
   animation: rmg-arrive-out 1.3s cubic-bezier(0.4,0,0.2,1) both; }
 @keyframes rmg-arrive-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rmg-arrive { display: none; } }
-.rmg-eyebrow { margin: 0 0 18px; font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.rmg-eyebrow { margin: 0 0 var(--sp-3); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
 
 /* 스침 — 캡처바 바로 위, 한 줄. 6초 뒤 스스로 옅어진다. 카드도 목록도 아니다. */
-.rmg-flash { position: fixed; bottom: 92px; left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 19;
+.rmg-flash { position: fixed; bottom: 96px; left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 19;
   display: flex; align-items: center; gap: 10px;
-  width: min(560px, calc(100% - 48px)); padding: 9px 14px; border-radius: 13px;
+  width: min(560px, var(--measure), calc(100% - 2 * var(--gutter))); padding: var(--sp-1) 14px; border-radius: var(--r);
   background: color-mix(in srgb, var(--surface) 86%, transparent); border: 1px solid var(--hair);
   backdrop-filter: blur(12px); box-shadow: 0 10px 30px -16px rgba(0,0,0,0.55);
   animation: rmg-rise 0.34s cubic-bezier(0.22,1,0.36,1) both;
@@ -1610,8 +1787,8 @@ const CSS = `
 .rmg-rail { position: relative; z-index: 2; width: 100%; height: 100%; overflow: hidden; }
 .rmg-rail-panel {
   width: 100%; height: 100%; box-sizing: border-box;
-  display: flex; flex-direction: column; align-items: stretch; gap: 16px;
-  padding: 22px 12px; border-right: 1px solid var(--hair);
+  display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-3);
+  padding: var(--sp-3) 12px; border-right: 1px solid var(--hair);
   transition: background 280ms ease, border-color 280ms ease;
 }
 /* 확장 시 표면이 아주 은은하게 올라오고, 문틈 같은 액센트 헤어라인(공간이 열리는 감각) */
@@ -1622,22 +1799,23 @@ const CSS = `
 
 /* 브랜드 마크(문) + Comein 워드마크 리빌 — 아주 은은한 글로우 */
 /* 브랜드 마크 — 클릭 불가(가이드 제거). 레일 펼침 시 문에 은은한 숨결만. */
-.rmg-rail-mark { display: flex; align-items: center; gap: 15px; height: 42px; padding: 0 9px; border-radius: 12px; color: var(--ink); overflow: hidden; }
+/* 마크와 메뉴가 같은 행 규격(높이 40 · 좌우 패딩 10 · 아이콘 폭 19)을 써야 아이콘·라벨이 한 줄에 선다. */
+.rmg-rail-mark { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 10px; border-radius: var(--r); color: var(--ink); overflow: hidden; }
 .rmg.rail-open .rmg-rail-mark .aidoor-svg { filter: drop-shadow(0 0 7px var(--glow)); }
-.rmg-rail-door { width: 22px; height: 28px; flex: 0 0 22px; }
+.rmg-rail-door { width: 19px; height: 24px; flex: 0 0 19px; }
 .rmg-rail-word { font-size: 0.98rem; font-weight: 600; letter-spacing: -0.02em; color: var(--ink); }
 
 .rmg-rail-nav { position: relative; display: flex; flex-direction: column; gap: 4px; }
 .rmg-rail-foot { margin-top: auto; display: flex; flex-direction: column; gap: 4px; }
 /* 활성 인디케이터 — 선택 항목 사이를 미끄러지듯 이동(morph). 아이템 높이 40 + gap 4 = 44px 스텝 */
-.rmg-rail-ind { position: absolute; left: 0; right: 0; top: 0; height: 40px; border-radius: 11px; z-index: 0; pointer-events: none;
+.rmg-rail-ind { position: absolute; left: 0; right: 0; top: 0; height: 40px; border-radius: var(--r); z-index: 0; pointer-events: none;
   background: color-mix(in srgb, var(--accent) 13%, transparent);
   transform: translateY(calc(var(--active, 0) * 44px));
   transition: transform 280ms cubic-bezier(0.22,1,0.36,1), opacity 200ms ease;
   will-change: transform; }
 .rmg-rail-ind::before { content: ""; position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: var(--accent); box-shadow: 0 0 10px -1px color-mix(in srgb, var(--accent) 55%, transparent); }
 .rmg-rail-ind[data-hidden="true"] { opacity: 0; }
-.rmg-railbtn { position: relative; z-index: 1; display: flex; align-items: center; gap: 15px; width: 100%; height: 40px; padding: 0 11px; box-sizing: border-box; border: 0; border-radius: 11px; background: none; color: var(--faint); cursor: pointer; text-decoration: none;
+.rmg-railbtn { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; padding: 0 10px; box-sizing: border-box; border: 0; border-radius: var(--r); background: none; color: var(--faint); cursor: pointer; text-decoration: none;
   transition: background 220ms ease, color 220ms ease, transform 200ms cubic-bezier(0.22,1,0.36,1); }
 .rmg-railbtn > .rmg-railicon { flex: 0 0 19px; }
 /* Hover — 살짝 밝아지고 1px 떠오른다 */
@@ -1669,42 +1847,39 @@ const CSS = `
 }
 
 /* 캔버스 · 환경 */
-.rmg-canvas { position: relative; overflow-y: auto; overflow-x: hidden; display: flex; justify-content: center; background: transparent; }
+/* 스크롤바 자리를 양쪽에 늘 비워둔다 — 한쪽만 비우면 본문 중심선이 fixed 로 뜬 캡처바와 어긋나고,
+   뷰마다 스크롤 유무가 달라 기준선 자체가 흔들린다. */
+.rmg-canvas { position: relative; overflow-y: auto; overflow-x: hidden; scrollbar-gutter: stable both-edges; display: flex; justify-content: center; background: transparent; }
 .rmg-env { position: absolute; inset: 0; pointer-events: none; z-index: 0; overflow: hidden; }
 .rmg-ambient-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .rmg-grain { position: absolute; inset: 0; opacity: 0.026; mix-blend-mode: overlay;
   background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E"); }
-.rmg-heart { position: absolute; right: 8%; top: 30%; width: clamp(120px, 16vw, 220px); aspect-ratio: 40/52; opacity: 0.05; transition: opacity 1.2s ease; }
+/* 문 문양 — 규칙은 하나다: 본문 컬럼 바깥 오른쪽 여백의 한가운데.
+   가로는 그 여백의 중앙, 세로는 본문과 같은 중심선. 뷰마다 다른 오프셋을 주지 않는다
+   (그렇게 땜질하면 화면을 옮길 때마다 문이 제 자리를 잃는다). */
+.rmg-heart { position: absolute; right: calc((var(--edge) - var(--heart-w)) / 2); top: 50%; transform: translateY(-50%); width: var(--heart-w); aspect-ratio: 40/52; color: var(--ink); opacity: 0.12; transition: opacity 1.2s ease; }
+/* 문양이 들어갈 바깥 여백이 없으면 아예 물러난다 — 장식이 본문 위로 올라오지 않는다.
+   본문이 넓은 캘린더에서는 대개 여기에 해당해, 오른쪽은 24시간 링이 대신 채운다. */
+@media (max-width: 1500px) { .rmg-heart { display: none; } }
+.rmg.view-calendar .rmg-heart { display: none; }
 .rmg-heart.on { opacity: 0.5; }
 /* light 모드: --muted가 어두운 회색이라 흰 배경 위 실효 ~2% 불투명도로는 문이 사라져 보임 → 휴식 가시성 보강(다크는 유지). .on보다 특이성이 높아 조직화 글로우도 유지. */
-:root:not(.dark) .rmg-heart { opacity: 0.3; }
+/* 빈 상태 일러스트 — 링과 같은 뉴트럴 계열. 윤곽이 사라지지 않을 만큼만 올린다(튀지 않게). */
+:root:not(.dark) .rmg-heart { opacity: 0.38; }
 :root:not(.dark) .rmg-heart.on { opacity: 0.62; }
 .rmg-heart-door { width: 100%; height: 100%; }
 
 /* 최상단 옵션 바 + 알림 */
-.rmg-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 6; height: 52px; display: flex; align-items: center; justify-content: flex-end; gap: 16px; padding: 0 clamp(16px, 3vw, 32px); }
-.rmg-notif { position: relative; }
-.rmg-notif-btn { position: relative; display: grid; place-items: center; width: 42px; height: 42px; border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 60%, transparent); color: var(--muted); border-radius: 12px; cursor: pointer; transition: color 0.25s, border-color 0.25s; }
-.rmg-notif-btn:hover, .rmg-notif-btn.on { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 16%, var(--hair)); }
-.rmg-notif-btn:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rmg-topbar { position: absolute; top: 0; left: 0; right: 0; z-index: 6; height: 56px; display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); padding: 0 var(--edge); }
+/* 패널 닫기 아이콘 규격 (알림 벨은 제거됐지만 이 크기는 설정·캘린더 패널이 함께 쓴다) */
 .rmg-notif-ic { width: 18.5px; height: 18.5px; stroke-width: 1.7; }
-.rmg-notif-badge { position: absolute; top: -4px; right: -4px; min-width: 16px; height: 16px; display: grid; place-items: center; padding: 0 4px; border-radius: 999px; background: var(--accent); color: #141210; font-size: 10px; font-weight: 700; }
-.rmg-notif-scrim { position: fixed; inset: 0; z-index: 40; background: color-mix(in srgb, #000 22%, transparent); backdrop-filter: blur(1.5px); animation: rmg-cs-fade 0.18s ease both; }
-.rmg-notif-panel { position: absolute; top: 52px; right: 0; z-index: 41; width: 324px; padding: 10px; border: 1px solid var(--hair); border-radius: 16px; background: color-mix(in srgb, var(--surface) 97%, transparent); backdrop-filter: blur(16px); box-shadow: 0 24px 60px -22px rgba(0,0,0,0.7); animation: rmg-rise 0.25s cubic-bezier(0.22,1,0.36,1) both; }
-.rmg-notif-head { margin: 6px 10px 8px; font-size: 12px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
-.rmg-notif-list { list-style: none; margin: 0; padding: 0; }
-.rmg-notif-row { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border-radius: 10px; transition: background 0.2s; }
-.rmg-notif-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.rmg-notif-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); margin-top: 6px; flex-shrink: 0; }
-.rmg-notif-title { margin: 0; font-size: 0.92rem; font-weight: 500; color: var(--ink); }
-.rmg-notif-detail { margin: 2px 0 0; font-size: 0.84rem; font-weight: 300; color: var(--muted); }
-.rmg-notif-empty { margin: 0; padding: 18px 10px; text-align: center; font-size: 0.85rem; color: var(--faint); }
 
 /* 왼쪽 상시 캘린더 */
 .rmg-calrail { display: none; }
 @media (min-width: 1240px) {
   /* 상단 라인을 메인 인사말(.rmg-flow 상단 여백)에 맞춤 — 월 헤더 윗선이 Good morning. 첫 줄과 같은 높이. +6px는 큰 글자 대비 광학 보정. */
-  .rmg-calrail { display: block; position: absolute; left: 0; top: 0; bottom: 0; width: 288px; z-index: 4; overflow-y: auto; padding: calc(clamp(48px, 12vh, 128px) + 6px) 22px 40px 30px; }
+  .rmg-calrail { display: block; position: absolute; left: 0; top: 0; bottom: 0; width: 288px; z-index: 4; overflow-y: auto; padding: calc(var(--flow-top) + 6px) var(--sp-3) var(--sp-6) var(--sp-4); }
+  .rmg-calrail[data-hidden="true"] { display: none; }
 }
 .rmg-mc { user-select: none; }
 .rmg-mc-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 14px; }
@@ -1731,21 +1906,30 @@ const CSS = `
 .rmg-mc-mo:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 .rmg-mc-mo.on { background: var(--accent); color: #141210; font-weight: 600; }
 
-.rmg-mc-wd { display: grid; grid-template-columns: repeat(7, 1fr); margin-bottom: 4px; }
+/* 요일 행과 날짜 그리드는 같은 컬럼 규격 + 같은 gap 이어야 한 격자 위에 선다. */
+.rmg-mc-wd { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; margin-bottom: 4px; }
 .rmg-mc-wd span { text-align: center; font-size: 0.68rem; font-weight: 500; color: var(--faint); padding: 4px 0; }
-.rmg-mc-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; animation: rmg-mc-fade 0.19s ease both; }
+.rmg-mc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; animation: rmg-mc-fade 0.19s ease both; }
 .rmg-mc-grid.in-l { animation: rmg-mc-slide-l 0.2s cubic-bezier(0.22,1,0.36,1) both; }
 .rmg-mc-grid.in-r { animation: rmg-mc-slide-r 0.2s cubic-bezier(0.22,1,0.36,1) both; }
 @keyframes rmg-mc-fade { from { opacity: 0; } to { opacity: 1; } }
 @keyframes rmg-mc-slide-l { from { opacity: 0; transform: translateX(-10px); } to { opacity: 1; transform: none; } }
 @keyframes rmg-mc-slide-r { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
-.rmg-mc-cell { position: relative; isolation: isolate; aspect-ratio: 1; display: grid; place-items: center; border: 0; background: none; color: var(--muted); font-family: inherit; font-size: 0.8rem; font-weight: 400; border-radius: 8px; cursor: pointer; transition: background 0.2s, color 0.2s; }
+/* color 에는 전환을 걸지 않는다 — 선택 카드는 즉시 깔리는데 글자색만 0.2s 뒤따라오면
+   그 사이 어두운 카드 위에 어두운 글자가 겹쳐 숫자가 잠깐 사라져 보인다. */
+.rmg-mc-cell { position: relative; isolation: isolate; aspect-ratio: 1; display: grid; place-items: center; border: 0; background: none; color: var(--muted); font-family: inherit; font-size: 0.8rem; font-weight: 400; border-radius: var(--r-sm); cursor: pointer; transition: background 0.2s; }
 .rmg-mc-cell.empty { pointer-events: none; }
 .rmg-mc-cell:not(.empty):hover { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink); }
 /* 오늘 — 강한 primary 대신 은은한 액센트 필드 서클 (팔레트 유지) */
 .rmg-mc-cell.today { color: var(--accent); font-weight: 700; }
 .rmg-mc-cell.today::before { content: ""; position: absolute; inset: 14%; border-radius: 50%; background: color-mix(in srgb, var(--accent) 16%, transparent); z-index: -1; }
-.rmg-mc-cell.sel { background: var(--ink); color: var(--paper); font-weight: 600; }
+/* 선택 표식은 셀 전체가 아니라 안쪽 사각형 — 칸이 커져도 카드 크기가 함께 부풀지 않고 숫자는 늘 가운데 있다. */
+.rmg-mc-cell.sel { background: none; color: var(--paper); font-weight: 600; }
+/* 카드는 살짝 부풀며 자리를 잡는다(불투명도는 건드리지 않는다 — 옅어지면 글자가 또 묻힌다). */
+.rmg-mc-cell.sel::after { content: ""; position: absolute; inset: 10%; border-radius: var(--r-sm); background: var(--ink); z-index: -1; animation: rmg-mc-pick 0.2s cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes rmg-mc-pick { from { transform: scale(0.86); } to { transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .rmg-mc-cell.sel::after { animation: none; } }
+.rmg-mc.big .rmg-mc-cell.sel::after { border-radius: var(--r); }
 .rmg-mc-cell.sel.today { color: var(--paper); }
 .rmg-mc-cell.sel.today::before { display: none; }
 .rmg-mc-dot { position: absolute; bottom: 4px; left: 50%; transform: translateX(-50%); width: 3px; height: 3px; border-radius: 50%; background: var(--accent); z-index: 1; }
@@ -1800,10 +1984,16 @@ const CSS = `
 .rmg-calup-date { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.01em; color: var(--faint); }
 .rmg-mc.big .rmg-mc-title { font-size: 1.25rem; }
 .rmg-mc.big .rmg-mc-title-ic { width: 17px; height: 17px; }
-.rmg-mc.big .rmg-mc-head { margin-bottom: 20px; }
-.rmg-mc.big .rmg-mc-cell { font-size: 1.02rem; border-radius: 12px; }
-.rmg-mc.big .rmg-mc-wd span { font-size: 0.82rem; padding: 8px 0; }
-.rmg-mc.big .rmg-mc-grid { gap: 4px; }
+.rmg-mc.big .rmg-mc-head { margin-bottom: var(--sp-2); }
+/* 칸을 아주 살짝 가로로 눕힌다 — 넓힌 행 간격(8px)만큼 세로를 돌려주어
+   달력이 길어져 '다가오는 순간'을 화면 밖으로 밀어내지 않게. 정사각과 구분되지 않을 정도. */
+/* 칸이 가로로 넓어진 만큼 세로는 눕힌다 — 안 그러면 달력이 길어져 하단(다가오는 순간)이 캡처바에 잠긴다.
+   숫자는 늘 칸 한가운데라 3:2 비율에서도 눌려 보이지 않는다. */
+.rmg-mc.big .rmg-mc-cell { aspect-ratio: 1.5; font-size: 1.02rem; border-radius: var(--r); }
+.rmg-mc.big .rmg-mc-wd span { font-size: 0.82rem; padding: var(--sp-1) 0; }
+/* 열 간격은 요일 행과 같아야 격자가 맞고, 행 간격만 넓혀 날짜가 눌려 보이지 않게 한다. */
+.rmg-mc.big .rmg-mc-wd { column-gap: 6px; }
+.rmg-mc.big .rmg-mc-grid { column-gap: 6px; row-gap: var(--sp-1); }
 .rmg-mc.big .rmg-mc-dot { width: 4px; height: 4px; bottom: 6px; }
 .rmg-mc.big .rmg-mc-months { gap: 6px; }
 .rmg-mc.big .rmg-mc-mo { font-size: 0.9rem; padding: 12px 0; }
@@ -1851,7 +2041,10 @@ const CSS = `
 .rmg-switch.on .rmg-switch-dot { transform: translateX(19px); }
 
 /* 하나의 흐름 (단일 컬럼) */
-.rmg-flow { position: relative; z-index: 2; width: 100%; max-width: 600px; display: flex; flex-direction: column; gap: clamp(40px, 7vh, 80px); padding: clamp(48px, 12vh, 128px) clamp(28px, 5vw, 56px) 128px;
+/* 본문 컬럼 — 가로 패딩을 두지 않는다. 폭 자체가 기준선이라야 시계·문양이 같은 선에 설 수 있다.
+   세로로는 남는 공간을 위아래로 나눠 갖는다(safe center) — 위에만 쌓이고 아래가 텅 비지 않게.
+   'safe' 는 콘텐츠가 화면보다 길 때 위가 잘려 스크롤로도 못 보는 사고를 막는다. */
+.rmg-flow { position: relative; z-index: 2; width: min(var(--measure), calc(100% - 2 * var(--gutter))); min-height: 100%; display: flex; flex-direction: column; justify-content: safe center; gap: var(--flow-gap); padding: var(--flow-top) 0 var(--flow-bottom);
   transition: opacity 0.34s cubic-bezier(0.22,1,0.36,1), transform 0.34s cubic-bezier(0.22,1,0.36,1); will-change: opacity, transform; }
 /* 탭 전환: 이전 뷰가 아래로 살짝 가라앉으며 사라진 뒤, 새 뷰가 rmg-a* 로 떠오른다 */
 .rmg-flow.flow-exit { opacity: 0; transform: translateY(-6px); }
@@ -1859,18 +2052,19 @@ const CSS = `
 /* HERO */
 .rmg-hero { display: flex; flex-direction: column; }
 .rmg-greet { margin: 0; font-size: clamp(2.4rem, 6vw, 3.6rem); font-weight: 300; letter-spacing: -0.035em; line-height: 1.02; color: var(--ink); }
-.rmg-date { margin: 14px 0 0; font-size: 0.92rem; font-weight: 500; letter-spacing: 0.01em; color: var(--muted); font-variant-numeric: tabular-nums; animation: rmg-fade 0.5s ease both; }
-.rmg-mood { margin: 10px 0 0; font-size: clamp(1.1rem, 2.6vw, 1.4rem); font-weight: 300; letter-spacing: -0.015em; color: var(--muted); }
-.rmg-env-line { margin: 20px 0 0; display: inline-flex; align-items: center; gap: 7px; font-size: 0.9rem; font-weight: 400; color: var(--faint); }
+.rmg-date { margin: var(--sp-2) 0 0; font-size: 0.92rem; font-weight: 500; letter-spacing: 0.01em; color: var(--muted); font-variant-numeric: tabular-nums; animation: rmg-fade 0.5s ease both; }
+.rmg-mood { margin: var(--sp-2) 0 0; font-size: clamp(1.1rem, 2.6vw, 1.4rem); font-weight: 300; letter-spacing: -0.015em; color: var(--muted); }
+.rmg-env-line { margin: var(--sp-3) 0 0; display: inline-flex; align-items: center; gap: var(--sp-1); font-size: 0.9rem; font-weight: 400; color: var(--faint); }
 .rmg-env-icon { width: 15px; height: 15px; stroke-width: 1.7; }
-.rmg-counts { margin-top: 30px; display: flex; gap: clamp(30px, 5vw, 54px); }
-.rmg-count { display: flex; flex-direction: column; gap: 4px; }
+.rmg-counts { margin-top: var(--sp-5); display: flex; gap: var(--sp-6); }
+.rmg-count { display: flex; flex-direction: column; gap: var(--sp-1); }
 .rmg-count-n { font-size: 1.75rem; font-weight: 300; color: var(--ink); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
 .rmg-count-l { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
 
 /* CONTEXT (큐레이션) */
-.rmg-ctx-line { display: grid; grid-template-columns: 6.5em 1fr; gap: 18px; align-items: baseline; padding: 15px 0; border-top: 1px solid var(--hair); }
-.rmg-ctx-line:first-of-type { border-top: 0; padding-top: 4px; }
+/* 세 줄이 하나의 정보 덩어리 — 줄 사이를 넓혀 숨 쉬게 하되 묶임은 유지한다. */
+.rmg-ctx-line { display: grid; grid-template-columns: 6.5em 1fr; gap: var(--sp-3); align-items: baseline; padding: var(--sp-3) 0; border-top: 1px solid var(--hair); }
+.rmg-ctx-line:first-of-type { border-top: 0; padding-top: var(--sp-1); }
 .rmg-ctx-k { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em; color: var(--faint); }
 .rmg-ctx-v { font-size: 1.06rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); line-height: 1.5; }
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
@@ -1881,12 +2075,12 @@ const CSS = `
 /* 캡처바는 캔버스 스크롤과 무관하게 항상 같은 자리에 있어야 한다.
    (absolute 였을 때는 스크롤 컨테이너의 '콘텐츠 바닥'에 붙어 목록 위로 겹쳐 올라왔다.)
    fixed + 레일 폭만큼 left 를 밀어 캔버스 기준으로 가운데. 레일이 열리면 같이 미끄러진다. */
-.rmg-ask { position: fixed; bottom: 26px; left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 20;
+.rmg-ask { position: fixed; bottom: var(--sp-4); left: var(--rail-w, 64px); right: 0; margin: 0 auto; z-index: 20;
   display: flex; align-items: center; gap: 12px;
-  width: min(560px, calc(100% - 48px));
-  padding: 9px 12px 9px 16px; border-radius: 16px;
+  width: min(560px, var(--measure), calc(100% - 2 * var(--gutter)));
+  padding: var(--sp-1) 12px var(--sp-1) var(--sp-2); border-radius: var(--r-lg);
   background: color-mix(in srgb, var(--surface) 84%, transparent); border: 1px solid var(--hair);
-  backdrop-filter: blur(12px); box-shadow: 0 14px 42px -18px rgba(0,0,0,0.6);
+  backdrop-filter: blur(12px); box-shadow: 0 10px 30px -20px rgba(0,0,0,0.5);
   transition: border-color 0.3s, box-shadow 0.3s, left 280ms cubic-bezier(0.22, 1, 0.36, 1); }
 .rmg-ask.focus { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); box-shadow: 0 16px 46px -18px rgba(0,0,0,0.65), 0 0 0 3px var(--glow); }
 .rmg-ask-door { display: grid; place-items: center; width: 24px; flex-shrink: 0; }
@@ -1919,10 +2113,105 @@ const CSS = `
 .rmg-vtrail { font-size: 0.76rem; color: var(--faint); font-weight: 400; flex-shrink: 0; }
 
 /* 공통 · 기능 헤더 · AI 귀속 태그 */
-.rmg-feat-head { margin-bottom: 22px; }
+.rmg-feat-head { margin-bottom: var(--sp-2); }
 .rmg-feat-title { margin: 0; font-size: clamp(1.5rem, 3vw, 1.9rem); font-weight: 400; letter-spacing: -0.03em; color: var(--ink); }
 .rmg-tag-ai { display: inline-grid; place-items: center; width: 14px; color: var(--muted); flex-shrink: 0; }
 .rmg-tag-door { width: 11px; height: 14px; }
+
+/* Calendar 뷰 · 월(月) → 일(日) */
+/* 달(月) ↔ 하루(시간표) 전환은 툭 갈아끼우지 않고 한 호흡으로 떠오른다. */
+.rmg-cv { display: flex; flex-direction: column; gap: var(--sp-3); animation: rmg-cv-in 0.26s cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes rmg-cv-in { from { opacity: 0; transform: translateY(7px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .rmg-cv { animation: none; } }
+/* 달력 ‖ 24시간 원 — 링은 296px 고정, 남는 폭은 달력이 가진다.
+   좁아지면 링이 아래로 내려가되 두 요소의 좌우 기준선은 그대로 유지된다. */
+.rmg-cv-split { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: var(--ring-gap); align-items: start; }
+/* 오른쪽 컬럼의 라벨은 왼쪽 '연·월' 헤더와 같은 높이의 칸을 차지한다 →
+   두 라벨의 세로 중심이 맞고, 그 아래 요일 행과 링 상단도 같은 선에서 시작한다. */
+.rmg-cv-col > .rmg-cv-eyebrow { display: flex; align-items: center; min-height: 30px; }
+@media (max-width: 1000px) { .rmg-cv-split { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); } }
+.rmg-cv-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
+.rmg-cv-eyebrow { margin: 0; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+/* 일(日) 화면 — 달력 컬럼과 같은 폭을 쓴다. 월↔일을 오갈 때 좌우 기준선과 무게가 그대로다. */
+.rmg-cv-head, .rmg-tt { max-width: 640px; }
+.rmg-cv-head { display: flex; align-items: center; gap: var(--sp-2); }
+.rmg-cv-back { display: inline-flex; align-items: center; gap: var(--sp-1); flex: 0 0 auto; height: 40px; padding: 0 var(--sp-2); border-radius: var(--r); border: 1px solid var(--hair); background: var(--surface); color: var(--muted); font: inherit; font-size: 0.84rem; cursor: pointer; transition: color 0.15s, border-color 0.15s; }
+.rmg-cv-back:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
+.rmg-cv-title { flex: 1; text-align: center; margin: 0; font-weight: 300; font-size: 1.3rem; letter-spacing: -0.02em; color: var(--ink); }
+.rmg-cv-spacer { flex: 0 0 auto; width: 40px; }
+.rmg-cv-up { padding-top: var(--sp-2); border-top: 1px solid var(--hair); display: flex; flex-direction: column; gap: var(--sp-1); }
+.rmg-cv-uplist { list-style: none; margin: 0; padding: 0; }
+.rmg-cv-uprow { display: flex; align-items: baseline; gap: 12px; padding: 8px 0; cursor: pointer; border-radius: 6px; transition: background 0.15s ease; }
+.rmg-cv-uprow:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.rmg-cv-uptime { min-width: 5.4em; font-variant-numeric: tabular-nums; font-size: 0.82rem; color: var(--muted); }
+.rmg-cv-uptitle { font-size: 0.9rem; color: var(--ink); }
+.rmg-cv-upempty { font-size: 0.86rem; color: var(--faint); padding: 4px 0; }
+
+/* 오른쪽 컬럼 머리 — 선택한 날짜 라벨 + 시간표 진입(명시적 액션) */
+/* 오른쪽 컬럼이 넓어져도 라벨·원·범례는 한 폭(--dial-w)으로 묶여 컬럼 가운데에 선다. */
+.rmg-cv-ringhead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); min-height: 30px; width: 100%; max-width: var(--dial-w); margin: 0 auto; }
+.rmg-cv-ringhead .rmg-cv-eyebrow { min-height: 0; }
+.rmg-cv-tolist { flex: 0 0 auto; border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; padding: 5px 11px; border-radius: 999px; cursor: pointer; transition: color 0.2s, border-color 0.2s; }
+.rmg-cv-tolist:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+
+/* 생활계획표 · 24시간 원 */
+.rmg-dial { display: flex; flex-direction: column; align-items: stretch; gap: var(--sp-2); width: 100%; max-width: var(--dial-w); margin: 0 auto; }
+.rmg-dial-stage { position: relative; align-self: center; width: 100%; }
+.rmg-dial-svg { display: block; width: 100%; overflow: visible; }
+/* 같은 뉴트럴 계열 안에서 농도만 한 단계씩 올린다 — 배경에 묻히지 않을 만큼만. */
+.rmg-dial-ring { fill: none; stroke: color-mix(in srgb, var(--ink) 14%, var(--hair)); stroke-width: 1; }
+.rmg-dial-tick { stroke: color-mix(in srgb, var(--ink) 10%, var(--hair)); stroke-width: 1; }
+.rmg-dial-tick.major { stroke: color-mix(in srgb, var(--ink) 30%, var(--hair)); }
+.rmg-dial-num { fill: var(--muted); font-size: 10px; font-weight: 500; text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; }
+/* 색이 아니라 농도로 가른다 — 인접한 구간끼리만 구별되면 충분하다. */
+.rmg-dial-slice { fill: color-mix(in srgb, var(--accent) calc(30% - var(--step) * 8%), transparent); stroke: var(--paper); stroke-width: 1; cursor: pointer; transition: fill 0.2s, opacity 0.2s; }
+.rmg-dial-slice:hover, .rmg-dial-slice.on { fill: color-mix(in srgb, var(--accent) 52%, transparent); }
+/* 하나를 붙잡으면 나머지는 물러난다 — 지워지지는 않게. */
+.rmg-dial-slice.dim { opacity: 0.45; }
+.rmg-dial-slice.pending { fill: color-mix(in srgb, var(--accent) 12%, transparent); stroke-dasharray: 3 2; stroke: color-mix(in srgb, var(--accent) 55%, transparent); }
+/* 종일 — 시간대가 없으니 바깥을 한 바퀴 두른다. */
+.rmg-dial-allday { fill: none; stroke: color-mix(in srgb, var(--accent) 42%, transparent); stroke-width: 2.5; cursor: pointer; transition: stroke 0.2s; }
+.rmg-dial-allday:hover, .rmg-dial-allday.on { stroke: color-mix(in srgb, var(--accent) 75%, transparent); }
+/* 지금 바늘만 한 단계 더 또렷하게 — 눈이 먼저 닿아야 하는 하나.
+   halo 는 일정 arc 위를 지날 때 바늘이 묻히지 않도록 깔아주는 배경색 밑선. */
+.rmg-dial-hand-halo { stroke: var(--paper); stroke-width: 4; stroke-linecap: round; opacity: 0.85; }
+.rmg-dial-hand { stroke: var(--ink); stroke-width: 1.7; stroke-linecap: round; }
+.rmg-dial-hub { fill: var(--ink); }
+.rmg-dial-empty { margin: 0; font-size: 0.86rem; color: var(--faint); }
+
+/* 툴팁 — 구간 한가운데에 붙는 한 줄. 클릭하면 붙잡힌다(popover). */
+.rmg-dial-tip { position: absolute; z-index: 3; transform: translate(-50%, -50%); pointer-events: none;
+  display: flex; flex-direction: column; gap: 2px; white-space: nowrap;
+  padding: 6px var(--sp-1); border: 1px solid var(--hair); border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--surface) 96%, transparent); backdrop-filter: blur(6px);
+  box-shadow: 0 6px 18px -12px rgba(0,0,0,0.5); animation: rmg-fade 0.14s ease both; }
+.rmg-dial-tip.pinned { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.rmg-dial-tip-t { font-size: 0.8rem; font-weight: 500; color: var(--ink); }
+.rmg-dial-tip-r { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+.rmg-dial-key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
+.rmg-dial-keyrow { display: flex; align-items: baseline; gap: var(--sp-1); cursor: pointer; border-radius: var(--r-sm); padding: 2px 4px; margin: 0 -4px; transition: background 0.15s; }
+.rmg-dial-keyrow:hover, .rmg-dial-keyrow.on { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.rmg-dial-chip { flex: 0 0 auto; width: 10px; height: 10px; border-radius: 3px; background: color-mix(in srgb, var(--accent) calc(30% - var(--step) * 8%), transparent); border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent); }
+.rmg-dial-chip.pending { border-style: dashed; }
+.rmg-dial-chip.allday { border-radius: 50%; background: none; border-width: 2px; }
+.rmg-dial-keytime { font-variant-numeric: tabular-nums; font-size: 0.78rem; color: var(--muted); min-width: 3.4em; }
+.rmg-dial-keytitle { font-size: 0.86rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 타임테이블 · 시간이 아래로 흐르는 표 */
+.rmg-tt { position: relative; }
+.rmg-tt-rows { position: relative; }
+.rmg-tt-row { display: flex; align-items: flex-start; gap: 12px; height: var(--row); border-top: 1px solid var(--hair); cursor: pointer; transition: background 0.15s ease; }
+.rmg-tt-row:first-child { border-top: 0; }
+.rmg-tt-row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.rmg-tt-row.now { background: color-mix(in srgb, var(--accent) 9%, transparent); }
+.rmg-tt-hour { flex: 0 0 3.6em; padding-top: 6px; font-variant-numeric: tabular-nums; font-size: 0.76rem; color: var(--faint); user-select: none; }
+.rmg-tt-cell { flex: 1; min-width: 0; padding: 4px 8px 0 0; }
+.rmg-tt-input { width: 100%; border: 0; background: none; font: inherit; font-size: 0.86rem; color: var(--ink); outline: none; padding: 2px 0; border-bottom: 1px solid var(--accent); }
+.rmg-tt-input::placeholder { color: var(--faint); }
+.rmg-tt-blocks { position: absolute; top: 0; left: calc(3.6em + 12px); right: 0; bottom: 0; pointer-events: none; }
+.rmg-tt-block { position: absolute; left: 0; right: var(--sp-1); display: flex; align-items: center; gap: 6px; padding: 4px var(--sp-1); border-radius: var(--r-sm); overflow: hidden; pointer-events: auto; background: color-mix(in srgb, var(--accent) 16%, transparent); border: 1px solid color-mix(in srgb, var(--accent) 40%, transparent); }
+.rmg-tt-block.pending { background: color-mix(in srgb, var(--accent) 8%, transparent); border-style: dashed; }
+.rmg-tt-block-title { font-size: 0.82rem; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* Calendar · 아젠다 */
 .rmg-cal { display: flex; flex-direction: column; gap: 26px; }
@@ -1935,39 +2224,6 @@ const CSS = `
 .rmg-cal-title { flex: 1; min-width: 0; font-size: 1.02rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* Tasks · 체크리스트 */
-.rmg-task-list { list-style: none; margin: 0; padding: 0; }
-.rmg-task { display: flex; align-items: center; gap: 13px; padding: 13px 0; border-bottom: 1px solid var(--hair); }
-.rmg-task:last-child { border-bottom: 0; }
-.rmg-task-box { display: grid; place-items: center; width: 21px; height: 21px; border: 1.5px solid var(--faint); border-radius: 7px; background: none; cursor: pointer; flex-shrink: 0; transition: border-color 0.2s, background 0.2s; }
-.rmg-task-box:hover { border-color: var(--accent); }
-.rmg-task-box:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
-.rmg-task-check { width: 13px; height: 13px; stroke-width: 2.4; color: transparent; transition: color 0.2s; }
-.rmg-task-box:hover .rmg-task-check { color: var(--faint); }
-.rmg-task-title { flex: 1; min-width: 0; font-size: 1.02rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rmg-task-prio { font-size: 0.7rem; font-weight: 600; letter-spacing: 0.02em; color: var(--faint); padding: 3px 9px; border: 1px solid var(--hair); border-radius: 999px; flex-shrink: 0; }
-.rmg-task-prio.high { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
-
-/* Notes · 그리드 */
-.rmg-notes { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 14px; }
-.rmg-note { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid var(--hair); border-radius: 14px; background: color-mix(in srgb, var(--surface) 45%, transparent); min-height: 120px; transition: border-color 0.3s; }
-.rmg-note:hover { border-color: color-mix(in srgb, var(--ink) 12%, var(--hair)); }
-.rmg-note-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
-.rmg-note-title { font-size: 0.98rem; font-weight: 500; letter-spacing: -0.01em; color: var(--ink); }
-.rmg-note-body { margin: 0; flex: 1; font-size: 0.86rem; font-weight: 300; line-height: 1.55; color: var(--muted); display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.rmg-note-foot { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
-.rmg-note-tag { font-size: 0.72rem; font-weight: 400; color: var(--faint); }
-.rmg-note-act { margin-left: auto; }
-
-/* Meetings · 리스트 */
-.rmg-mtg-list { list-style: none; margin: 0; padding: 0; }
-.rmg-mtg { display: flex; flex-direction: column; gap: 10px; padding: 18px 0; border-bottom: 1px solid var(--hair); }
-.rmg-mtg:last-child { border-bottom: 0; }
-.rmg-mtg-top { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; }
-.rmg-mtg-title { font-size: 1.06rem; font-weight: 500; letter-spacing: -0.02em; color: var(--ink); }
-.rmg-mtg-time { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-size: 0.8rem; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); white-space: nowrap; }
-.rmg-mtg-people { display: flex; flex-wrap: wrap; gap: 6px; }
-.rmg-mtg-chip { font-size: 0.76rem; font-weight: 400; color: var(--muted); padding: 3px 10px; border: 1px solid var(--hair); border-radius: 999px; }
-.rmg-mtg-sum { margin: 0; font-size: 0.9rem; font-weight: 300; line-height: 1.6; color: var(--muted); }
 
 /* People · 연락처 */
 .rmg-ppl-list { list-style: none; margin: 0; padding: 0; }
@@ -1979,7 +2235,8 @@ const CSS = `
 .rmg-ppl-org { font-size: 0.8rem; font-weight: 300; color: var(--faint); }
 
 /* Workspace Status — 우상단 세로 스택(시간 · 알림 · 문 · 상태문구). 시스템 시계가 아니라 '오늘의 상태' 공간. */
-.rmg-status { position: absolute; top: 18px; right: clamp(16px, 3vw, 34px); z-index: 8; display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: 18px; pointer-events: none; }
+/* 시계·알림 — 본문 컬럼의 오른쪽 기준선에 맞춰 선다(캔버스 가장자리가 아니라). */
+.rmg-status { position: absolute; top: var(--sp-3); right: var(--edge); z-index: 8; display: flex; flex-direction: column; align-items: flex-end; text-align: right; gap: var(--sp-2); pointer-events: none; }
 .rmg-status > * { pointer-events: auto; }
 .rmg-status-time-wrap { display: flex; flex-direction: column; align-items: flex-end; line-height: 1; }
 .rmg-status-time { font-size: clamp(1.7rem, 2.4vw, 2.05rem); font-weight: 300; letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; animation: rmg-status-fade 180ms ease both; }
