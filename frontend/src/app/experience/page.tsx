@@ -98,7 +98,10 @@ export default function Opening() {
       <div className="opn-light" aria-hidden />
       <div className="opn-flash" aria-hidden />
 
-      <button type="button" className="opn-skip" onClick={cross}>건너뛰기</button>
+      <button type="button" className="opn-skip" onClick={cross} aria-label="인트로 건너뛰고 워크스페이스로 들어가기">
+        건너뛰기
+        <span className="opn-skip-ar" aria-hidden>→</span>
+      </button>
 
       <div className="opn-stage">
         <p className="opn-logo">Comein</p>
@@ -211,9 +214,23 @@ const CSS = `
 .opn.phase-auth .opn-light { opacity: 1; transform: translate(-50%, -50%) scale(1.15); }
 .opn.phase-entering .opn-light { opacity: 1; transform: translate(-50%, -50%) scale(3.4); transition: opacity 1.3s ease, transform 1.4s cubic-bezier(0.4,0,0.2,1); }
 
-.opn-skip { position: fixed; top: 28px; right: 30px; z-index: 4; background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 12px; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); transition: color 0.3s, opacity 0.6s; }
-.opn.phase-logo .opn-skip, .opn.phase-door .opn-skip { opacity: 0; pointer-events: none; }
-.opn-skip:hover { color: var(--ink); }
+/* 건너뛰기 — 인트로는 8초가 넘는다. 처음부터 '누를 수 있는 것'으로 보여야 기다릴지 넘길지 고를 수 있다.
+   (예전엔 앞 3.8초 동안 숨어 있었고, 테두리도 배경도 없어 버튼으로 읽히지 않았다.) */
+.opn-skip { position: fixed; top: 24px; right: 32px; z-index: 6;
+  display: inline-flex; align-items: center; gap: 8px; padding: 10px 18px;
+  border: 1px solid color-mix(in srgb, var(--ink) 20%, transparent); border-radius: 999px;
+  background: color-mix(in srgb, var(--ink) 7%, transparent); backdrop-filter: blur(10px);
+  cursor: pointer; font-family: inherit; font-size: 13px; font-weight: 500; letter-spacing: 0.02em;
+  color: var(--ink); opacity: 0; animation: opn-skip-in 0.7s cubic-bezier(0.22,1,0.36,1) 0.9s both;
+  transition: color 0.25s, border-color 0.25s, background 0.25s; }
+@keyframes opn-skip-in { from { opacity: 0; transform: translateY(-4px); } to { opacity: 0.72; transform: none; } }
+.opn-skip:hover { opacity: 1; border-color: color-mix(in srgb, var(--ink) 38%, transparent); background: color-mix(in srgb, var(--ink) 13%, transparent); }
+.opn-skip:focus-visible { opacity: 1; outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 3px; }
+.opn-skip-ar { font-size: 14px; line-height: 1; color: var(--muted); transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), color 0.25s; }
+.opn-skip:hover .opn-skip-ar { transform: translateX(3px); color: var(--ink); }
+/* 이미 건너뛴 뒤(전환 중)에는 물러난다 — 두 번 눌리지 않게. */
+.opn.phase-entering .opn-skip { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+@media (prefers-reduced-motion: reduce) { .opn-skip { animation: none; opacity: 0.72; } }
 
 .opn-stage { position: relative; z-index: 2; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 64px 24px; gap: 0; transition: opacity 0.9s ease; }
 .opn.phase-entering .opn-stage { opacity: 0; transform: scale(1.045); transition: opacity 1.1s ease 0.12s, transform 1.25s cubic-bezier(0.4,0,0.2,1); }
