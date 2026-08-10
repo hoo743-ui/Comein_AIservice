@@ -722,15 +722,6 @@ export default function Reimagine() {
     ? settings.textScale
     : ({ md: 1, lg: 1.12, xl: 1.24 } as Record<string, number>)[settings.textScale as string] ?? 1;
 
-  // 첫 진입 → opening 으로 리디렉트 중엔 빈 배경만 (깜빡임 없이 넘어간다)
-  if (toOpening) {
-    return (
-      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
-        <style>{CSS}</style>
-      </div>
-    );
-  }
-
   // ── 사용 가이드 여섯 걸음 ──
   // 각 단계는 진짜 화면을 짚는다. 필요한 화면으로 먼저 옮겨 두고 그 위의 요소를 가리킨다.
   const tourSteps = React.useMemo<TourStep[]>(() => {
@@ -908,6 +899,17 @@ export default function Reimagine() {
       </p>
     );
   })();
+
+  // 첫 진입 → opening 으로 리디렉트 중엔 빈 배경만 (깜빡임 없이 넘어간다).
+  // ★ 이 조기 반환은 반드시 모든 훅 아래에 둔다 — 위에 두면 렌더마다 훅 개수가 달라져
+  //   React 가 "Rendered fewer hooks than expected"(#300) 로 화면을 통째로 떨어뜨린다.
+  if (toOpening) {
+    return (
+      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
+        <style>{CSS}</style>
+      </div>
+    );
+  }
 
   // 레일 활성 인디케이터 위치 — 캘린더 패널이면 캘린더 칸, 패널 없으면 현재 뷰 칸. 설정/가이드(패널)일 땐 숨김(위치는 마지막 뷰 유지 → 튐 없이 페이드).
   const navViewIndex = NAV.findIndex((n) => n.key === view);
