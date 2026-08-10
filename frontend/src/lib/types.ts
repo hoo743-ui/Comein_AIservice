@@ -60,6 +60,44 @@ export interface ChatMessage {
   pending?: boolean;
 }
 
+// ── 일정 제안 ──────────────────────────────────────────
+// 대화에서 시간이 정해지는 길. AI 는 제안까지만 하고 확정은 사람들이 한다.
+//   대화 → 후보 시각 → 각자의 달력과 대조 → 제안 → 전원 동의 → 확정
+// 새 일정을 만들지 않는다. 서 있던 일정이 시각을 얻고 앉는다.
+
+/** 그 시간에 되는가. busy 라고만 말하고 무엇을 하는지는 말하지 않는다.
+ *  unknown 은 '한가하다'가 아니라 '알 수 없다' 다 — 달력이 비어 있는 것과 시간이 있는 건 다르다. */
+export type Availability = "available" | "busy" | "unknown";
+
+export type ProposalStatus = "proposed" | "pending" | "confirmed" | "declined" | "superseded";
+export type ProposalResponse = "pending" | "accepted" | "declined" | "alternative";
+
+export interface ScheduleProposal {
+  id: ID;
+  eventId: ID;
+  createdBy: ID;
+  title?: string;
+  start: string; // ISO
+  end: string; // ISO
+  /** AI 가 왜 이 시각을 골랐는지 한 줄. 근거 없는 제안은 사람을 설득하지 못한다. */
+  rationale?: string;
+  status: ProposalStatus;
+  /** 참여자별 응답 */
+  responses: { userId: ID; response: ProposalResponse; altStart?: string }[];
+  /** 제안된 그 시간대의 참여자별 가능 여부 */
+  availability?: { userId: ID; state: Availability }[];
+}
+
+/** suggest_slots 가 돌려주는 후보 한 칸. 사람별 바쁜 시각은 들어 있지 않다. */
+export interface SlotSuggestion {
+  start: string;
+  end: string;
+  availableCount: number;
+  totalCount: number;
+  bufferMin: number;
+  distanceMin: number;
+}
+
 export interface Todo {
   id: ID;
   title: string;

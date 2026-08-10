@@ -14,7 +14,7 @@ import { fmtTime, fmtDate } from "@/lib/format";
 import { API_BASE } from "@/lib/api";
 import { useRemoteSync, type RemoteState } from "@/lib/useRemoteSync";
 import { signInWithEmail, signInWithPassword, signInWithProvider, signOutRemote, signUpWithPassword } from "@/lib/remote";
-import type { ChatMessage, Contact, EventParticipant, Schedule, TodoPriority } from "@/lib/types";
+import type { ChatMessage, Contact, EventParticipant, Schedule, ScheduleProposal, TodoPriority } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 
 /**
@@ -622,6 +622,47 @@ export default function Reimagine() {
     try { localStorage.setItem("comein_onboarding_completed", "true"); } catch { /* 저장 못 해도 흐름은 막지 않는다 */ }
   }, []);
 
+  // ── 대화에서 시간이 정해지는 길 ──
+  const proposals = useWorkspace((s) => s.proposals);
+  const loadProposal = useWorkspace((s) => s.loadProposal);
+  const proposeTime = useWorkspace((s) => s.proposeTime);
+  const answerProposal = useWorkspace((s) => s.answerProposal);
+  const [proposalBusy, setProposalBusy] = React.useState(false);
+
+  // 일정을 열면 그 일정에 답을 기다리는 제안이 있는지 확인한다.
+  React.useEffect(() => {
+    if (openEventId) void loadProposal(openEventId);
+  }, [openEventId, loadProposal]);
+
+  /** 일정 대화에 말을 얹는다. 그 말에 시각이 들어 있으면 AI 가 후보를 내놓는다.
+   *  말은 먼저 올라가고 제안은 뒤따른다 — AI 를 기다리느라 대화가 멈추지는 않는다.
+   *  시각이 없으면 아무 일도 일어나지 않는다. 지어내서 제안하지 않는다. */
+  const sendEventMessageAndMaybePropose = React.useCallback((eventId: string, text: string) => {
+    sendEventMessage(eventId, text);
+    if (!remote.signedIn) return;
+    void (async () => {
+      try {
+        const res = await fetch(`${API_BASE}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: text }),
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        const items: unknown[] = Array.isArray(data?.items) ? data.items : [];
+        // 시각이 잡힌 것만 후보로 삼는다.
+        for (const raw of items) {
+          const p = toParsed(raw, text);
+          if (p.kind !== "일정" || !p.date) continue;
+          setProposalBusy(true);
+          await proposeTime(eventId, p.date, 60, p.title);
+          setProposalBusy(false);
+          return;
+        }
+      } catch { /* AI 가 닿지 않아도 대화는 그대로 남는다 */ }
+    })();
+  }, [sendEventMessage, proposeTime, remote.signedIn]);
+
   /** 문을 연다 — 문짝이 열리는 동안 기다렸다가 가이드를 시작한다.
    *  문과 미리보기 카드가 같은 자리를 여는 것이므로 손잡이도 하나만 둔다. */
   const openGuideDoor = React.useCallback(() => {
@@ -845,8 +886,16 @@ export default function Reimagine() {
           myName={myName}
           lang={lang}
           focusChat={chatFocus}
+          proposal={proposals[openEventData.id] ?? null}
+          proposalBusy={proposalBusy}
+          onAnswerProposal={(r) => {
+            const p = proposals[openEventData.id];
+            if (!p) return;
+            setProposalBusy(true);
+            void answerProposal(openEventData.id, p.id, r).finally(() => setProposalBusy(false));
+          }}
           onClose={closeEvent}
-          onSend={(text) => sendEventMessage(openEventData.id, text)}
+          onSend={(text) => sendEventMessageAndMaybePropose(openEventData.id, text)}
           onAddParticipant={(uid) => addParticipant(openEventData.id, uid)}
           onRemoveParticipant={(uid) => removeParticipant(openEventData.id, uid)}
           onRespond={(status) => setParticipantStatus(openEventData.id, ME_ID, status)}
@@ -2255,7 +2304,80 @@ function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, participantsO
  *  People 에서는 목록 옆 빈 자리에 그대로 눕고(inline), 그 자리가 없는 Calendar 에서는
  *  오른쪽에서 한 겹 열린다(drawer). 어느 쪽이든 내용과 규격은 같다.
  *  Slack/Discord 처럼 만들지 않는다 — 말풍선도 아바타 행렬도 없이, 한 사람의 한 마디씩만 조용히 쌓인다. */
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack }: {
+/** AI 일정 제안 — 대화에서 나온 시각을 각자의 달력과 대조해 내놓은 한 칸.
+ *  AI 는 여기까지만 한다. 확정은 사람들이 한다(전원이 동의해야 일정이 앉는다).
+ *  누가 그 시간에 바쁜지는 말하되, 무엇을 하는지는 말하지 않는다 — 서버가 아예 보내지 않는다. */
+function ProposalCard({ proposal, participants, nameOf, lang, busy, onAnswer }: {
+  proposal: ScheduleProposal;
+  participants: EventParticipant[];
+  nameOf: (userId: string) => string;
+  lang: Lang;
+  busy: boolean;
+  onAnswer: (r: "accepted" | "declined") => void;
+}) {
+  const en = lang === "en";
+  const start = new Date(proposal.start);
+  const end = new Date(proposal.end);
+  const avail = new Map(proposal.availability?.map((a) => [a.userId, a.state]));
+  const answer = new Map(proposal.responses.map((r) => [r.userId, r.response]));
+  const mine = answer.get(ME_ID) ?? "pending";
+  const waiting = participants.filter((p) => (answer.get(p.userId) ?? "pending") !== "accepted").length;
+  const freeAll = participants.every((p) => avail.get(p.userId) !== "busy");
+
+  const stateWord = (s?: string) =>
+    s === "busy" ? (en ? "Busy" : "일정 있음")
+      : s === "unknown" ? (en ? "Unknown" : "알 수 없음")
+        : (en ? "Free" : "가능");
+
+  return (
+    <section className="rmg-prop" aria-label={en ? "Suggested time" : "AI 일정 제안"}>
+      <p className="rmg-eyebrow rmg-prop-eye">{en ? "Suggested time" : "AI 일정 제안"}</p>
+
+      <p className="rmg-prop-when">
+        {fmtDate(start)} · {fmtTime(start)} – {fmtTime(end)}
+      </p>
+      {proposal.rationale && <p className="rmg-prop-why">{proposal.rationale}</p>}
+
+      {/* 사람마다 그 시간에 되는지 · 답했는지. 두 가지는 다른 이야기라 나란히 둔다. */}
+      <ul className="rmg-prop-people">
+        {participants.map((p) => {
+          const a = avail.get(p.userId);
+          const r = answer.get(p.userId) ?? "pending";
+          return (
+            <li key={p.userId} className={`rmg-prop-p ${a ?? ""}`}>
+              <span className="rmg-prop-pname">{nameOf(p.userId)}</span>
+              <span className={`rmg-prop-pav ${a ?? ""}`}>{stateWord(a)}</span>
+              <span className={`rmg-prop-pans ${r}`}>
+                {r === "accepted" ? (en ? "Agreed" : "동의")
+                  : r === "declined" ? (en ? "Declined" : "거절")
+                    : (en ? "Waiting" : "대기")}
+              </span>
+            </li>
+          );
+        })}
+      </ul>
+
+      <p className="rmg-prop-sum">
+        {freeAll
+          ? (en ? `No conflicts for ${participants.length}.` : `${participants.length}명 모두 일정 충돌 없음`)
+          : (en ? "Some have something then." : "일부는 그 시간에 일정이 있어요")}
+        {waiting > 0 && (en ? ` · waiting on ${waiting}` : ` · ${waiting}명 대기 중`)}
+      </p>
+
+      {/* 이미 답했으면 조용히 상태만 두고, 마음이 바뀌면 다시 누를 수 있게 남겨 둔다. */}
+      <div className="rmg-prop-acts">
+        <button type="button" className={`rmg-ppl-act ${mine === "accepted" ? "primary" : ""}`} disabled={busy} onClick={() => onAnswer("accepted")}>
+          {en ? "Agree" : "동의"}
+        </button>
+        <button type="button" className={`rmg-ppl-act ${mine === "declined" ? "primary" : ""}`} disabled={busy} onClick={() => onAnswer("declined")}>
+          {en ? "Another time" : "다른 시간"}
+        </button>
+      </div>
+    </section>
+  );
+}
+
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", proposal, proposalBusy, onAnswerProposal, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -2265,6 +2387,10 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   focusChat: boolean;
   /** inline = 사람 탭의 남는 오른쪽 칸에 그대로 / drawer = 오른쪽에서 한 겹 */
   variant?: "inline" | "drawer";
+  /** 이 일정에 열려 있는 AI 제안(없으면 null) */
+  proposal?: ScheduleProposal | null;
+  proposalBusy?: boolean;
+  onAnswerProposal?: (r: "accepted" | "declined") => void;
   onClose: () => void;
   onSend: (text: string) => void;
   onAddParticipant: (userId: string) => void;
@@ -2331,6 +2457,18 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           <X className="rmg-notif-ic" />
         </button>
       </div>
+
+      {/* AI 가 시간을 내놓았으면 대화보다 먼저 — 지금 답을 기다리는 건 이것이다. */}
+      {proposal && onAnswerProposal && (
+        <ProposalCard
+          proposal={proposal}
+          participants={participants}
+          nameOf={nameOf}
+          lang={lang}
+          busy={!!proposalBusy}
+          onAnswer={onAnswerProposal}
+        />
+      )}
 
       {/* 내 참석 여부 — 여럿이 모이는 자리는 '초대됐다'로 끝나면 안 되고 답이 돌아와야 한다.
           이미 답했으면 조용히 상태만 두고, 마음이 바뀌면 다시 누를 수 있게 남겨둔다. */}
@@ -4096,6 +4234,28 @@ const CSS = `
 .rmg-ppl-blank { padding: var(--sp-4) 8px; }
 .rmg-ppl-blank-t { margin: 0 0 6px; font-size: 0.98rem; font-weight: 500; color: var(--ink); }
 .rmg-ppl-blank-b { margin: 0; font-size: 0.88rem; font-weight: 400; line-height: 1.65; color: color-mix(in srgb, var(--ink) 66%, transparent); }
+
+/* ── AI 일정 제안 ──
+   대화 위에 잠깐 놓이는 한 칸. 카드처럼 띄우지 않고 이 화면의 재질로 눕힌다
+   — 여기만 다른 앱에서 온 위젯처럼 보이면 '조용히 돕는다'가 깨진다. */
+.rmg-prop { display: flex; flex-direction: column; gap: var(--sp-1);
+  padding: var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r);
+  background: color-mix(in srgb, var(--ink) 3%, transparent); }
+.rmg-prop-eye { margin: 0; }
+.rmg-prop-when { margin: 0; font-size: 1.02rem; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rmg-prop-why { margin: 0; font-size: 0.84rem; line-height: 1.6; color: color-mix(in srgb, var(--ink) 70%, transparent); }
+.rmg-prop-people { list-style: none; margin: var(--sp-1) 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+.rmg-prop-p { display: flex; align-items: baseline; gap: var(--sp-1); font-size: 0.84rem; }
+.rmg-prop-pname { color: var(--ink); min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* '되는가'와 '답했는가'는 다른 이야기라 색을 나눠 쓰지 않고 자리를 나눈다. */
+.rmg-prop-pav { margin-left: auto; font-size: 0.78rem; color: color-mix(in srgb, var(--ink) 55%, transparent); }
+.rmg-prop-pav.busy { color: color-mix(in srgb, 18 40% 46%, var(--ink) 40%); }
+.rmg-prop-pav.unknown { color: var(--faint); }
+.rmg-prop-pans { min-width: 2.6em; text-align: right; font-size: 0.78rem; color: var(--faint); }
+.rmg-prop-pans.accepted { color: color-mix(in srgb, var(--ink) 78%, transparent); }
+.rmg-prop-sum { margin: var(--sp-1) 0 0; font-size: 0.8rem; color: color-mix(in srgb, var(--ink) 62%, transparent); }
+.rmg-prop-acts { display: flex; gap: 6px; margin-top: 4px; }
+.rmg-prop-acts .rmg-ppl-act { font-size: 0.84rem; padding: 6px 14px; }
 /* 함께하는 일정 수 — 이 사람과 나의 접점. 숫자 하나면 충분하다. */
 .rmg-ppl-n { margin-left: auto; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 /* 고른 사람 — 레일과 같은 언어(뉴트럴 면 + 좌측 3px). 목록이 출렁이지 않는다. */

@@ -17,13 +17,15 @@ import type {
   Message,
   ParticipantStatus,
   Schedule,
+  ScheduleProposal,
   Todo,
   TodoStatus,
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
-  connectWith, ensureDmRoomRemote, fetchPeople, pullParticipant, pushEvent, pushMessage,
-  pushParticipant, pushParticipantStatus, remoteReady, roomIdForEvent, searchPeople,
+  connectWith, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot, openProposal,
+  pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus, remoteReady,
+  respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
 } from "@/lib/remote";
 
 // ── 유틸 ───────────────────────────────────────────────
@@ -278,6 +280,15 @@ interface WorkspaceState {
   addParticipant: (eventId: ID, userId: ID) => void;
   removeParticipant: (eventId: ID, userId: ID) => void;
   setParticipantStatus: (eventId: ID, userId: ID, status: ParticipantStatus) => void;
+
+  // 일정 제안 — 대화에서 시간이 정해지는 길
+  /** eventId → 열려 있는 제안(없으면 null). 지난 제안은 담지 않는다. */
+  proposals: Record<ID, ScheduleProposal | null>;
+  loadProposal: (eventId: ID) => Promise<void>;
+  /** 후보 시각 언저리에서 가장 나은 시간을 서버에 물어 제안을 연다.
+   *  못 찾으면 null 을 돌려준다 — 아무 때나 지어내 제안하지 않는다. */
+  proposeTime: (eventId: ID, preferred: Date, durationMin?: number, title?: string) => Promise<ScheduleProposal | null>;
+  answerProposal: (eventId: ID, proposalId: ID, response: "accepted" | "declined") => Promise<void>;
 
   // 일정 대화 — 일정 하나당 방 하나
   /** 없으면 만들고 있으면 그대로 돌려준다(중복 생성 금지). */
@@ -574,6 +585,52 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       ),
     }));
     if (remoteReady()) void pushParticipantStatus(eventId, userId, status);
+  },
+
+  // ── 일정 제안 ───────────────────────────────────────
+  proposals: {},
+
+  loadProposal: async (eventId) => {
+    if (!remoteReady()) return;
+    const p = await fetchOpenProposal(eventId);
+    set((st) => ({ proposals: { ...st.proposals, [eventId]: p } }));
+  },
+
+  proposeTime: async (eventId, preferred, durationMin = 60, title) => {
+    if (!remoteReady()) return null;
+    // 후보를 찾는 창은 그날 하루로 둔다 — 며칠씩 훑으면 '언제 바쁜지'를 넓게 되묻는 셈이 된다.
+    const dayStart = new Date(preferred); dayStart.setHours(7, 0, 0, 0);
+    const dayEnd = new Date(preferred); dayEnd.setHours(23, 0, 0, 0);
+    const slots = await suggestSlots(
+      eventId, dayStart.toISOString(), dayEnd.toISOString(), durationMin, preferred.toISOString(),
+    );
+    if (slots.length === 0) return null;
+
+    const best = slots[0];
+    // 왜 이 시각인지 한 줄로 남긴다. 근거 없는 제안은 사람을 설득하지 못한다.
+    const everyone = best.availableCount === best.totalCount;
+    const moved = Math.abs(+new Date(best.start) - +preferred) >= 60_000;
+    const why = everyone
+      ? (moved ? `${best.totalCount}명 모두 가능한 가장 가까운 시간이에요.` : `${best.totalCount}명 모두 일정 충돌이 없어요.`)
+      : `${best.totalCount}명 중 ${best.availableCount}명이 가능한 시간이에요.`;
+
+    const id = await openProposal(eventId, title ?? null, best.start, best.end, why);
+    if (!id) return null;
+    await get().loadProposal(eventId);
+    return get().proposals[eventId] ?? null;
+  },
+
+  answerProposal: async (eventId, proposalId, response) => {
+    if (!remoteReady()) return;
+    const res = await respondToProposal(proposalId, response);
+    // 전원이 동의하면 서버가 그 자리에서 일정을 앉힌다 → 달력도 다시 받아 온다.
+    if (res?.status === "confirmed") {
+      const snap = await fetchSnapshot();
+      if (snap) get().hydrateRemote(snap);
+      set((st) => ({ proposals: { ...st.proposals, [eventId]: null } }));
+      return;
+    }
+    await get().loadProposal(eventId);
   },
 
   // ── 일정 대화 — 일정 하나당 방 하나 ──────────────────

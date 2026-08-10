@@ -17,7 +17,12 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
-import { ME_ID, type ChatMessage, type ChatRoom, type Contact, type EventParticipant, type ID, type Schedule } from "@/lib/types";
+import {
+  ME_ID,
+  type Availability, type ChatMessage, type ChatRoom, type Contact, type EventParticipant,
+  type ID, type ProposalResponse, type ProposalStatus, type Schedule, type ScheduleProposal,
+  type SlotSuggestion,
+} from "@/lib/types";
 
 export type RemoteSnapshot = {
   schedules: Schedule[];
@@ -333,6 +338,104 @@ export async function disconnectFrom(peerId: ID): Promise<boolean> {
   const { error } = await sb.rpc("disconnect_from", { peer: peerId });
   if (error) { console.error("연결 해제 실패:", error.message); return false; }
   return true;
+}
+
+// ── 일정 제안 ──────────────────────────────────────────
+// 충돌 판정은 전부 서버 안에서 끝난다. 여기로 넘어오는 건 결론뿐이다 —
+// 남의 일정을 읽어야 판정할 수 있는데, 읽게 해 주면 그 순간 약속이 무너진다.
+
+/** 그 시간대에 참여자들이 되는가. 제목·장소는 서버가 아예 내보내지 않는다. */
+export async function availabilityFor(eventId: ID, start: string, end: string) {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return [];
+  const { data, error } = await sb.rpc("availability_for", { e: eventId, s: start, f: end });
+  if (error) { console.error("가용성 조회 실패:", error.message); return []; }
+  return (data ?? []).map((r: any) => ({ userId: toLocalUser(r.user_id), state: r.state as Availability }));
+}
+
+/** 쓸 만한 시간대를 서버가 골라 준다. 사람별로 언제 바쁜지는 넘어오지 않는다 —
+ *  여러 시간대를 훑어 놓고 그걸 다 받으면 남의 하루가 그대로 재구성된다. */
+export async function suggestSlots(
+  eventId: ID,
+  winStart: string,
+  winEnd: string,
+  durationMin = 60,
+  preferred?: string,
+): Promise<SlotSuggestion[]> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return [];
+  const { data, error } = await sb.rpc("suggest_slots", {
+    e: eventId, win_start: winStart, win_end: winEnd,
+    duration_min: durationMin, preferred: preferred ?? null, step_min: 30, limit_n: 5,
+  });
+  if (error) { console.error("시간 후보 실패:", error.message); return []; }
+  return (data ?? []).map((r: any): SlotSuggestion => ({
+    start: r.slot_start, end: r.slot_end,
+    availableCount: r.available_count, totalCount: r.total_count,
+    bufferMin: r.buffer_min, distanceMin: r.distance_min,
+  }));
+}
+
+export async function openProposal(eventId: ID, title: string | null, start: string, end: string, rationale?: string) {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("open_proposal", {
+    e: eventId, p_title: title, s: start, f: end, p_rationale: rationale ?? null,
+  });
+  if (error) { console.error("제안 실패:", error.message); return null; }
+  return data as string;
+}
+
+/** 답한다. 전원이 채워지면 서버가 그 자리에서 일정을 앉힌다(확정을 따로 부르지 않는다). */
+export async function respondToProposal(proposalId: ID, response: "accepted" | "declined" | "alternative", alt?: string) {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("respond_to_proposal", { p: proposalId, resp: response, alt: alt ?? null });
+  if (error) { console.error("응답 실패:", error.message); return null; }
+  const row = Array.isArray(data) ? data[0] : data;
+  return row ? { status: row.status as ProposalStatus, eventId: row.event_id as string, waiting: row.waiting as number } : null;
+}
+
+/** 이 일정에 열려 있는 제안 하나(없으면 null). 지난 제안은 가져오지 않는다. */
+export async function fetchOpenProposal(eventId: ID): Promise<ScheduleProposal | null> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return null;
+  const { data, error } = await sb
+    .from("schedule_proposals")
+    .select("*")
+    .eq("event_id", eventId)
+    .in("status", ["proposed", "pending"])
+    .maybeSingle();
+  if (error || !data) return null;
+
+  const rs = await sb.from("schedule_proposal_participants").select("*").eq("proposal_id", data.id);
+  const av = await availabilityFor(eventId, data.proposed_start_at, data.proposed_end_at);
+
+  return {
+    id: data.id,
+    eventId: data.event_id,
+    createdBy: toLocalUser(data.created_by),
+    title: data.title ?? undefined,
+    start: data.proposed_start_at,
+    end: data.proposed_end_at,
+    rationale: data.rationale ?? undefined,
+    status: data.status,
+    responses: (rs.data ?? []).map((r: any) => ({
+      userId: toLocalUser(r.user_id),
+      response: r.response as ProposalResponse,
+      altStart: r.alt_start_at ?? undefined,
+    })),
+    availability: av,
+  };
+}
+
+/** 확정된 뒤 내 개인 일정과 겹치는가 (§13). 나에 대해서만 답한다. */
+export async function myConflictsWith(eventId: ID) {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return [];
+  const { data, error } = await sb.rpc("my_conflicts_with", { e: eventId });
+  if (error) return [];
+  return (data ?? []).map((r: any) => ({ id: r.conflict_id, title: r.title as string, start: r.start_at as string, end: r.end_at as string | null }));
 }
 
 // ── 실시간 ──────────────────────────────────────────────
