@@ -5,7 +5,6 @@ export type ID = string;
 export type ScheduleStatus = "pending" | "confirmed";
 export type TodoStatus = "todo" | "doing" | "done";
 export type TodoPriority = "high" | "mid" | "low";
-export type Role = "user" | "ai";
 
 export interface Schedule {
   id: ID;
@@ -106,45 +105,9 @@ export interface Todo {
   status: TodoStatus;
 }
 
-export interface Memo {
-  id: ID;
-  title: string;
-  content: string;
-  tags: string[];
-  createdAt: string; // ISO
-}
-
-export interface Meeting {
-  id: ID;
-  title: string;
-  start: string; // ISO
-  participants: string[];
-  summary?: string;
-  actionItems?: string[];
-  notes?: string;
-}
-
-/** 채팅 메시지에 부착되는 인라인 카드(생성된 엔티티 참조) */
-export interface MessageCard {
-  kind: "schedule" | "todo" | "memo";
-  id: ID;
-}
-
-export interface Message {
-  id: ID;
-  role: Role;
-  content: string;
-  createdAt: string; // ISO
-  card?: MessageCard;
-}
-
-export interface Conversation {
-  id: ID;
-  title: string;
-  createdAt: string; // ISO
-  messages: Message[];
-  pinned?: boolean;
-}
+// 메모·회의·대화방(Conversation/Message/MessageCard/Role) 타입은 걷어냈다.
+// 뷰가 사라지면서 어떤 화면도 이 모양을 쓰지 않는다 — 쓰이지 않는 타입은
+// '앞으로 만들 것' 처럼 보여서, 없는 기능을 있는 것처럼 읽히게 한다.
 
 // ── 장소 (범용) — 좌표 있는 위치. 캠퍼스 건물/사옥/사용자 장소 모두. 스키매틱 0~100(추후 lat/lng) ──
 export type PlaceCategory = "campus" | "office" | "custom";
@@ -179,12 +142,6 @@ export interface Contact {
   connected?: boolean;
   /** 함께 있는 일정 수 */
   sharedEvents?: number;
-}
-
-export interface Connections {
-  googleCalendar: boolean;
-  googleContacts: boolean;
-  outlook: boolean;
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";

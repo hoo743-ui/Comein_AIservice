@@ -43,10 +43,6 @@ export function getSupabase(): SupabaseClient | null {
   return client;
 }
 
-/** 지금 로그인한 사람의 id. 로그인 전이면 null. */
-export async function currentUserId(): Promise<string | null> {
-  const sb = getSupabase();
-  if (!sb) return null;
-  const { data } = await sb.auth.getUser();
-  return data.user?.id ?? null;
-}
+// 여기 있던 currentUserId() 는 걷어냈다. 신원은 remote.ts 가 한 곳에서 쥔다
+// (ensureUid → getSession). 같은 것을 묻는 창구가 둘이면 한쪽은 반드시 낡는다 —
+// 실제로 getUser() 와 getSession() 이 서로 다른 답을 주는 순간이 있었다.

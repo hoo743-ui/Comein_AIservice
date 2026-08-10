@@ -39,7 +39,6 @@ type UidHolder = { [UID_KEY]?: string | null };
 const uidHolder = globalThis as unknown as UidHolder;
 const setMyUid = (v: string | null) => { uidHolder[UID_KEY] = v; };
 const myUidOf = () => uidHolder[UID_KEY] ?? null;
-export const getMyUid = () => myUidOf();
 
 /** 쓰기 직전에 세션을 확실히 올린다.
  *  모듈 변수만 믿으면, 세션이 아직 클라이언트에 올라오지 않은 채 요청이 나가
@@ -332,13 +331,9 @@ export async function connectWith(peerId: ID): Promise<boolean> {
   return true;
 }
 
-export async function disconnectFrom(peerId: ID): Promise<boolean> {
-  const sb = getSupabase();
-  if (!sb || !(await ensureUid())) return false;
-  const { error } = await sb.rpc("disconnect_from", { peer: peerId });
-  if (error) { console.error("연결 해제 실패:", error.message); return false; }
-  return true;
-}
+// 연결 해제(disconnect_from)와 확정 후 개인 일정 충돌(my_conflicts_with)은
+// DB 함수만 세워 두고 화면을 붙이지 않았다 — 쓰지 않는 래퍼는 두지 않는다.
+// 필요해지면 sb.rpc("disconnect_from" | "my_conflicts_with") 로 다시 감싸면 된다.
 
 // ── 일정 제안 ──────────────────────────────────────────
 // 충돌 판정은 전부 서버 안에서 끝난다. 여기로 넘어오는 건 결론뿐이다 —
@@ -427,15 +422,6 @@ export async function fetchOpenProposal(eventId: ID): Promise<ScheduleProposal |
     })),
     availability: av,
   };
-}
-
-/** 확정된 뒤 내 개인 일정과 겹치는가 (§13). 나에 대해서만 답한다. */
-export async function myConflictsWith(eventId: ID) {
-  const sb = getSupabase();
-  if (!sb || !myUidOf()) return [];
-  const { data, error } = await sb.rpc("my_conflicts_with", { e: eventId });
-  if (error) return [];
-  return (data ?? []).map((r: any) => ({ id: r.conflict_id, title: r.title as string, start: r.start_at as string, end: r.end_at as string | null }));
 }
 
 // ── 실시간 ──────────────────────────────────────────────

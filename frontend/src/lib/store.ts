@@ -6,15 +6,10 @@ import type {
   ChatMessage,
   ChatRoom,
   ClassEntry,
-  Connections,
   Contact,
-  Conversation,
   EventParticipant,
   Place,
   ID,
-  Meeting,
-  Memo,
-  Message,
   ParticipantStatus,
   Schedule,
   ScheduleProposal,
@@ -88,23 +83,9 @@ const seedTodos: Todo[] = [
   { id: "t5", title: "배포 스크립트 점검", priority: "mid", status: "done" },
 ];
 
-const seedMemos: Memo[] = [
-  { id: "m1", title: "온보딩 문 애니메이션", content: "문이 열리며 워크스페이스로 들어가는 연출. 브랜드 스토리와 연결.", tags: ["브랜드", "UX"], createdAt: "2026-07-07T09:00:00" },
-  { id: "m2", title: "레퍼런스 링크 모음", content: "shadcn/ui 블록, FullCalendar 예제, 라벤더 팔레트 참고.", tags: ["리서치"], createdAt: "2026-07-06T14:00:00" },
-  { id: "m3", title: "차별화 포인트", content: "대화로 입력 → AI 자동 분류·저장 → 충돌 감지·추천까지.", tags: ["기획"], createdAt: "2026-07-05T11:00:00" },
-];
-
-const seedMeetings: Meeting[] = [
-  {
-    id: "mt1",
-    title: "캡스톤 중간발표 준비",
-    start: "2026-07-09T14:00:00",
-    participants: ["나", "김교수", "팀원A", "팀원B"],
-    summary: "발표 흐름 확정, 데모 시나리오 3종 리허설. 디자인 QA는 목요일까지.",
-    actionItems: ["발표자료 초안 작성", "데모 시나리오 리허설", "디자인 QA"],
-    notes: "",
-  },
-];
+// 메모·회의 슬라이스는 걷어냈다. 뷰가 사라지면서(24_AI_PIPELINE_STATUS §9·§10.1)
+// 어떤 화면도 읽지 않게 됐고, 캡처는 memo 를 '할 일'로 접어 담는다.
+// 시드만 남으면 로그인한 계정에 지어낸 회의가 떠 있는 것처럼 보인다.
 
 // 장소 (범용 · 스키매틱 좌표 0~100). 캠퍼스 건물 + 직장인 프리셋 예시. 실제 지도 연동 시 x/y→lat/lng.
 const seedPlaces: Place[] = [
@@ -143,35 +124,10 @@ const seedParticipants: EventParticipant[] = [];
 const seedRooms: ChatRoom[] = [];
 const seedChatMessages: ChatMessage[] = [];
 
-const seedConversations: Conversation[] = [
-  {
-    id: "c1",
-    title: "교수님 미팅 일정 잡기",
-    createdAt: "2026-07-08T09:10:00",
-    messages: [
-      { id: "msg1", role: "user", content: "다음 주 화요일 3시에 교수님 미팅 잡아줘", createdAt: "2026-07-08T09:10:00" },
-      { id: "msg2", role: "ai", content: "교수님 미팅을 제안 일정으로 만들었어요. 확인해 주세요.", createdAt: "2026-07-08T09:10:05", card: { kind: "schedule", id: "s1" } },
-    ],
-  },
-];
-
-// ── 간이 인텐트 라우터 (실제 LLM 연결 전 데모) ──
-type Interpretation =
-  | { kind: "schedule"; title: string; reply: string }
-  | { kind: "todo"; title: string; reply: string }
-  | { kind: "memo"; title: string; reply: string }
-  | { kind: "chat"; reply: string };
-
-function interpret(text: string): Interpretation {
-  const t = text.trim();
-  if (/할\s*일|투두|todo|해야|마감|체크리스트/i.test(t))
-    return { kind: "todo", title: t, reply: "할 일로 정리했어요. 우선순위를 추천해 뒀습니다." };
-  if (/메모|기록|아이디어|적어|노트/i.test(t))
-    return { kind: "memo", title: t.slice(0, 24), reply: "메모로 저장하고 태그를 자동으로 붙였어요." };
-  if (/일정|약속|스케줄|잡아|미팅|회의|시에|오후|오전|내일|다음\s*주|모레/i.test(t))
-    return { kind: "schedule", title: t, reply: "제안 일정으로 만들었어요. 겹치는 일정이 없는지 확인했습니다." };
-  return { kind: "chat", reply: "네, 말씀하신 내용을 워크스페이스에 반영할 수 있어요. 일정·메모·할 일 무엇이든 편하게 말씀해 주세요." };
-}
+// 대화방(conversations)과 간이 인텐트 라우터 interpret() 는 걷어냈다.
+// 정규식으로 "일정|메모|할 일" 을 갈라 놓고 "우선순위를 추천해 뒀습니다" 라고 말하던
+// 가짜 AI 였고, 지금은 캡처바가 진짜 AI(/api/chat)를 부른다. 화면도 이 대화방을
+// 그리지 않는다 — 남겨 두면 '있는 것처럼 보이는' 코드가 된다.
 
 // ── 설정 ──
 export type Language = "ko" | "en";
@@ -193,22 +149,17 @@ export interface Settings {
 
 // ── 스토어 ─────────────────────────────────────────────
 interface WorkspaceState {
-  conversations: Conversation[];
-  activeConversationId: ID | null;
   schedules: Schedule[];
+  /** 아직 서버에 자리가 없다 — 캡처한 할 일은 지금 어디에도 저장되지 않는다.
+   *  '오늘'의 할 일 수만 이 값을 읽는다. todos 테이블이 생기면 그때 이어진다. */
   todos: Todo[];
-  memos: Memo[];
-  meetings: Meeting[];
   places: Place[];
   timetable: ClassEntry[];
   contacts: Contact[];
   eventParticipants: EventParticipant[];
   chatRooms: ChatRoom[];
   chatMessages: ChatMessage[];
-  connections: Connections;
   settings: Settings;
-  commandOpen: boolean;
-  dismissedNotifs: ID[];
   seedsRebased: boolean;
   /** Supabase 에 붙어 있는가. 붙으면 시드 데모 데이터를 걷어내고 서버의 것만 본다. */
   remoteLive: boolean;
@@ -239,20 +190,8 @@ interface WorkspaceState {
   bumpUnread: (roomId: ID) => void;
   markRoomRead: (roomId: ID) => void;
 
-  // Chat
-  newConversation: () => ID;
-  setActiveConversation: (id: ID) => void;
-  sendMessage: (text: string) => void;
-  togglePin: (id: ID) => void;
-
   // Schedule
   addSchedule: (s: Omit<Schedule, "id">) => ID;
-  updateSchedule: (id: ID, patch: Partial<Schedule>) => void;
-  removeSchedule: (id: ID) => void;
-  /** 일정과 함께 참여자·대화방·메시지까지 지운다(고아 데이터 방지). */
-  removeScheduleCascade: (id: ID) => void;
-  confirmSchedule: (id: ID) => void;
-  conflictsFor: (id: ID) => Schedule[];
 
   // Todo
   addTodo: (t: Omit<Todo, "id">) => void;
@@ -260,22 +199,10 @@ interface WorkspaceState {
   moveTodo: (id: ID, status: TodoStatus) => void;
   removeTodo: (id: ID) => void;
 
-  // Memo
-  addMemo: (m: Omit<Memo, "id" | "createdAt">) => void;
-  updateMemo: (id: ID, patch: Partial<Memo>) => void;
-  removeMemo: (id: ID) => void;
-
-  // Meeting
-  addMeeting: (m: Omit<Meeting, "id">) => void;
-  removeMeeting: (id: ID) => void;
-
   // 공유 일정 · 참여자 — 하나의 일정을 여럿이 같은 id 로 바라본다
   participantsOf: (eventId: ID) => EventParticipant[];
-  /** 내가 참여한 일정만. Supabase 전환 시 current_user → event_participants → events 질의로 대체된다. */
-  myEvents: () => Schedule[];
   /** 그 사람과 내가 함께 있는 일정 — People 화면의 '공유 일정'. */
   sharedEventsWith: (userId: ID) => Schedule[];
-  isShared: (eventId: ID) => boolean;
   /** 같은 사람을 두 번 초대해도 한 줄만 남는다(멱등). 참여자가 되면 대화방 멤버도 된다. */
   addParticipant: (eventId: ID, userId: ID) => void;
   removeParticipant: (eventId: ID, userId: ID) => void;
@@ -298,42 +225,22 @@ interface WorkspaceState {
 
   // 사람과의 1:1 대화 — 일정에 매이지 않는 방. 상대 한 명당 하나(멱등).
   ensureDirectRoom: (peerId: ID) => ID;
-  directMessagesOf: (peerId: ID) => ChatMessage[];
   sendDirectMessage: (peerId: ID, content: string) => void;
 
   // Settings
   updateSettings: (patch: Partial<Settings>) => void;
-
-  // Command palette
-  setCommandOpen: (v: boolean) => void;
-
-  // Notifications (닫은 알림 id 기억 — 세션 내 유지)
-  dismissNotif: (id: ID) => void;
-  dismissNotifs: (ids: ID[]) => void;
-
-  // Connections
-  toggleConnection: (key: keyof Connections) => void;
-  setConnection: (key: keyof Connections, value: boolean) => void;
-  addContact: (c: Omit<Contact, "id">) => void;
 }
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
-  conversations: seedConversations,
-  activeConversationId: "c1",
   schedules: seedSchedules,
   todos: seedTodos,
-  memos: seedMemos,
-  meetings: seedMeetings,
   places: seedPlaces,
   timetable: seedTimetable,
   contacts: seedContacts,
   eventParticipants: seedParticipants,
   chatRooms: seedRooms,
   chatMessages: seedChatMessages,
-  connections: { googleCalendar: true, googleContacts: true, outlook: false },
   settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: 1 },
-  commandOpen: false,
-  dismissedNotifs: [],
   seedsRebased: false,
   remoteLive: false,
 
@@ -345,14 +252,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       eventParticipants: snap.eventParticipants,
       chatRooms: snap.chatRooms,
       chatMessages: snap.chatMessages,
-      // 데모용으로 깔아 둔 것들은 물러난다 — 로그인한 계정에 지어낸 사람과
-      // 지어낸 회의가 남아 있으면 그게 진짜 데이터인 줄 알게 된다.
+      // 데모용으로 깔아 둔 것들은 물러난다 — 로그인한 계정에 지어낸 데이터가
+      // 남아 있으면 그게 진짜인 줄 알게 된다.
       // 사람만은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
       contacts: snap.contacts ?? [],
-      meetings: [],
       todos: [],
-      memos: [],
-      conversations: [],
     }),
 
   refreshPeople: async () => {
@@ -396,81 +300,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         end: s.end ? shiftISO(s.end, days) : s.end,
       })),
       todos: st.todos.map((t) => (t.due ? { ...t, due: shiftISO(t.due, days) } : t)),
-      memos: st.memos.map((m) => ({ ...m, createdAt: shiftISO(m.createdAt, days) })),
-      meetings: st.meetings.map((m) => ({ ...m, start: shiftISO(m.start, days) })),
       contacts: st.contacts.map((c) => (c.lastMet ? { ...c, lastMet: shiftISO(c.lastMet, days) } : c)),
       chatMessages: st.chatMessages.map((m) => ({ ...m, createdAt: shiftISO(m.createdAt, days) })),
-      conversations: st.conversations.map((c) => ({
-        ...c,
-        createdAt: shiftISO(c.createdAt, days),
-        messages: c.messages.map((msg) => ({ ...msg, createdAt: shiftISO(msg.createdAt, days) })),
-      })),
-    }));
-  },
-
-  newConversation: () => {
-    const id = uid();
-    const conv: Conversation = { id, title: "새 대화", createdAt: nowISO(), messages: [] };
-    set((st) => ({ conversations: [conv, ...st.conversations], activeConversationId: id }));
-    return id;
-  },
-
-  setActiveConversation: (id) => set({ activeConversationId: id }),
-
-  togglePin: (id) =>
-    set((st) => ({
-      conversations: st.conversations.map((c) => (c.id === id ? { ...c, pinned: !c.pinned } : c)),
-    })),
-
-  sendMessage: (text) => {
-    const content = text.trim();
-    if (!content) return;
-    const st = get();
-    let convId = st.activeConversationId;
-    // 활성 대화 없으면 생성
-    if (!convId || !st.conversations.find((c) => c.id === convId)) {
-      convId = get().newConversation();
-    }
-    const userMsg: Message = { id: uid(), role: "user", content, createdAt: nowISO() };
-
-    const res = interpret(content);
-    let card: Message["card"];
-
-    if (res.kind === "schedule") {
-      const start = new Date();
-      start.setDate(start.getDate() + 1);
-      start.setHours(15, 0, 0, 0);
-      const id = get().addSchedule({
-        title: res.title,
-        start: start.toISOString(),
-        end: new Date(+start + 60 * 60 * 1000).toISOString(),
-        status: get().settings.autoConfirm ? "confirmed" : "pending",
-      });
-      card = { kind: "schedule", id };
-    } else if (res.kind === "todo") {
-      const id = uid();
-      set((s) => ({ todos: [{ id, title: res.title, priority: "mid", status: "todo" }, ...s.todos] }));
-      card = { kind: "todo", id };
-    } else if (res.kind === "memo") {
-      const id = uid();
-      set((s) => ({
-        memos: [{ id, title: res.title || "메모", content, tags: ["AI"], createdAt: nowISO() }, ...s.memos],
-      }));
-      card = { kind: "memo", id };
-    }
-
-    const aiMsg: Message = { id: uid(), role: "ai", content: res.reply, createdAt: nowISO(), card };
-
-    set((s) => ({
-      conversations: s.conversations.map((c) =>
-        c.id === convId
-          ? {
-              ...c,
-              title: c.messages.length === 0 ? content.slice(0, 20) : c.title,
-              messages: [...c.messages, userMsg, aiMsg],
-            }
-          : c
-      ),
     }));
   },
 
@@ -497,29 +328,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     return id;
   },
-  removeScheduleCascade: (id) =>
-    // 일정이 사라지면 그 일정에 매인 참여자·대화방·메시지도 함께 사라진다(고아 데이터를 남기지 않는다).
-    set((st) => {
-      const room = st.chatRooms.find((r) => r.eventId === id);
-      return {
-        schedules: st.schedules.filter((s) => s.id !== id),
-        eventParticipants: st.eventParticipants.filter((p) => p.eventId !== id),
-        chatRooms: st.chatRooms.filter((r) => r.eventId !== id),
-        chatMessages: room ? st.chatMessages.filter((m) => m.roomId !== room.id) : st.chatMessages,
-      };
-    }),
-  updateSchedule: (id, patch) =>
-    set((st) => ({ schedules: st.schedules.map((s) => (s.id === id ? { ...s, ...patch } : s)) })),
-  removeSchedule: (id) => set((st) => ({ schedules: st.schedules.filter((s) => s.id !== id) })),
-  confirmSchedule: (id) =>
-    set((st) => ({ schedules: st.schedules.map((s) => (s.id === id ? { ...s, status: "confirmed" } : s)) })),
-  conflictsFor: (id) => {
-    const st = get();
-    const target = st.schedules.find((s) => s.id === id);
-    if (!target) return [];
-    return st.schedules.filter((s) => s.id !== id && overlaps(s, target));
-  },
-
   addTodo: (t) => set((st) => ({ todos: [{ ...t, id: uid() }, ...st.todos] })),
   updateTodo: (id, patch) =>
     set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
@@ -527,27 +335,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, status } : t)) })),
   removeTodo: (id) => set((st) => ({ todos: st.todos.filter((t) => t.id !== id) })),
 
-  addMemo: (m) => set((st) => ({ memos: [{ ...m, id: uid(), createdAt: nowISO() }, ...st.memos] })),
-  updateMemo: (id, patch) =>
-    set((st) => ({ memos: st.memos.map((m) => (m.id === id ? { ...m, ...patch } : m)) })),
-  removeMemo: (id) => set((st) => ({ memos: st.memos.filter((m) => m.id !== id) })),
-
-  addMeeting: (m) => set((st) => ({ meetings: [{ ...m, id: uid() }, ...st.meetings] })),
-  removeMeeting: (id) => set((st) => ({ meetings: st.meetings.filter((m) => m.id !== id) })),
-
   // ── 공유 일정 · 참여자 ──────────────────────────────
   participantsOf: (eventId) => get().eventParticipants.filter((p) => p.eventId === eventId),
-
-  isShared: (eventId) => get().eventParticipants.filter((p) => p.eventId === eventId).length > 1,
-
-  myEvents: () => {
-    const st = get();
-    // 내가 참여자로 들어간 일정 + 참여자 관계가 아예 없는 개인 일정.
-    // (참여자 표가 있는 일정인데 내가 없다면 그건 남의 일정이라 보이지 않아야 한다.)
-    const mine = new Set(st.eventParticipants.filter((p) => p.userId === ME_ID).map((p) => p.eventId));
-    const shared = new Set(st.eventParticipants.map((p) => p.eventId));
-    return st.schedules.filter((s) => mine.has(s.id) || !shared.has(s.id));
-  },
 
   sharedEventsWith: (userId) => {
     const st = get();
@@ -679,14 +468,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     return id;
   },
 
-  directMessagesOf: (peerId) => {
-    const room = get().chatRooms.find((r) => r.peerId === peerId);
-    if (!room) return [];
-    return get()
-      .chatMessages.filter((m) => m.roomId === room.id)
-      .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-  },
-
   sendDirectMessage: (peerId, content) => {
     const text = content.trim();
     if (!text) return;
@@ -707,23 +488,16 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
-
-  setCommandOpen: (v) => set({ commandOpen: v }),
-
-  dismissNotif: (id) =>
-    set((st) =>
-      st.dismissedNotifs.includes(id)
-        ? st
-        : { dismissedNotifs: [...st.dismissedNotifs, id] }
-    ),
-  dismissNotifs: (ids) =>
-    set((st) => ({
-      dismissedNotifs: [...new Set([...st.dismissedNotifs, ...ids])],
-    })),
-
-  toggleConnection: (key) =>
-    set((st) => ({ connections: { ...st.connections, [key]: !st.connections[key] } })),
-  setConnection: (key, value) =>
-    set((st) => ({ connections: { ...st.connections, [key]: value } })),
-  addContact: (c) => set((st) => ({ contacts: [{ ...c, id: uid() }, ...st.contacts] })),
 }));
+
+// 함께 걷어낸 것들 —
+//   commandOpen / setCommandOpen      커맨드 팔레트가 없다
+//   dismissNotif(s) / dismissedNotifs 알림 벨을 없앨 때(§10.1) 함께 죽었다
+//   connections / toggle·setConnection  구글·아웃룩 토글 화면이 없다
+//   addContact                        사람은 이제 Comein 계정 검색으로만 들어온다
+//   memos / meetings                  뷰가 사라졌다(§9·§10.1)
+//   conversations / sendMessage       가짜 AI 대화방. 캡처바가 대신한다
+//   updateSchedule / removeSchedule / removeScheduleCascade / confirmSchedule /
+//   conflictsFor / overlaps / isShared / myEvents / directMessagesOf
+//                                     한 곳에서도 부르지 않았다
+// 되살릴 일이 생기면 git 이 기억하고 있다.

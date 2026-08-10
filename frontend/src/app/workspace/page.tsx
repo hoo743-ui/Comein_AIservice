@@ -1881,6 +1881,10 @@ function Feature(props: {
   query: string;
   onQuery: (v: string) => void;
   onNewRoom: () => void;
+  /** 사람 찾기·잇기 · 읽지 않은 말 — People 로 그대로 흘려보낸다. */
+  onFind: (q: string) => Promise<Contact[]>;
+  onConnect: (peerId: string) => Promise<boolean>;
+  unreadOf: (personId: string) => number;
 }) {
   const { view, receipts } = props;
   const mine = receipts.filter((r) => r.destView === view);
