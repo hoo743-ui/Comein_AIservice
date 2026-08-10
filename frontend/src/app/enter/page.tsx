@@ -3,6 +3,8 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { refreshSession, signInWithProvider } from "@/lib/remote";
+
 /**
  * Comein · Entrance — 로그인 페이지가 아니라 "워크스페이스로 들어오는 순간".
  * Sign in / Sign up 구분 없음. 소셜(Continue with …)이 유일한 주 인터랙션.
@@ -12,43 +14,52 @@ import { useRouter } from "next/navigation";
  * 미니멀 타이포 · 큰 여백 · 은은한 모노크롬 배경. (DESIGN.md)
  */
 
-type Provider = "google" | "apple" | "microsoft";
+type Provider = "github" | "kakao";
 type Phase = "idle" | "connecting" | "welcome" | "error";
 
 const PROVIDERS: { key: Provider; label: string }[] = [
-  { key: "google", label: "Google" },
-  { key: "apple", label: "Apple" },
-  { key: "microsoft", label: "Microsoft" },
+  { key: "github", label: "GitHub" },
+  { key: "kakao", label: "카카오" },
 ];
 
 export default function Enter() {
   const router = useRouter();
   const [phase, setPhase] = React.useState<Phase>("idle");
   const [active, setActive] = React.useState<Provider | null>(null);
+  const [errMsg, setErrMsg] = React.useState<string | null>(null);
   const timers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
 
   React.useEffect(() => () => timers.current.forEach(clearTimeout), []);
 
-  const enter = (p: Provider) => {
+  // 이미 들어와 있는 사람은 문 앞에 다시 세우지 않는다.
+  React.useEffect(() => {
+    void (async () => {
+      const uid = await refreshSession();
+      if (uid) router.replace("/workspace");
+    })();
+  }, [router]);
+
+  const enter = async (p: Provider) => {
     if (phase === "connecting" || phase === "welcome") return;
     setActive(p);
     setPhase("connecting");
-    // 프로토타입: 실제 OAuth 대신 연결→환영→입장. (실연동 시 실패는 setPhase("error"))
-    timers.current.push(
-      setTimeout(() => {
-        setPhase("welcome");
-        try {
-          // 이 순간이 곧 '문턱' — 워크스페이스는 threshold를 다시 재생하지 않는다.
-          sessionStorage.setItem("comein:reimagine", "1");
-        } catch {}
-        timers.current.push(setTimeout(() => router.push("/workspace"), 1100));
-      }, 1050)
-    );
+    try {
+      // 이 순간이 곧 '문턱' — 돌아왔을 때 워크스페이스가 threshold 를 다시 재생하지 않게.
+      try { sessionStorage.setItem("comein:reimagine", "1"); } catch {}
+      // 돌아올 자리는 지금 이 주소를 기준으로 잡는다 — 로컬이든 배포든 같은 코드로 동작한다.
+      const { error } = await signInWithProvider(p, `${window.location.origin}/workspace`);
+      if (error) throw error;
+      // 여기서 브라우저가 제공자 화면으로 넘어간다. 아래 줄은 대개 실행되지 않는다.
+    } catch (e: any) {
+      setErrMsg(e?.message ?? null);
+      setPhase("error");
+    }
   };
 
   const retry = () => {
     setPhase("idle");
     setActive(null);
+    setErrMsg(null);
   };
 
   const activeLabel = PROVIDERS.find((p) => p.key === active)?.label ?? "";
@@ -102,9 +113,14 @@ export default function Enter() {
               })}
             </div>
 
+            {/* 소셜이 막혀 있을 때 들어올 다른 길 — 이메일·비밀번호 카드는 /experience 가 갖고 있다. */}
+            <button type="button" className="ent-swap ent-tomail" onClick={() => router.push("/experience")}>
+              이메일로 계속하기
+            </button>
+
             {phase === "error" ? (
               <div className="ent-error" role="alert">
-                <span>{activeLabel} 연결에 문제가 생겼어요.</span>
+                <span>{active ? `${activeLabel} 연결에 문제가 생겼어요.` : "들어가지 못했어요."}{errMsg ? ` (${errMsg})` : ""}</span>
                 <button type="button" onClick={retry} className="ent-retry">
                   다시 시도
                 </button>
@@ -138,28 +154,22 @@ function DoorMark({ className, open = false }: { className?: string; open?: bool
 }
 
 function ProviderGlyph({ provider }: { provider: Provider }) {
-  if (provider === "apple") {
+  if (provider === "kakao") {
+    // 말풍선 — 카카오의 형태만 단색으로. 브랜드 노랑을 이 화면에 들이지 않는다.
     return (
       <svg className="ent-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <path d="M16.365 1.43c0 1.14-.49 2.27-1.18 3.08-.74.9-1.98 1.57-2.98 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.57-2.27 1.2-2.98.8-.94 2.14-1.64 3.25-1.68.03.13.05.28.05.43zM20.93 17.14c-.03.09-.46 1.6-1.53 3.16-.95 1.35-1.94 2.7-3.5 2.7s-1.96-.9-3.76-.9c-1.76 0-2.4.93-3.83.93-1.44 0-2.53-1.25-3.53-2.6-1.4-1.94-2.53-4.96-2.53-7.82 0-4.6 2.99-7.04 5.93-7.04 1.56 0 2.87.98 3.86.98.95 0 2.41-1.04 4.18-1.04.68 0 3.11.06 4.75 2.4-.14.09-2.63 1.55-2.6 4.68.03 3.74 3.27 4.99 3.31 5.01z" />
+        <path d="M12 3C6.9 3 2.8 6.3 2.8 10.3c0 2.6 1.7 4.9 4.3 6.2l-1.1 4c-.1.3.3.6.6.4l4.7-3.1c.2 0 .5.1.7.1 5.1 0 9.2-3.3 9.2-7.6S17.1 3 12 3z" />
       </svg>
     );
   }
-  if (provider === "microsoft") {
+  if (provider === "github") {
     return (
       <svg className="ent-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-        <rect x="2" y="2" width="9" height="9" />
-        <rect x="13" y="2" width="9" height="9" opacity="0.72" />
-        <rect x="2" y="13" width="9" height="9" opacity="0.72" />
-        <rect x="13" y="13" width="9" height="9" opacity="0.5" />
+        <path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.77c-2.92.64-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.61 1.09 1.61 1.09.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.09-2.83-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.89 1.08a10 10 0 0 1 5.26 0c2-1.36 2.89-1.08 2.89-1.08.57 1.45.21 2.52.1 2.79.68.74 1.09 1.68 1.09 2.83 0 4.04-2.46 4.93-4.8 5.19.38.33.71.97.71 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z" />
       </svg>
     );
   }
-  return (
-    <svg className="ent-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
-      <path d="M12 11v2.6h5.9c-.24 1.5-1.75 4.1-5.9 4.1-3.55 0-6.45-2.94-6.45-6.55S8.45 4.7 12 4.7c2.02 0 3.38.86 4.16 1.6l2.84-2.74C17.17 1.9 14.83 1 12 1 6.48 1 2 5.48 2 11s4.48 10 10 10c5.77 0 9.6-4.06 9.6-9.77 0-.66-.07-1.16-.16-1.66H12z" />
-    </svg>
-  );
+  return null;
 }
 
 const CSS = `
@@ -228,6 +238,10 @@ const CSS = `
 /* 로딩 스피너 — 상태 전달용(장식 아님) */
 .ent-spin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid color-mix(in srgb, var(--accent) 22%, transparent); border-top-color: var(--accent); animation: ent-spin 0.7s linear infinite; }
 @keyframes ent-spin { to { transform: rotate(360deg); } }
+
+/* 이메일로 가는 길 — 소셜 아래 한 줄. 카드는 /experience 가 갖고 있다. */
+.ent-swap { margin-top: 14px; border: 0; background: none; font: inherit; font-size: 12px; color: var(--muted); cursor: pointer; padding: 8px; border-radius: 8px; transition: color 0.2s; animation: ent-rise 0.9s cubic-bezier(0.22,1,0.36,1) 0.55s both; }
+.ent-swap:hover { color: var(--ink); }
 
 .ent-legal { margin: 30px 0 0; font-size: 11px; font-weight: 400; line-height: 1.6; color: var(--faint); animation: ent-rise 0.9s cubic-bezier(0.22,1,0.36,1) 0.7s both; }
 .ent-legal u { text-decoration-color: var(--hair); text-underline-offset: 2px; cursor: pointer; }

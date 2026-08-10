@@ -77,6 +77,38 @@ export function chat(req: ChatRequest): Promise<ChatResponse> {
   });
 }
 
+/** 데모 사용자 id — 인증(JWT/Supabase Auth) 붙기 전 임시.
+ *  최초 1회 GET /api/users/demo(get-or-create)로 받아 캐시한다. 실패하면 캐시를 비워 다음에 재시도. */
+let demoUserIdCache: Promise<string> | null = null;
+export function getDemoUserId(): Promise<string> {
+  if (!demoUserIdCache) {
+    demoUserIdCache = request<{ id: string }>("/api/users/demo").then((u) => u.id);
+    demoUserIdCache.catch(() => {
+      demoUserIdCache = null;
+    });
+  }
+  return demoUserIdCache;
+}
+
+/** POST /api/items 로 저장된 엔티티 1건. */
+export interface SavedItem {
+  category: string;
+  id: string;
+  title?: string | null;
+}
+
+/** 파싱 결과(ParsedItem[])를 Supabase에 저장한다.
+ *  `/api/chat` 응답의 items 는 이미 ParsedItem 형태라 그대로 넘기면 된다. */
+export async function saveItems(items: unknown[]): Promise<SavedItem[]> {
+  if (!items.length) return [];
+  const user_id = await getDemoUserId();
+  const res = await request<{ results: SavedItem[] }>("/api/items", {
+    method: "POST",
+    body: JSON.stringify({ user_id, items }),
+  });
+  return res.results;
+}
+
 // ────────────────────────────────────────────────────────────
 // 목표 계약 (docs/10_API.md) — 백엔드 미구현. 경로 생기면 TODO 해제.
 // ────────────────────────────────────────────────────────────
