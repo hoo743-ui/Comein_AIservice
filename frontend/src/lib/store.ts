@@ -3,19 +3,28 @@
 import { create } from "zustand";
 
 import type {
+  ChatMessage,
+  ChatRoom,
   ClassEntry,
   Connections,
   Contact,
   Conversation,
+  EventParticipant,
   Place,
   ID,
   Meeting,
   Memo,
   Message,
+  ParticipantStatus,
   Schedule,
   Todo,
   TodoStatus,
 } from "@/lib/types";
+import { ME_ID } from "@/lib/types";
+import {
+  ensureDmRoomRemote, pullParticipant, pushEvent, pushMessage,
+  pushParticipant, pushParticipantStatus, remoteReady, roomIdForEvent,
+} from "@/lib/remote";
 
 // ── 유틸 ───────────────────────────────────────────────
 const uid = (): ID =>
@@ -33,6 +42,33 @@ export function overlaps(a: Schedule, b: Schedule): boolean {
   const bEnd = b.end ? +new Date(b.end) : bStart + 60 * 60 * 1000;
   return aStart < bEnd && bStart < aEnd;
 }
+
+// ── 시드 날짜 기준점 ──
+// 시드는 고정 ISO 로 둔다 — 모듈이 읽히는 시점에 new Date() 를 쓰면 서버와 브라우저가
+// 서로 다른 값을 만들어 하이드레이션이 깨진다. 대신 화면이 뜬 뒤 rebaseSeeds() 로
+// 이 기준일과 오늘의 차이만큼 한 번 밀어준다 → 데모가 늘 '오늘'을 중심으로 보인다.
+const SEED_ANCHOR = "2026-07-08"; // 시드에서 '오늘'에 해당하던 날
+
+const pad2 = (n: number) => String(n).padStart(2, "0");
+
+/** 로컬 시각 표기("YYYY-MM-DD" 또는 "YYYY-MM-DDTHH:mm:ss")를 days 만큼 민다.
+ *  toISOString() 을 쓰지 않는다 — UTC 로 바뀌면서 시각이 실제로 어긋난다. */
+function shiftISO(iso: string, days: number): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:T(\d{2}):(\d{2}):(\d{2}))?/.exec(iso);
+  if (!m) return iso;
+  const [, y, mo, da, hh, mi, ss] = m;
+  const d = new Date(Number(y), Number(mo) - 1, Number(da) + days, Number(hh ?? 0), Number(mi ?? 0), Number(ss ?? 0));
+  const ymd = `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+  return hh === undefined ? ymd : `${ymd}T${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+}
+
+const daysBetween = (fromISO: string, to: Date): number => {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(fromISO);
+  if (!m) return 0;
+  const from = Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3]));
+  const till = Date.UTC(to.getFullYear(), to.getMonth(), to.getDate());
+  return Math.round((till - from) / 86_400_000);
+};
 
 // ── 시드 데이터 (백엔드 연결 전 데모용, 고정 ISO로 SSR 안전) ──
 const seedSchedules: Schedule[] = [
@@ -94,14 +130,16 @@ const seedTimetable: ClassEntry[] = [
   { id: "c_8", course: "영어회화", day: "fri", start: "10:00", end: "11:30", buildingId: "b_lib", room: "3F" },
 ];
 
-// 연락처 (데모 · 구글/아웃룩에서 가져온 것처럼)
-const seedContacts: Contact[] = [
-  { id: "ct1", name: "김교수", org: "가천대 AI학과", email: "prof.kim@gachon.ac.kr", phone: "010-1234-5678", source: "google", lastMet: "2026-07-01T15:00:00" },
-  { id: "ct2", name: "이하늘", org: "캡스톤 팀", email: "haneul@example.com", phone: "010-2222-3333", source: "google", lastMet: "2026-07-05T13:00:00" },
-  { id: "ct3", name: "박지원", org: "거래처 · ACME", email: "jiwon@acme.co", phone: "010-4444-5555", source: "outlook", lastMet: "2026-06-28T10:00:00" },
-  { id: "ct4", name: "최민석", org: "알고리즘 스터디", email: "minseok@example.com", source: "google" },
-  { id: "ct5", name: "정예린", org: "동아리", phone: "010-7777-8888", source: "manual" },
-];
+// 연락처 — 비워 둔다.
+// 사람은 지어낼 수 없다. 실제로 가입한 상대만 여기 들어온다(그 전까지 '사람' 탭은 비어 있는 게 정직하다).
+const seedContacts: Contact[] = [];
+
+// ── 공유 일정 ──
+// 참여자·대화방·메시지는 지어내지 않는다. 지어낸 사람과 지어낸 대화는
+// 로그인한 뒤에도 남아 진짜 데이터인 척하게 된다.
+const seedParticipants: EventParticipant[] = [];
+const seedRooms: ChatRoom[] = [];
+const seedChatMessages: ChatMessage[] = [];
 
 const seedConversations: Conversation[] = [
   {
@@ -136,7 +174,10 @@ function interpret(text: string): Interpretation {
 // ── 설정 ──
 export type Language = "ko" | "en";
 export type Mode = "student" | "office" | "general";
-export type TextScale = "md" | "lg" | "xl"; // 글자 크기 — 보통 · 크게 · 더 크게
+/** 글자 크기 배율. 칸이 아니라 연속값 — 사람마다 편한 크기가 세 칸에 딱 떨어지지 않는다. */
+export type TextScale = number;
+export const TEXT_SCALE_MIN = 0.9;
+export const TEXT_SCALE_MAX = 1.4;
 
 export interface Settings {
   name: string;
@@ -159,10 +200,35 @@ interface WorkspaceState {
   places: Place[];
   timetable: ClassEntry[];
   contacts: Contact[];
+  eventParticipants: EventParticipant[];
+  chatRooms: ChatRoom[];
+  chatMessages: ChatMessage[];
   connections: Connections;
   settings: Settings;
   commandOpen: boolean;
   dismissedNotifs: ID[];
+  seedsRebased: boolean;
+  /** Supabase 에 붙어 있는가. 붙으면 시드 데모 데이터를 걷어내고 서버의 것만 본다. */
+  remoteLive: boolean;
+
+  /** 시드 날짜를 오늘 기준으로 한 번만 옮긴다(화면이 뜬 뒤 호출). 두 번 불러도 안전하다. */
+  rebaseSeeds: (today: Date) => void;
+
+  /** 서버에서 받아온 것으로 갈아끼운다. 로그인하면 데모 시드는 물러난다. */
+  hydrateRemote: (snap: {
+    schedules: Schedule[];
+    eventParticipants: EventParticipant[];
+    chatRooms: ChatRoom[];
+    chatMessages: ChatMessage[];
+  }) => void;
+  /** Realtime 으로 들어온 메시지 한 건. 같은 id 가 이미 있으면 무시한다
+   *  (내가 보낸 낙관적 메시지와 서버가 돌려준 것이 겹쳐 두 번 보이지 않게). */
+  applyRemoteMessage: (m: ChatMessage) => void;
+
+  // 읽지 않은 말 — 방마다 몇 개가 쌓였는가.
+  unread: Record<ID, number>;
+  bumpUnread: (roomId: ID) => void;
+  markRoomRead: (roomId: ID) => void;
 
   // Chat
   newConversation: () => ID;
@@ -174,6 +240,8 @@ interface WorkspaceState {
   addSchedule: (s: Omit<Schedule, "id">) => ID;
   updateSchedule: (id: ID, patch: Partial<Schedule>) => void;
   removeSchedule: (id: ID) => void;
+  /** 일정과 함께 참여자·대화방·메시지까지 지운다(고아 데이터 방지). */
+  removeScheduleCascade: (id: ID) => void;
   confirmSchedule: (id: ID) => void;
   conflictsFor: (id: ID) => Schedule[];
 
@@ -191,6 +259,29 @@ interface WorkspaceState {
   // Meeting
   addMeeting: (m: Omit<Meeting, "id">) => void;
   removeMeeting: (id: ID) => void;
+
+  // 공유 일정 · 참여자 — 하나의 일정을 여럿이 같은 id 로 바라본다
+  participantsOf: (eventId: ID) => EventParticipant[];
+  /** 내가 참여한 일정만. Supabase 전환 시 current_user → event_participants → events 질의로 대체된다. */
+  myEvents: () => Schedule[];
+  /** 그 사람과 내가 함께 있는 일정 — People 화면의 '공유 일정'. */
+  sharedEventsWith: (userId: ID) => Schedule[];
+  isShared: (eventId: ID) => boolean;
+  /** 같은 사람을 두 번 초대해도 한 줄만 남는다(멱등). 참여자가 되면 대화방 멤버도 된다. */
+  addParticipant: (eventId: ID, userId: ID) => void;
+  removeParticipant: (eventId: ID, userId: ID) => void;
+  setParticipantStatus: (eventId: ID, userId: ID, status: ParticipantStatus) => void;
+
+  // 일정 대화 — 일정 하나당 방 하나
+  /** 없으면 만들고 있으면 그대로 돌려준다(중복 생성 금지). */
+  ensureRoom: (eventId: ID) => ID;
+  messagesOf: (eventId: ID) => ChatMessage[];
+  sendEventMessage: (eventId: ID, content: string) => void;
+
+  // 사람과의 1:1 대화 — 일정에 매이지 않는 방. 상대 한 명당 하나(멱등).
+  ensureDirectRoom: (peerId: ID) => ID;
+  directMessagesOf: (peerId: ID) => ChatMessage[];
+  sendDirectMessage: (peerId: ID, content: string) => void;
 
   // Settings
   updateSettings: (patch: Partial<Settings>) => void;
@@ -218,10 +309,70 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   places: seedPlaces,
   timetable: seedTimetable,
   contacts: seedContacts,
+  eventParticipants: seedParticipants,
+  chatRooms: seedRooms,
+  chatMessages: seedChatMessages,
   connections: { googleCalendar: true, googleContacts: true, outlook: false },
-  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: "md" },
+  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: 1 },
   commandOpen: false,
   dismissedNotifs: [],
+  seedsRebased: false,
+  remoteLive: false,
+
+  hydrateRemote: (snap) =>
+    set({
+      remoteLive: true,
+      seedsRebased: true, // 서버 것을 쓰기 시작하면 시드 날짜를 옮길 이유가 없다
+      schedules: snap.schedules,
+      eventParticipants: snap.eventParticipants,
+      chatRooms: snap.chatRooms,
+      chatMessages: snap.chatMessages,
+      // 데모용으로 깔아 둔 것들도 함께 물러난다 — 로그인한 계정에 지어낸 사람과
+      // 지어낸 회의가 남아 있으면 그게 진짜 데이터인 줄 알게 된다.
+      contacts: [],
+      meetings: [],
+      todos: [],
+      memos: [],
+      conversations: [],
+    }),
+
+  applyRemoteMessage: (m) =>
+    set((st) => (st.chatMessages.some((x) => x.id === m.id) ? st : { chatMessages: [...st.chatMessages, m] })),
+
+  unread: {},
+  bumpUnread: (roomId) => set((st) => ({ unread: { ...st.unread, [roomId]: (st.unread[roomId] ?? 0) + 1 } })),
+  markRoomRead: (roomId) =>
+    set((st) => {
+      if (!st.unread[roomId]) return st;      // 이미 0 이면 새 객체를 만들지 않는다(불필요한 리렌더 방지)
+      const next = { ...st.unread };
+      delete next[roomId];
+      return { unread: next };
+    }),
+
+  rebaseSeeds: (today) => {
+    if (get().remoteLive) return;   // 서버 데이터에는 손대지 않는다
+    if (get().seedsRebased) return; // 이미 옮겼다 — 두 번 밀면 날짜가 더 멀어진다
+    const days = daysBetween(SEED_ANCHOR, today);
+    if (days === 0) { set({ seedsRebased: true }); return; }
+    set((st) => ({
+      seedsRebased: true,
+      schedules: st.schedules.map((s) => ({
+        ...s,
+        start: shiftISO(s.start, days),
+        end: s.end ? shiftISO(s.end, days) : s.end,
+      })),
+      todos: st.todos.map((t) => (t.due ? { ...t, due: shiftISO(t.due, days) } : t)),
+      memos: st.memos.map((m) => ({ ...m, createdAt: shiftISO(m.createdAt, days) })),
+      meetings: st.meetings.map((m) => ({ ...m, start: shiftISO(m.start, days) })),
+      contacts: st.contacts.map((c) => (c.lastMet ? { ...c, lastMet: shiftISO(c.lastMet, days) } : c)),
+      chatMessages: st.chatMessages.map((m) => ({ ...m, createdAt: shiftISO(m.createdAt, days) })),
+      conversations: st.conversations.map((c) => ({
+        ...c,
+        createdAt: shiftISO(c.createdAt, days),
+        messages: c.messages.map((msg) => ({ ...msg, createdAt: shiftISO(msg.createdAt, days) })),
+      })),
+    }));
+  },
 
   newConversation: () => {
     const id = uid();
@@ -291,9 +442,38 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   addSchedule: (s) => {
     const id = uid();
-    set((st) => ({ schedules: [...st.schedules, { ...s, id }] }));
+    // 일정을 만든 사람은 그 일정의 주인이다 — 참여자 표에 owner 로 함께 들어간다.
+    // (여기가 비어 있으면 나중에 사람을 초대해도 '누가 이 일정의 주인인가'를 알 수 없다.)
+    set((st) => ({
+      schedules: [...st.schedules, { ...s, id, ownerId: s.ownerId ?? ME_ID }],
+      eventParticipants: [...st.eventParticipants, { eventId: id, userId: ME_ID, role: "owner", status: "accepted" }],
+    }));
+    // 서버에 붙어 있으면 곧바로 밀어 넣고, 서버가 준 진짜 id 로 지역 id 를 바꿔 단다.
+    // (화면은 이미 그려졌다 — 저장은 뒤에서 따라온다. 실패해도 화면은 멈추지 않는다.)
+    if (remoteReady()) {
+      void pushEvent({ ...s, id } as Schedule).then((realId) => {
+        if (!realId) return;
+        set((st) => ({
+          schedules: st.schedules.map((x) => (x.id === id ? { ...x, id: realId } : x)),
+          eventParticipants: st.eventParticipants.map((p) => (p.eventId === id ? { ...p, eventId: realId } : p)),
+          chatRooms: st.chatRooms.map((r) => (r.eventId === id ? { ...r, eventId: realId, id: `room_${realId}` } : r)),
+          chatMessages: st.chatMessages.map((m) => (m.roomId === `room_${id}` ? { ...m, roomId: `room_${realId}` } : m)),
+        }));
+      });
+    }
     return id;
   },
+  removeScheduleCascade: (id) =>
+    // 일정이 사라지면 그 일정에 매인 참여자·대화방·메시지도 함께 사라진다(고아 데이터를 남기지 않는다).
+    set((st) => {
+      const room = st.chatRooms.find((r) => r.eventId === id);
+      return {
+        schedules: st.schedules.filter((s) => s.id !== id),
+        eventParticipants: st.eventParticipants.filter((p) => p.eventId !== id),
+        chatRooms: st.chatRooms.filter((r) => r.eventId !== id),
+        chatMessages: room ? st.chatMessages.filter((m) => m.roomId !== room.id) : st.chatMessages,
+      };
+    }),
   updateSchedule: (id, patch) =>
     set((st) => ({ schedules: st.schedules.map((s) => (s.id === id ? { ...s, ...patch } : s)) })),
   removeSchedule: (id) => set((st) => ({ schedules: st.schedules.filter((s) => s.id !== id) })),
@@ -320,6 +500,131 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   addMeeting: (m) => set((st) => ({ meetings: [{ ...m, id: uid() }, ...st.meetings] })),
   removeMeeting: (id) => set((st) => ({ meetings: st.meetings.filter((m) => m.id !== id) })),
+
+  // ── 공유 일정 · 참여자 ──────────────────────────────
+  participantsOf: (eventId) => get().eventParticipants.filter((p) => p.eventId === eventId),
+
+  isShared: (eventId) => get().eventParticipants.filter((p) => p.eventId === eventId).length > 1,
+
+  myEvents: () => {
+    const st = get();
+    // 내가 참여자로 들어간 일정 + 참여자 관계가 아예 없는 개인 일정.
+    // (참여자 표가 있는 일정인데 내가 없다면 그건 남의 일정이라 보이지 않아야 한다.)
+    const mine = new Set(st.eventParticipants.filter((p) => p.userId === ME_ID).map((p) => p.eventId));
+    const shared = new Set(st.eventParticipants.map((p) => p.eventId));
+    return st.schedules.filter((s) => mine.has(s.id) || !shared.has(s.id));
+  },
+
+  sharedEventsWith: (userId) => {
+    const st = get();
+    const theirs = new Set(st.eventParticipants.filter((p) => p.userId === userId).map((p) => p.eventId));
+    const mine = new Set(st.eventParticipants.filter((p) => p.userId === ME_ID).map((p) => p.eventId));
+    return st.schedules
+      .filter((s) => theirs.has(s.id) && mine.has(s.id))
+      .sort((a, b) => +new Date(a.start) - +new Date(b.start));
+  },
+
+  addParticipant: (eventId, userId) => {
+    // 멱등 — 같은 사람이 동시에 두 번 초대돼도 한 줄만 남는다.
+    set((st) =>
+      st.eventParticipants.some((p) => p.eventId === eventId && p.userId === userId)
+        ? st
+        : { eventParticipants: [...st.eventParticipants, { eventId, userId, role: "participant", status: "invited" }] },
+    );
+    // 참여자가 되면 그 일정의 대화에 들어올 수 있어야 한다.
+    get().ensureRoom(eventId);
+    if (remoteReady()) void pushParticipant(eventId, userId);
+  },
+
+  removeParticipant: (eventId, userId) => {
+    // 참여자에서 빠지면 대화 접근도 끊긴다. 다만 이미 남긴 메시지의 작성자 정보는 지우지 않는다.
+    set((st) => ({
+      eventParticipants: st.eventParticipants.filter((p) => !(p.eventId === eventId && p.userId === userId)),
+    }));
+    if (remoteReady()) void pullParticipant(eventId, userId);
+  },
+
+  setParticipantStatus: (eventId, userId, status) => {
+    set((st) => ({
+      eventParticipants: st.eventParticipants.map((p) =>
+        p.eventId === eventId && p.userId === userId ? { ...p, status } : p,
+      ),
+    }));
+    if (remoteReady()) void pushParticipantStatus(eventId, userId, status);
+  },
+
+  // ── 일정 대화 — 일정 하나당 방 하나 ──────────────────
+  ensureRoom: (eventId) => {
+    const existing = get().chatRooms.find((r) => r.eventId === eventId);
+    if (existing) return existing.id;
+    // id 를 eventId 에서 파생시켜 두면 경합이 나도 같은 방으로 수렴한다.
+    const id = `room_${eventId}`;
+    set((st) => (st.chatRooms.some((r) => r.eventId === eventId) ? st : { chatRooms: [...st.chatRooms, { id, eventId }] }));
+    return id;
+  },
+
+  messagesOf: (eventId) => {
+    const room = get().chatRooms.find((r) => r.eventId === eventId);
+    if (!room) return [];
+    return get()
+      .chatMessages.filter((m) => m.roomId === room.id)
+      .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
+  },
+
+  sendEventMessage: (eventId, content) => {
+    const text = content.trim();
+    if (!text) return;
+    const roomId = get().ensureRoom(eventId);
+    // 낙관적 반영 — 말은 즉시 화면에 얹고, 저장은 뒤따른다.
+    const msg: ChatMessage = { id: uid(), roomId, senderId: ME_ID, content: text, createdAt: nowISO(), pending: remoteReady() };
+    set((st) => ({ chatMessages: [...st.chatMessages, msg] }));
+    if (!remoteReady()) return;
+    void (async () => {
+      const rid = (await roomIdForEvent(eventId)) ?? roomId;
+      const realId = await pushMessage(rid, text);
+      // 서버가 준 id 로 갈아 단다 — Realtime 이 같은 걸 돌려줘도 중복으로 쌓이지 않는다.
+      set((st) => ({
+        chatMessages: realId
+          ? st.chatMessages.map((m) => (m.id === msg.id ? { ...m, id: realId, roomId: rid, pending: false } : m))
+          : st.chatMessages.filter((m) => m.id !== msg.id),
+      }));
+    })();
+  },
+
+  ensureDirectRoom: (peerId) => {
+    const existing = get().chatRooms.find((r) => r.peerId === peerId);
+    if (existing) return existing.id;
+    const id = `dm_${peerId}`;
+    set((st) => (st.chatRooms.some((r) => r.peerId === peerId) ? st : { chatRooms: [...st.chatRooms, { id, peerId }] }));
+    return id;
+  },
+
+  directMessagesOf: (peerId) => {
+    const room = get().chatRooms.find((r) => r.peerId === peerId);
+    if (!room) return [];
+    return get()
+      .chatMessages.filter((m) => m.roomId === room.id)
+      .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
+  },
+
+  sendDirectMessage: (peerId, content) => {
+    const text = content.trim();
+    if (!text) return;
+    const roomId = get().ensureDirectRoom(peerId);
+    const msg: ChatMessage = { id: uid(), roomId, senderId: ME_ID, content: text, createdAt: nowISO(), pending: remoteReady() };
+    set((st) => ({ chatMessages: [...st.chatMessages, msg] }));
+    if (!remoteReady()) return;
+    void (async () => {
+      const rid = await ensureDmRoomRemote(peerId);
+      if (!rid) return;
+      const realId = await pushMessage(rid, text);
+      set((st) => ({
+        chatMessages: realId
+          ? st.chatMessages.map((m) => (m.id === msg.id ? { ...m, id: realId, roomId: rid, pending: false } : m))
+          : st.chatMessages.filter((m) => m.id !== msg.id),
+      }));
+    })();
+  },
 
   updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
 

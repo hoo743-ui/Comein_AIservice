@@ -3,7 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
-import { signIn as authSignIn, signUp as authSignUp, signInSocial } from "@/lib/auth";
+import { refreshSession, signInWithPassword, signInWithProvider, signUpWithPassword } from "@/lib/remote";
 
 /**
  * Comein · Opening — 로그인이 아니라 '들어서는 경험'.
@@ -13,11 +13,10 @@ import { signIn as authSignIn, signUp as authSignUp, signInSocial } from "@/lib/
  */
 
 type Phase = "logo" | "door" | "open" | "reveal" | "auth" | "entering";
-type Provider = "google" | "apple" | "microsoft";
+type Provider = "github" | "kakao";
 const PROVIDERS: { key: Provider; label: string }[] = [
-  { key: "google", label: "Google" },
-  { key: "apple", label: "Apple" },
-  { key: "microsoft", label: "Microsoft" },
+  { key: "github", label: "GitHub" },
+  { key: "kakao", label: "카카오" },
 ];
 
 // Comein = Co(ntext) · Me(mory) · In(sight) — 앞글자를 강조하면 곧 브랜드가 된다.
@@ -74,19 +73,33 @@ export default function Opening() {
     setTimeout(() => router.push("/workspace"), 1300);
   }, [router]);
 
-  const social = (p: Provider) => {
+  /** 건너뛰기 — 인트로만 넘긴다. 다른 페이지로 내보내지 않고, 이 화면의 로그인 카드로 바로 간다.
+   *  이미 들어와 있으면 그대로 통과. */
+  const skip = React.useCallback(() => {
+    void (async () => {
+      const uid = await refreshSession();
+      if (uid) { cross(); return; }
+      setPhase("auth");
+    })();
+  }, [cross]);
+
+  const social = async (p: Provider) => {
     if (busy || phase === "entering") return;
     setBusy(p);
-    const r = signInSocial(p);
-    if (r.ok) setTimeout(cross, 500);
-    else { setErr(r.error); setBusy(null); }
+    setErr(null);
+    try {
+      const { error } = await signInWithProvider(p, `${window.location.origin}/workspace`);
+      if (error) throw error;
+    } catch (e: any) { setErr(e?.message ?? "연결에 문제가 생겼어요."); setBusy(null); }
   };
-  const submitAuth = (e: React.FormEvent) => {
+  const submitAuth = async (e: React.FormEvent) => {
     e.preventDefault();
     setErr(null);
-    const r = mode === "signup" ? authSignUp(email, name, pw) : authSignIn(email, pw);
-    if (r.ok) cross();
-    else setErr(r.error);
+    try {
+      if (mode === "signup") await signUpWithPassword(email, pw);
+      else await signInWithPassword(email, pw);
+      cross();
+    } catch (e: any) { setErr(e?.message ?? "로그인에 실패했어요."); }
   };
 
   const doorOpen = phase === "open" || phase === "reveal" || phase === "auth" || phase === "entering";
@@ -98,7 +111,7 @@ export default function Opening() {
       <div className="opn-light" aria-hidden />
       <div className="opn-flash" aria-hidden />
 
-      <button type="button" className="opn-skip" onClick={cross} aria-label="인트로 건너뛰고 워크스페이스로 들어가기">
+      <button type="button" className="opn-skip" onClick={skip} aria-label="인트로 건너뛰기">
         건너뛰기
         <span className="opn-skip-ar" aria-hidden>→</span>
       </button>
@@ -175,14 +188,12 @@ export default function Opening() {
 }
 
 function Glyph({ provider }: { provider: Provider }) {
-  if (provider === "apple") return (
-    <svg className="opn-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M16.365 1.43c0 1.14-.49 2.27-1.18 3.08-.74.9-1.98 1.57-2.98 1.57-.12 0-.23-.02-.3-.03-.01-.06-.04-.22-.04-.39 0-1.15.57-2.27 1.2-2.98.8-.94 2.14-1.64 3.25-1.68.03.13.05.28.05.43zM20.93 17.14c-.03.09-.46 1.6-1.53 3.16-.95 1.35-1.94 2.7-3.5 2.7s-1.96-.9-3.76-.9c-1.76 0-2.4.93-3.83.93-1.44 0-2.53-1.25-3.53-2.6-1.4-1.94-2.53-4.96-2.53-7.82 0-4.6 2.99-7.04 5.93-7.04 1.56 0 2.87.98 3.86.98.95 0 2.41-1.04 4.18-1.04.68 0 3.11.06 4.75 2.4-.14.09-2.63 1.55-2.6 4.68.03 3.74 3.27 4.99 3.31 5.01z" /></svg>
-  );
-  if (provider === "microsoft") return (
-    <svg className="opn-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden><rect x="2" y="2" width="9" height="9" /><rect x="13" y="2" width="9" height="9" opacity="0.72" /><rect x="2" y="13" width="9" height="9" opacity="0.72" /><rect x="13" y="13" width="9" height="9" opacity="0.5" /></svg>
+  // 말풍선 — 카카오의 형태만 단색으로. 브랜드 노랑을 이 화면에 들이지 않는다.
+  if (provider === "kakao") return (
+    <svg className="opn-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 3C6.9 3 2.8 6.3 2.8 10.3c0 2.6 1.7 4.9 4.3 6.2l-1.1 4c-.1.3.3.6.6.4l4.7-3.1c.2 0 .5.1.7.1 5.1 0 9.2-3.3 9.2-7.6S17.1 3 12 3z" /></svg>
   );
   return (
-    <svg className="opn-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 11v2.6h5.9c-.24 1.5-1.75 4.1-5.9 4.1-3.55 0-6.45-2.94-6.45-6.55S8.45 4.7 12 4.7c2.02 0 3.38.86 4.16 1.6l2.84-2.74C17.17 1.9 14.83 1 12 1 6.48 1 2 5.48 2 11s4.48 10 10 10c5.77 0 9.6-4.06 9.6-9.77 0-.66-.07-1.16-.16-1.66H12z" /></svg>
+    <svg className="opn-glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden><path d="M12 1.5a10.5 10.5 0 0 0-3.32 20.47c.53.1.72-.23.72-.5v-1.77c-2.92.64-3.54-1.4-3.54-1.4-.48-1.22-1.17-1.55-1.17-1.55-.95-.65.07-.64.07-.64 1.06.07 1.61 1.09 1.61 1.09.94 1.6 2.46 1.14 3.06.87.1-.68.37-1.14.67-1.4-2.33-.27-4.78-1.17-4.78-5.2 0-1.15.41-2.09 1.09-2.83-.11-.27-.47-1.34.1-2.79 0 0 .88-.28 2.89 1.08a10 10 0 0 1 5.26 0c2-1.36 2.89-1.08 2.89-1.08.57 1.45.21 2.52.1 2.79.68.74 1.09 1.68 1.09 2.83 0 4.04-2.46 4.93-4.8 5.19.38.33.71.97.71 1.96v2.9c0 .28.19.61.73.5A10.5 10.5 0 0 0 12 1.5z" /></svg>
   );
 }
 

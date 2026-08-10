@@ -15,6 +15,49 @@ export interface Schedule {
   location?: string;
   placeId?: ID; // 좌표 있는 장소 연결(지도·이동시간)
   status: ScheduleStatus; // AI 제안(pending) → 사용자 확정(confirmed)
+  /** 공유 일정의 주인. 없으면 나 혼자 보는 개인 일정이다.
+   *  일정은 참여자 수만큼 복제되지 않는다 — 하나의 Schedule 을 여럿이 같은 id 로 바라본다. */
+  ownerId?: ID;
+  description?: string;
+}
+
+// ── 공유 일정 · 참여자 · 일정 대화 ──────────────────────
+// Comein 의 "사람"은 연락처가 아니라 일정으로 연결된 관계다.
+//   User ─< EventParticipant >─ Schedule ─ ChatRoom ─< ChatMessage
+// 일정 하나가 곧 하나의 Context 이고, 그 안에서 사람들이 대화한다.
+
+/** 로그인 붙기 전의 '나'. Supabase Auth 연동 시 auth.uid() 로 대체된다. */
+export const ME_ID: ID = "me";
+
+export type ParticipantRole = "owner" | "participant";
+export type ParticipantStatus = "invited" | "accepted" | "declined";
+
+/** (eventId, userId) 는 유일하다 — 같은 사람을 두 번 초대해도 한 줄만 남는다. */
+export interface EventParticipant {
+  eventId: ID;
+  userId: ID; // Contact.id 또는 ME_ID
+  role: ParticipantRole;
+  status: ParticipantStatus;
+}
+
+/** 대화방은 두 종류다.
+ *  - 일정 대화방: eventId 가 있다. 일정 하나당 하나(중복 생성 금지).
+ *  - 사람과의 1:1 방: peerId 가 있다. 상대 한 명당 하나.
+ *  둘 중 하나만 채워진다. 메시지 모델은 하나를 공유한다 — 대화를 두 벌로 만들지 않는다. */
+export interface ChatRoom {
+  id: ID;
+  eventId?: ID;
+  peerId?: ID;
+}
+
+export interface ChatMessage {
+  id: ID;
+  roomId: ID;
+  senderId: ID;
+  content: string;
+  createdAt: string; // ISO
+  /** 낙관적 반영 중인 메시지 — 서버/Realtime 이 같은 걸 돌려주면 이 자리를 대체한다. */
+  pending?: boolean;
 }
 
 export interface Todo {
