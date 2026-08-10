@@ -12,7 +12,7 @@ import {
 import { useWorkspace } from "@/lib/store";
 import { fmtTime, fmtDate } from "@/lib/format";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
-import { API_BASE } from "@/lib/api";
+import { API_BASE, saveItems } from "@/lib/api";
 import type { TodoPriority } from "@/lib/types";
 
 /**
@@ -501,6 +501,10 @@ export default function Reimagine() {
       const rows = file(parsed.length ? parsed : [{ title: t, kind: "메모", time: null, note: "" }]);
       const said = typeof data.reply === "string" ? data.reply.trim() : "";
       showFlash(rows, said || undefined);
+
+      // Supabase 영속화 — /api/chat 의 items 는 이미 ParsedItem 형태라 그대로 저장한다.
+      // 저장에 실패해도 화면 흐름(flash)은 막지 않는다(로컬 폴백 철학과 동일).
+      void saveItems(items.slice(0, 4)).catch((e) => console.error("항목 저장 실패:", e));
     } catch (err) {
       // 백엔드가 자거나 죽어도 입력은 삼키지 않는다 — 로컬 규칙으로라도 정리한다.
       console.error("AI 파싱 실패 → 로컬 폴백:", err);
