@@ -143,6 +143,20 @@ export default function Opening() {
             <div className="opn-card">
             <p className="opn-card-hi">{mode === "login" ? "Welcome back." : "Welcome."}</p>
 
+            {/* 이메일·비밀번호가 위에 온다 — 실제로 열려 있는 길이 먼저 보여야 한다.
+                소셜은 아래로. 아직 provider 가 꺼져 있는 동안에도 화면이 정직해진다. */}
+            <form className="opn-form" onSubmit={submitAuth}>
+              {mode === "signup" && (
+                <input className="opn-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" aria-label="이름" autoComplete="name" />
+              )}
+              <input className="opn-field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" aria-label="이메일" autoComplete="email" />
+              <input className="opn-field" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="비밀번호" aria-label="비밀번호" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
+              {err && <p className="opn-err">{err}</p>}
+              <button type="submit" className="opn-submit" disabled={phase === "entering"}>{mode === "login" ? "Enter Comein" : "Create your space"}</button>
+            </form>
+
+            <div className="opn-div"><span>or continue with</span></div>
+
             <div className="opn-providers">
               {PROVIDERS.map((p, i) => (
                 <button
@@ -158,18 +172,6 @@ export default function Opening() {
                 </button>
               ))}
             </div>
-
-            <div className="opn-div"><span>or with email</span></div>
-
-            <form className="opn-form" onSubmit={submitAuth}>
-              {mode === "signup" && (
-                <input className="opn-field" value={name} onChange={(e) => setName(e.target.value)} placeholder="이름" aria-label="이름" autoComplete="name" />
-              )}
-              <input className="opn-field" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="이메일" aria-label="이메일" autoComplete="email" />
-              <input className="opn-field" type="password" value={pw} onChange={(e) => setPw(e.target.value)} placeholder="비밀번호" aria-label="비밀번호" autoComplete={mode === "signup" ? "new-password" : "current-password"} />
-              {err && <p className="opn-err">{err}</p>}
-              <button type="submit" className="opn-submit" disabled={phase === "entering"}>{mode === "login" ? "Enter Comein" : "Create your space"}</button>
-            </form>
 
             <p className="opn-switch">
               {mode === "login" ? "처음이신가요? " : "이미 계정이 있나요? "}
@@ -351,10 +353,13 @@ const CSS = `
 @keyframes opn-branch-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
 
 /* 인증 — 가로 2단: 브랜드(좌) + 로그인(우). 세로로 길지 않게 여백(가로)을 쓴다. */
-.opn-authwrap { position: relative; z-index: 2; display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: center; gap: clamp(32px, 6vw, 88px); width: min(940px, 92vw); animation: opn-card-in 1s cubic-bezier(0.22,1,0.36,1) 0.1s both; }
+/* 두 단은 가운데가 아니라 '윗줄'로 맞춘다 — Comein 이 카드의 첫 줄과 같은 높이에 서야
+   두 덩어리가 나란히 놓인 하나로 읽힌다. 가운데 정렬은 카드 길이가 바뀔 때마다 로고가 떠다닌다. */
+.opn-authwrap { position: relative; z-index: 2; display: grid; grid-template-columns: 1.05fr 0.95fr; align-items: start; gap: clamp(32px, 6vw, 88px); width: min(940px, 92vw); animation: opn-card-in 1s cubic-bezier(0.22,1,0.36,1) 0.1s both; }
 .opn-authwrap .opn-card { margin: 0 auto; animation: none; }
-.opn-brand { text-align: left; }
-.opn-brand-logo { margin: 0; font-size: clamp(2.85rem, 6vw, 4.05rem); font-weight: 400; letter-spacing: -0.038em; color: var(--ink); text-shadow: 0 0 56px var(--glow); }
+/* 카드 안쪽 여백(30px)만큼 내려서, 큰 글자의 윗선이 카드 첫 줄과 만나게 한다. */
+.opn-brand { text-align: left; padding-top: 26px; }
+.opn-brand-logo { margin: 0; font-size: clamp(2.85rem, 6vw, 4.05rem); font-weight: 400; line-height: 1; letter-spacing: -0.038em; color: var(--ink); text-shadow: 0 0 56px var(--glow); }
 .opn-brand-tag { margin: 20px 0 26px; font-size: clamp(0.86rem, 1.6vw, 0.98rem); font-weight: 300; color: var(--muted); }
 .opn-brand .opn-tree-word { font-size: clamp(1.05rem, 2.4vw, 1.35rem); }
 .opn-brand .opn-tree-desc { font-size: clamp(0.8rem, 1.5vw, 0.9rem); }

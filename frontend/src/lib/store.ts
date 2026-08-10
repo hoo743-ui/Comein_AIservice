@@ -22,8 +22,8 @@ import type {
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
-  ensureDmRoomRemote, pullParticipant, pushEvent, pushMessage,
-  pushParticipant, pushParticipantStatus, remoteReady, roomIdForEvent,
+  connectWith, ensureDmRoomRemote, fetchPeople, pullParticipant, pushEvent, pushMessage,
+  pushParticipant, pushParticipantStatus, remoteReady, roomIdForEvent, searchPeople,
 } from "@/lib/remote";
 
 // ── 유틸 ───────────────────────────────────────────────
@@ -220,7 +220,14 @@ interface WorkspaceState {
     eventParticipants: EventParticipant[];
     chatRooms: ChatRoom[];
     chatMessages: ChatMessage[];
+    contacts?: Contact[];
   }) => void;
+  /** 사람 목록만 다시 받아온다(누군가를 잇고 난 뒤). */
+  refreshPeople: () => Promise<void>;
+  /** Comein 계정 검색 — 지역 상태를 건드리지 않고 결과만 돌려준다. */
+  findPeople: (q: string) => Promise<Contact[]>;
+  /** 잇는다. 이어지면 사람 목록에 들어온다(멱등). */
+  connectPerson: (peerId: ID) => Promise<boolean>;
   /** Realtime 으로 들어온 메시지 한 건. 같은 id 가 이미 있으면 무시한다
    *  (내가 보낸 낙관적 메시지와 서버가 돌려준 것이 겹쳐 두 번 보이지 않게). */
   applyRemoteMessage: (m: ChatMessage) => void;
@@ -327,14 +334,30 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       eventParticipants: snap.eventParticipants,
       chatRooms: snap.chatRooms,
       chatMessages: snap.chatMessages,
-      // 데모용으로 깔아 둔 것들도 함께 물러난다 — 로그인한 계정에 지어낸 사람과
+      // 데모용으로 깔아 둔 것들은 물러난다 — 로그인한 계정에 지어낸 사람과
       // 지어낸 회의가 남아 있으면 그게 진짜 데이터인 줄 알게 된다.
-      contacts: [],
+      // 사람만은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
+      contacts: snap.contacts ?? [],
       meetings: [],
       todos: [],
       memos: [],
       conversations: [],
     }),
+
+  refreshPeople: async () => {
+    if (!remoteReady()) return;
+    const people = await fetchPeople();
+    set({ contacts: people });
+  },
+
+  findPeople: async (q) => (remoteReady() ? searchPeople(q) : []),
+
+  connectPerson: async (peerId) => {
+    if (!remoteReady()) return false;
+    const ok = await connectWith(peerId);
+    if (ok) await get().refreshPeople();
+    return ok;
+  },
 
   applyRemoteMessage: (m) =>
     set((st) => (st.chatMessages.some((x) => x.id === m.id) ? st : { chatMessages: [...st.chatMessages, m] })),

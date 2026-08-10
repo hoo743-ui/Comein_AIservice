@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
 import {
@@ -262,6 +261,9 @@ export default function Reimagine() {
   const chatMessages = useWorkspace((s) => s.chatMessages);
   const sharedEventsWith = useWorkspace((s) => s.sharedEventsWith);
   const participantsOf = useWorkspace((s) => s.participantsOf);
+  // 사람 찾기·잇기 — 지어낸 이름이 아니라 실재하는 Comein 계정을 고른다.
+  const findPeople = useWorkspace((s) => s.findPeople);
+  const connectPerson = useWorkspace((s) => s.connectPerson);
   const sendEventMessage = useWorkspace((s) => s.sendEventMessage);
   const sendDirectMessage = useWorkspace((s) => s.sendDirectMessage);
   const setParticipantStatus = useWorkspace((s) => s.setParticipantStatus);
@@ -572,11 +574,29 @@ export default function Reimagine() {
 
   // 서버와의 연결 — 한 번만 건다(자식에서 또 걸면 Realtime 소켓이 두 개 열린다).
   const remote = useRemoteSync();
+  // 나가는 중 — 로그아웃과 화면 전환이 겹치지 않게 잡아 두는 빗장.
+  // (위쪽 leaving 은 '들어올 때 문이 열리는' 연출이라 뜻이 다르다. 같은 이름을 쓰지 않는다.)
+  const [exiting, setExiting] = React.useState(false);
+
   // 연결이 켜져 있는데 로그인하지 않았다면 문 앞으로 돌려보낸다.
   // ready 를 기다리는 이유: 세션 확인 전에 단정하면 이미 들어와 있는 사람까지 쫓아낸다.
+  // exiting 을 빼 두는 이유: 나가는 사람은 세션이 풀리는 순간 이 가드에도 걸려 /enter 로
+  // 끌려간다 — 나가려는 곳과 가드가 미는 곳이 달라 화면이 두 번 바뀐다.
   React.useEffect(() => {
+    if (exiting) return;
     if (remote.configured && remote.ready && !remote.signedIn) router.replace("/enter");
-  }, [remote.configured, remote.ready, remote.signedIn, router]);
+  }, [exiting, remote.configured, remote.ready, remote.signedIn, router]);
+
+  /** 나가기 — 묻지 않고 그냥 나간다.
+   *  "정말 나가시겠어요?" 를 한 겹 세우면 나가는 일이 결심이 된다. 다시 들어오면 되는 일이다.
+   *  세션을 먼저 끊고 그 다음에 한 번만 옮긴다(끊기 전에 옮기면 로그아웃이 도중에 잘린다). */
+  const exitWorkspace = React.useCallback(() => {
+    if (exiting) return;
+    setExiting(true);
+    // 문턱 연출은 들어올 때의 것이다 — 나갈 때 남겨 두면 다음에 들어올 때 재생되지 않는다.
+    try { sessionStorage.removeItem("comein:reimagine"); } catch { /* 사생활 모드 */ }
+    void signOutRemote().finally(() => router.replace("/"));
+  }, [exiting, router]);
 
   // 처음 온 사람에게만 문 옆에 작은 표식 하나. 가이드를 강제로 재생하지는 않는다.
   React.useEffect(() => {
@@ -601,6 +621,14 @@ export default function Reimagine() {
     setFirstVisit(false);
     try { localStorage.setItem("comein_onboarding_completed", "true"); } catch { /* 저장 못 해도 흐름은 막지 않는다 */ }
   }, []);
+
+  /** 문을 연다 — 문짝이 열리는 동안 기다렸다가 가이드를 시작한다.
+   *  문과 미리보기 카드가 같은 자리를 여는 것이므로 손잡이도 하나만 둔다. */
+  const openGuideDoor = React.useCallback(() => {
+    if (doorOpening) return;
+    setDoorOpening(true);
+    window.setTimeout(() => { setTourStep(0); setDoorOpening(false); }, 520);
+  }, [doorOpening]);
 
   const person = personId ? contacts.find((c: any) => c.id === personId) ?? null : null;
   const personMsgs = React.useMemo(() => {
@@ -784,19 +812,12 @@ export default function Reimagine() {
   // 캘린더에서도 서랍으로 띄우지 않고 같은 칸을 쓴다 — 화면마다 다른 방식으로 열리면 다른 앱처럼 보인다.
   const myName = settings.name || (lang === "en" ? "Me" : "나");
   const aside = (() => {
-    // 설정도 화면을 덮지 않는다 — 다른 것들과 같은 칸에 눕는다.
+    // 설정은 이제 캔버스를 그대로 넘겨받는다(옆 칸이 아니라 하나의 화면).
     if (panel === "settings") {
       return (
+        // 제목도 돌아가는 길도 이제 페이지 헤더가 갖는다 — 설정은 곁들이는 칸이 아니라
+        // 하나의 화면이므로, 안에서 제목을 한 번 더 세우면 머리가 둘이 된다.
         <div className="rmg-evpanel rmg-setpanel">
-          <div className="rmg-drawer-head">
-            <div className="rmg-drawer-when">
-              {/* 닫기(X) 대신 되돌아가기 — 어디로 가는지 말해 주는 편이 낫다. */}
-              <button type="button" className="rmg-evback" onClick={() => setPanel(null)}>
-                ‹ {t.viewLabel(shownView)}
-              </button>
-              <p className="rmg-drawer-title">{t.topSettings}</p>
-            </div>
-          </div>
           <div className="rmg-setpanel-body">
             <SettingsPanel
               settings={settings}
@@ -842,11 +863,7 @@ export default function Reimagine() {
           <button
             type="button"
             className={`rmg-doorway ${doorOpening ? "opening" : ""}`}
-            onClick={() => {
-              if (doorOpening) return;
-              setDoorOpening(true);
-              window.setTimeout(() => { setTourStep(0); setDoorOpening(false); }, 520);
-            }}
+            onClick={openGuideDoor}
             aria-label={lang === "en" ? "Start the guide" : "사용 가이드 시작"}
           >
             <AiDoor active={doorOpening} className="rmg-doorway-door" />
@@ -857,8 +874,10 @@ export default function Reimagine() {
             {firstVisit && <span className="rmg-doorway-new" aria-hidden />}
           </button>
 
-          {/* hover 미리보기 — SaaS 툴팁이 아니라 이 화면과 같은 언어로 */}
-          <div className="rmg-doorprev" aria-hidden>
+          {/* hover 미리보기 — SaaS 툴팁이 아니라 이 화면과 같은 언어로.
+              '가이드 시작 →' 이라 적어 놓고 손이 닿으면 사라지던 것을 고친다:
+              카드도 같은 문을 여는 자리다(보일 때만 눌린다). */}
+          <div className="rmg-doorprev" onClick={openGuideDoor} role="presentation">
             <p className="rmg-doorprev-t">{lang === "en" ? "How Comein works" : "Comein 사용 가이드"}</p>
             <p className="rmg-doorprev-b">
               {lang === "en"
@@ -900,6 +919,12 @@ export default function Reimagine() {
       </p>
     );
   })();
+
+  // 맥락 레일을 세울지 — 한 곳에서만 정한다.
+  // 이 판단이 두 군데(격자 컬럼 수 · 레일 렌더)에 따로 적혀 있으면 반드시 어긋난다.
+  // 실제로 어긋나 있었다: 설정을 열면 컬럼은 둘로 줄었는데 레일은 계속 그려져,
+  // 자식 셋이 칸 둘에 들어가느라 설정 패널이 다음 줄로 떨어졌다.
+  const showCtxRail = shownView !== "calendar" && panel !== "settings";
 
   // 첫 진입 → opening 으로 리디렉트 중엔 빈 배경만 (깜빡임 없이 넘어간다).
   // ★ 이 조기 반환은 반드시 모든 훅 아래에 둔다 — 위에 두면 렌더마다 훅 개수가 달라져
@@ -982,10 +1007,16 @@ export default function Reimagine() {
               <SettingsIcon className="rmg-railicon" />
               <span className="rmg-raillabel">{t.topSettings}</span>
             </button>
-            <Link href="/" className="rmg-railbtn" aria-label={lang === "en" ? "Exit" : "나가기"}>
+            <button
+              type="button"
+              className="rmg-railbtn"
+              aria-label={lang === "en" ? "Exit" : "나가기"}
+              onClick={exitWorkspace}
+              disabled={exiting}
+            >
               <LogOut className="rmg-railicon" />
               <span className="rmg-raillabel">{lang === "en" ? "Exit" : "나가기"}</span>
-            </Link>
+            </button>
           </div>
         </div>
       </aside>
@@ -1008,28 +1039,42 @@ export default function Reimagine() {
 
         {/* 하나의 작업면 — 세 화면이 같은 폭·같은 좌우 기준선 위에 선다.
             뷰마다 다른 건 이 안의 컬럼 구성뿐이고, 바깥 상자는 절대 움직이지 않는다. */}
-        <div className={`rmg-flow ${flowExit ? "flow-exit" : ""} ${switched ? "switched" : ""}`} key={shownView}>
+        {/* 설정도 하나의 화면이다 — 옆에 곁들이는 칸이 아니라 캔버스를 그대로 넘겨받는다.
+            key 에 함께 넣어 두면 탭을 옮길 때와 같은 크로스페이드로 들어오고 나간다. */}
+        <div className={`rmg-flow ${flowExit ? "flow-exit" : ""} ${switched ? "switched" : ""}`} key={panel === "settings" ? "settings" : shownView}>
 
-          {/* PAGE HEADER — 제목의 X·Y 는 세 화면이 같다. 내용만 다르다. */}
+          {/* PAGE HEADER — 제목의 X·Y 는 모든 화면이 같다. 내용만 다르다. */}
           <header className="rmg-pagehead rmg-a1">
-            <p className="rmg-pagetitle">
-              {shownView === "today" ? `${mounted ? greetingFor(h) : " "}.` : t.viewLabel(shownView)}
-            </p>
-            {/* 캘린더는 부제를 두지 않는다 — 달력 자체가 이미 무엇을 보는 화면인지 말한다. */}
-            {shownView !== "calendar" && (
-              <p className="rmg-pagesub">
-                {shownView === "today" ? (mounted ? dateLine : "") : t.navDesc(shownView)}
-              </p>
+            {panel === "settings" ? (
+              <>
+                {/* 돌아갈 곳을 이름으로 말한다 — X 는 어디로 닫히는지 말해 주지 않는다. */}
+                <button type="button" className="rmg-evback rmg-pageback" onClick={() => setPanel(null)}>
+                  ‹ {t.viewLabel(shownView)}
+                </button>
+                <p className="rmg-pagetitle">{t.topSettings}</p>
+                <p className="rmg-pagesub">
+                  {lang === "en" ? "How this workspace behaves." : "이 워크스페이스가 움직이는 방식."}
+                </p>
+              </>
+            ) : (
+              <>
+                {/* 세 화면 모두 탭 이름을 그대로 쓴다 — 여기만 인사말이 서면 '오늘'은
+                    다른 규격의 화면처럼 보인다. 인사는 본문(A calm night.)이 이미 하고 있다. */}
+                <p className="rmg-pagetitle">{t.viewLabel(shownView)}</p>
+                {/* 부제는 '오늘'의 날짜뿐이다. 화면 이름을 한 번 더 풀어 쓰는 설명은 두지 않는다
+                    — 제목이 이미 말한 것을 작은 글씨로 반복하는 자리가 된다. */}
+                {shownView === "today" && <p className="rmg-pagesub">{mounted ? dateLine : ""}</p>}
+              </>
             )}
           </header>
 
           {/* PAGE BODY — Context Rail + 본문 (+ 필요하면 오른쪽 칸).
               캘린더는 큰 달력이 레일 자리를 대신하므로 왼쪽 레일이 없다. */}
-          <div className="rmg-pagebody" data-ctx={shownView !== "calendar" && panel !== "settings"} data-aside={!!aside} data-settings={panel === "settings"}>
+          <div className="rmg-pagebody" data-ctx={showCtxRail} data-aside={!!aside} data-settings={panel === "settings"}>
 
             {/* CONTEXT RAIL — Today·People 이 같은 규격으로 쓰는 시간 맥락.
                 날짜를 누르면 그 날을 고른 채 캘린더로 건너간다 — 장식이 아니라 입구다. */}
-            {shownView !== "calendar" && (
+            {showCtxRail && (
               <aside className="rmg-ctxrail rmg-a2" aria-label={t.topCalendar}>
                 {mounted && calDay && now && (
                   <>
@@ -1120,6 +1165,8 @@ export default function Reimagine() {
                   query={peopleQuery}
                   onQuery={setPeopleQuery}
                   onNewRoom={() => { selectPerson(null); setNewRoom(true); }}
+                  onFind={findPeople}
+                  onConnect={connectPerson}
                 />
               )}
             </div>
@@ -1890,8 +1937,14 @@ function DayDial({ spans, day, now, lang, onOpenEvent, participantsOf }: {
 
   const isToday = dayKey(day) === dayKey(now);
   const nowMin = now.getHours() * 60 + now.getMinutes();
-  const [nx, ny] = pt(nowMin, R_RING - 2);
-  const [nInX, nInY] = pt(nowMin, R_INNER + 4);
+  /** 지금바늘은 좌표가 아니라 각도로 둔다 — 좌표를 다시 계산하면 갱신마다 툭 옮겨지지만,
+   *  각도는 transform 이라 CSS 가 그 사이를 메워 준다(시계 초침처럼 미끄러진다). */
+  const nowDeg = (nowMin / 1440) * 360;
+
+  /** 둥근 끝을 쓰면 획 굵기의 절반만큼 양끝이 삐져나온다 — 그만큼 일정이 길어 보인다.
+   *  그래서 그 길이(분)를 미리 깎고 둥글린다. 그러면 칠해진 끝이 실제 시각에 정확히 닿는다.
+   *  일정의 길이가 곧 정보인 화면이라, 부드러움을 위해 길이를 속이지는 않는다. */
+  const capMin = (r: number) => ((EV_W / 2) / (2 * Math.PI * r)) * 1440;
 
   const active = spans.find((s) => s.id === activeId) ?? null;
   const tipAt = active
@@ -1950,15 +2003,21 @@ function DayDial({ spans, day, now, lang, onOpenEvent, participantsOf }: {
               onMouseEnter: () => setHover(s.id),
               onClick: () => setPinned((p) => (p === s.id ? null : s.id)),
             };
-            // 끝 시각이 없는 건은 길이를 지어내지 않는다 — 시작점에 점 하나만 찍는다.
-            if (!s.hasEnd) {
-              const [px, py] = pt(s.from, r);
-              return <circle key={s.id} cx={px} cy={py} r={EV_W / 2.4} className={`${cls} point`} style={{ ["--hue" as string]: String(i % 4) } as React.CSSProperties} {...handlers} />;
+            const ci = capMin(r);
+            // 끝 시각이 없거나, 둥근 끝 두 개보다 짧은 일정 — 없는 길이를 지어내지 않고 점으로 둔다.
+            if (!s.hasEnd || s.to - s.from <= ci * 2.2) {
+              const [px, py] = pt(s.hasEnd ? (s.from + s.to) / 2 : s.from, r);
+              return (
+                <g key={s.id} className="rmg-dial-ev">
+                  <circle cx={px} cy={py} r={EV_W / 2.4} className={`${cls} point`} {...handlers} />
+                </g>
+              );
             }
             const [sx, sy] = pt(s.from, r), [ex, ey] = pt(s.to, r);
             return (
-              <g key={s.id} style={{ ["--hue" as string]: String(i % 4) } as React.CSSProperties}>
-                <path d={eventToArc(s.from, s.to, r)} className={cls} strokeWidth={EV_W} {...handlers} />
+              <g key={s.id} className="rmg-dial-ev">
+                {/* 양끝을 둥글린 만큼 미리 깎아 둔다 — 칠해진 끝이 곧 실제 시각이다. */}
+                <path d={eventToArc(s.from + ci, s.to - ci, r)} className={cls} strokeWidth={EV_W} {...handlers} />
                 {/* 시작·끝 표식은 붙잡았을 때만 — 평소엔 띠 하나로 조용하다. */}
                 {on && (
                   <>
@@ -1970,12 +2029,15 @@ function DayDial({ spans, day, now, lang, onOpenEvent, participantsOf }: {
             );
           })}
 
-          {/* 지금 — 얇은 중립선. 일정 위를 지나도 색을 덮지 않게 blend 로 얹는다. */}
+          {/* 지금 — 중심에서 뻗어 나가는 한 줄. 시곗바늘처럼 축에 매여 있어야
+              '떠 있는 막대'가 아니라 시간의 흐름으로 읽힌다.
+              좌표가 아니라 회전으로 두어, 갱신될 때 그 사이를 CSS 가 메운다. */}
           {isToday && (
-            <>
-              <line x1={nInX} y1={nInY} x2={nx} y2={ny} className="rmg-dial-now" />
-              <circle cx={C} cy={C} r={2} className="rmg-dial-hub" />
-            </>
+            <g className="rmg-dial-hand" style={{ transform: `rotate(${nowDeg}deg)`, transformOrigin: `${C}px ${C}px` }}>
+              <line x1={C} y1={C} x2={C} y2={C - R_INNER} className="rmg-dial-now shaft" />
+              <line x1={C} y1={C - R_INNER} x2={C} y2={C - (R_RING - 2)} className="rmg-dial-now" />
+              <circle cx={C} cy={C} r={1.8} className="rmg-dial-hub" />
+            </g>
           )}
         </svg>
 
@@ -2668,14 +2730,47 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom }: any) {
+function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onConnect }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   const q = (query as string).trim().toLowerCase();
-  // 이름·소속·이메일 어디로든 찾는다 — "그 교수님" 을 기억하는 방식은 사람마다 다르다.
+  // 이름·핸들·소속 어디로든 찾는다 — "그 교수님" 을 기억하는 방식은 사람마다 다르다.
   const shown = q
-    ? contacts.filter((c: any) => [c.name, c.org, c.email].filter(Boolean).some((v: string) => v.toLowerCase().includes(q)))
+    ? contacts.filter((c: any) => [c.name, c.handle, c.org].filter(Boolean).some((v: string) => v.toLowerCase().includes(q)))
     : contacts;
+
+  // ── Comein 계정에서 찾기 ──
+  // 내 목록에 없는 사람은 여기서 찾는다. 이름만 적어 넣는 방식이 아니라 실재하는 계정을
+  // 고르는 방식이라, 고른 사람은 곧바로 일정에 부를 수 있고 말을 걸 수 있다.
+  const [found, setFound] = React.useState<any[]>([]);
+  const [finding, setFinding] = React.useState(false);
+  const [joining, setJoining] = React.useState<string | null>(null);
+
+  React.useEffect(() => {
+    if (!onFind || q.length < 2) { setFound([]); setFinding(false); return; }
+    // 한 글자 칠 때마다 서버에 묻지 않는다 — 손이 멈추면 그때 한 번.
+    setFinding(true);
+    let alive = true;
+    const timer = window.setTimeout(async () => {
+      const rows = await onFind(q);
+      if (!alive) return;
+      setFound(rows ?? []);
+      setFinding(false);
+    }, 280);
+    return () => { alive = false; window.clearTimeout(timer); setFinding(false); window.clearTimeout(timer); };
+  }, [q, onFind]);
+
+  // 이미 내 목록에 있는 사람은 검색 결과에서 뺀다 — 같은 사람이 두 번 보이면 어느 쪽을 눌러야 할지 모른다.
+  const mine = new Set(contacts.map((c: any) => c.id));
+  const newcomers = found.filter((p) => !mine.has(p.id));
+
+  const connect = async (id: string) => {
+    if (joining) return;
+    setJoining(id);
+    await onConnect?.(id);
+    setJoining(null);
+    onQuery("");
+  };
 
   return (
     <div className="rmg-ppl-wrap">
@@ -2685,7 +2780,7 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
           className="rmg-ppl-searchin"
           value={query}
           onChange={(e) => onQuery(e.target.value)}
-          placeholder={en ? "Search people" : "이름 · 소속으로 찾기"}
+          placeholder={en ? "Name or @handle" : "이름 · @핸들로 찾기"}
           aria-label={en ? "Search people" : "사람 찾기"}
         />
         {q && (
@@ -2699,11 +2794,21 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
         </button>
       </div>
 
-      {contacts.length === 0 ? (
-        <p className="rmg-empty">{t.emptyPeople}</p>
-      ) : shown.length === 0 ? (
-        <p className="rmg-ppl-none">{en ? `No one matches "${query}".` : `"${query}"와 맞는 사람이 없어요.`}</p>
-      ) : (
+      {contacts.length === 0 && !q ? (
+        // 큰 그림 대신 다음 한 걸음만 말해 준다.
+        <div className="rmg-ppl-blank">
+          <p className="rmg-ppl-blank-t">{en ? "No one here yet." : "아직 연결된 사람이 없어요."}</p>
+          <p className="rmg-ppl-blank-b">
+            {en ? "Find someone on Comein by name or @handle, and start there." : "이름이나 @핸들로 Comein에서 사람을 찾아보세요."}
+          </p>
+        </div>
+      ) : shown.length === 0 && newcomers.length === 0 && !finding ? (
+        <p className="rmg-ppl-none">
+          {q.length < 2
+            ? (en ? "Type two letters or more." : "두 글자 이상 적어 주세요.")
+            : (en ? `No one matches "${query}".` : `"${query}"와 맞는 사람이 없어요.`)}
+        </p>
+      ) : shown.length === 0 ? null : (
         // 펼치지 않는다 — 고르면 오른쪽 칸이 그 사람 이야기로 바뀐다.
         // (예전처럼 목록 안에서 펼치면 아래가 밀려 리스트가 출렁이고, 버튼이 세 개나 겹쳐 보였다.)
         <ul className="rmg-ppl-list">
@@ -2725,6 +2830,36 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
             );
           })}
         </ul>
+      )}
+
+      {/* Comein 계정에서 찾은 사람 — 아직 내 사람이 아니다. 이어야 목록으로 올라온다.
+          없는 사람을 지어내 넣지 않는다: 여기 뜨는 건 전부 실재하는 계정이다. */}
+      {q.length >= 2 && (finding || newcomers.length > 0) && (
+        <div className="rmg-ppl-find">
+          <p className="rmg-eyebrow rmg-ppl-findeye">
+            {finding ? (en ? "Looking…" : "찾는 중…") : (en ? "On Comein" : "Comein에서")}
+          </p>
+          <ul className="rmg-ppl-list">
+            {newcomers.map((p: any) => (
+              <li key={p.id} className="rmg-ppl">
+                <div className="rmg-ppl-head rmg-ppl-findrow">
+                  <span className="rmg-ppl-av">{p.name?.slice(0, 1) ?? "·"}</span>
+                  <span className="rmg-ppl-txt">
+                    <span className="rmg-ppl-name">{p.name}</span>
+                    <span className="rmg-ppl-org">@{p.handle}</span>
+                  </span>
+                  {p.connected ? (
+                    <span className="rmg-ppl-n">{en ? "Connected" : "연결됨"}</span>
+                  ) : (
+                    <button type="button" className="rmg-ppl-act" disabled={joining === p.id} onClick={() => connect(p.id)}>
+                      {joining === p.id ? (en ? "…" : "…") : (en ? "Connect" : "연결")}
+                    </button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
       )}
     </div>
   );
@@ -2789,16 +2924,28 @@ function GuideTour({ steps, index, lang, onIndex, onClose }: {
   const last = index === steps.length - 1;
   const pad = 8;
 
+  // 카드 크기는 재서 쓴다 — 짐작한 값을 쓰면 단계마다 본문 길이가 다른 만큼 어긋나고,
+  // 가장 긴 마지막 단계에서 아래가 화면 밖으로 잘린다(실제로 그랬다).
+  const cardRef = React.useRef<HTMLDivElement>(null);
+  const [box, setBox] = React.useState({ w: 380, h: 240 });
+  React.useLayoutEffect(() => {
+    const el = cardRef.current;
+    if (!el) return;
+    const w = el.offsetWidth, h = el.offsetHeight;
+    if (Math.abs(w - box.w) > 1 || Math.abs(h - box.h) > 1) setBox({ w, h });
+  });
+
   // 카드는 대상 옆에 서되 화면 밖으로 나가지 않는다. 오른쪽이 좁으면 왼쪽으로 돈다.
   const card = (() => {
-    const W = 380, H = 230, M = 20;
-    if (!rect) return { left: window.innerWidth / 2 - W / 2, top: window.innerHeight / 2 - H / 2 };
+    const { w: W, h: H } = box;
+    const M = 20;
+    // 화면이 카드보다 낮으면 위쪽에 붙인다 — 가운데 맞추려다 위아래가 같이 잘린다.
+    const clampTop = (t: number) => (window.innerHeight - H - M < M ? M : Math.max(M, Math.min(t, window.innerHeight - H - M)));
+    if (!rect) return { left: window.innerWidth / 2 - W / 2, top: clampTop(window.innerHeight / 2 - H / 2) };
     let left = rect.right + M;
     if (left + W > window.innerWidth - M) left = rect.left - W - M;
     if (left < M) left = Math.min(Math.max(M, rect.left), window.innerWidth - W - M);
-    let top = rect.top + rect.height / 2 - H / 2;
-    top = Math.min(Math.max(M, top), window.innerHeight - H - M);
-    return { left, top };
+    return { left, top: clampTop(rect.top + rect.height / 2 - H / 2) };
   })();
 
   return (
@@ -2810,7 +2957,7 @@ function GuideTour({ steps, index, lang, onIndex, onClose }: {
           style={{ left: rect.left - pad, top: rect.top - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }}
         />
       )}
-      <div className="rmg-tour-card" style={{ left: card.left, top: card.top }}>
+      <div ref={cardRef} className="rmg-tour-card" style={{ left: card.left, top: card.top }}>
         <p className="rmg-tour-title">{step.title}</p>
         <p className="rmg-tour-body">{step.body}</p>
         {/* 아직 아무것도 없는 워크스페이스라 가리킬 실물이 없다 —
@@ -3242,15 +3389,17 @@ const CSS = `
 
 /* ── 오늘 화면 오른쪽의 문 ──
    장식이 아니라 입구다. 누르면 문짝이 안쪽으로 열리고, 그 자리에 안내가 펼쳐진다. */
+/* 조용함은 그림(문)이 맡고, 글자는 읽히게 둔다.
+   예전엔 버튼 전체에 opacity 를 걸어 두어 라벨까지 같이 흐려졌다 —
+   덕분에 문은 차분했지만 '무엇을 누르는 것인지'가 안 읽혔다. 둘을 떼어 놓는다. */
 .rmg-doorway { position: sticky; top: var(--flow-top); display: flex; flex-direction: column; align-items: center; gap: var(--sp-2);
   width: 100%; padding: var(--sp-6) var(--sp-3); border: 0; background: none; font: inherit; cursor: pointer;
-  color: var(--ink); opacity: 0.5; transition: opacity 400ms ease; }
-.rmg-doorway:hover { opacity: 0.85; }
+  color: var(--ink); }
 .rmg-doorway:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 4px; border-radius: var(--r); }
-.rmg-doorway.opening { opacity: 1; }
-.rmg-doorway-door { width: clamp(120px, 13vw, 168px); aspect-ratio: 40/52; }
-.rmg-doorway-cta { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); transition: color 400ms ease; }
-.rmg-doorway:hover .rmg-doorway-cta { color: var(--muted); }
+.rmg-doorway-door { width: var(--door-w); aspect-ratio: 40/52; opacity: 0.58; transition: opacity 400ms ease; }
+.rmg-doorway:hover .rmg-doorway-door, .rmg-doorway.opening .rmg-doorway-door { opacity: 0.88; }
+.rmg-doorway-cta { font-size: 0.86rem; font-weight: 500; letter-spacing: 0.08em; text-transform: uppercase; color: color-mix(in srgb, var(--ink) 64%, transparent); transition: color 400ms ease; }
+.rmg-doorway:hover .rmg-doorway-cta { color: color-mix(in srgb, var(--ink) 90%, transparent); }
 /* 문짝이 안쪽으로 열린다 — 경첩은 왼쪽 모서리. 빛이 문틈으로 번진다. */
 .rmg-doorway.opening .aidoor-panel { transform-box: fill-box; transform-origin: left center; animation: rmg-door-swing 520ms cubic-bezier(0.22,1,0.36,1) both; }
 .rmg-doorway.opening .aidoor-svg { animation: rmg-door-glow 520ms ease both; }
@@ -3260,23 +3409,25 @@ const CSS = `
   .rmg-doorway.opening .aidoor-panel, .rmg-doorway.opening .aidoor-svg { animation: none; }
 }
 /* hover 에서만 드러나는 것들 — 평소엔 문이 조용히 서 있기만 한다. */
-.rmg-doorway-wrap { position: relative; }
-.rmg-doorway-hint { font-size: 0.76rem; color: var(--faint); opacity: 0; transform: translateY(-3px); transition: opacity 200ms ease-out, transform 200ms ease-out; }
+.rmg-doorway-wrap { position: relative; --door-w: clamp(160px, 17vw, 224px); }
+.rmg-doorway-hint { font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 66%, transparent); opacity: 0; transform: translateY(-3px); transition: opacity 200ms ease-out, transform 200ms ease-out; }
 .rmg-doorway-wrap:hover .rmg-doorway-hint { opacity: 1; transform: none; }
-.rmg-doorway-wrap:hover .rmg-doorway { opacity: 0.92; transform: scale(1.012); }
-.rmg-doorway { transition: opacity 200ms ease-out, transform 200ms ease-out; }
+.rmg-doorway-wrap:hover .rmg-doorway { transform: scale(1.012); }
+.rmg-doorway { transition: transform 200ms ease-out; }
 /* 처음 온 사람에게만 — 점 하나. 배지도 숫자도 두지 않는다. */
-.rmg-doorway-new { position: absolute; top: calc(var(--sp-6) - 2px); right: calc(50% - 46px); width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 75%, transparent); }
+.rmg-doorway-new { position: absolute; top: calc(var(--sp-6) - 2px); right: calc(50% - var(--door-w) / 2 - 4px); width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--accent) 75%, transparent); }
 /* 미리보기 — 툴팁이 아니라 이 화면과 같은 재질의 작은 카드. */
 .rmg-doorprev { position: absolute; left: 50%; transform: translate(-50%, 6px); top: calc(100% - var(--sp-4));
   width: min(260px, 100%); padding: var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r);
   background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(10px);
   box-shadow: 0 12px 30px -22px rgba(0,0,0,0.5);
   opacity: 0; pointer-events: none; transition: opacity 200ms ease-out, transform 200ms ease-out; }
-.rmg-doorway-wrap:hover .rmg-doorprev { opacity: 1; transform: translate(-50%, 0); }
-.rmg-doorprev-t { margin: 0 0 6px; font-size: 0.86rem; font-weight: 500; color: var(--ink); }
-.rmg-doorprev-b { margin: 0 0 var(--sp-1); font-size: 0.8rem; font-weight: 300; line-height: 1.55; color: var(--muted); }
-.rmg-doorprev-cta { margin: 0; font-size: 0.76rem; font-weight: 500; color: var(--faint); }
+/* 보일 때만 눌린다 — 안 보이는 카드가 클릭을 삼키면 뒤의 것이 안 눌린다. */
+.rmg-doorway-wrap:hover .rmg-doorprev { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
+.rmg-doorprev-t { margin: 0 0 6px; font-size: 0.88rem; font-weight: 500; color: var(--ink); }
+.rmg-doorprev-b { margin: 0 0 var(--sp-1); font-size: 0.82rem; font-weight: 400; line-height: 1.6; color: color-mix(in srgb, var(--ink) 76%, transparent); }
+.rmg-doorprev-cta { margin: 0; font-size: 0.8rem; font-weight: 500; color: color-mix(in srgb, var(--ink) 68%, transparent); }
+.rmg-doorway-wrap:hover .rmg-doorprev:hover .rmg-doorprev-cta { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
   .rmg-doorway, .rmg-doorway-hint, .rmg-doorprev { transition: none; }
 }
@@ -3289,29 +3440,43 @@ const CSS = `
   /* 스포트라이트가 아니라 '나머지 UI 의 opacity 를 낮추는' 정도. */
   box-shadow: 0 0 0 9999px color-mix(in srgb, var(--paper) 62%, transparent);
   transition: left 220ms ease-out, top 220ms ease-out, width 220ms ease-out, height 220ms ease-out; }
+/* 가이드 카드 — 여기서만은 절제가 곧 흐릿함이 되면 안 된다.
+   차분함은 투명도로 만드는 게 아니다. 옅게 깔아 얻은 고요함은 그냥 안 읽히는 것이고,
+   하필 이 화면은 Comein 을 처음 보는 사람이 읽는 화면이다.
+   그래서 분위기(여백·무채색·낮은 채도)는 그대로 두고 위계는 크기와 무게로 세운다 —
+   본문에 opacity 를 더 먹이는 대신 글자를 키우고 굵기를 준다. 카드 크기는 건드리지 않는다. */
 .rmg-tour-card { position: fixed; width: min(380px, calc(100vw - 32px)); pointer-events: auto;
-  display: flex; flex-direction: column; gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-3) var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r-lg);
-  background: color-mix(in srgb, var(--surface) 96%, transparent); backdrop-filter: blur(12px);
+  display: flex; flex-direction: column; gap: 0;
+  padding: var(--sp-3) var(--sp-3) var(--sp-2); border: 1px solid color-mix(in srgb, var(--ink) 11%, var(--hair)); border-radius: var(--r-lg);
+  background: color-mix(in srgb, var(--surface) 98%, transparent); backdrop-filter: blur(12px);
   box-shadow: 0 18px 44px -26px rgba(0,0,0,0.55);
   animation: rmg-tour-in 200ms ease-out both;
   transition: left 220ms ease-out, top 220ms ease-out; }
 @keyframes rmg-tour-in { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 @media (prefers-reduced-motion: reduce) { .rmg-tour-card, .rmg-tour-ring { animation: none; transition: none; } }
-.rmg-tour-title { margin: 0; font-size: 1.24rem; font-weight: 400; letter-spacing: -0.02em; color: var(--ink); }
-/* 예시 한 줄 — 아직 비어 있는 워크스페이스에서 '이렇게 된다' 를 보여 준다. */
-.rmg-tour-eg { margin: 0; padding: var(--sp-1) 10px; border-left: 2px solid var(--hair); border-radius: 0 var(--r-sm) var(--r-sm) 0;
-  background: color-mix(in srgb, var(--ink) 4%, transparent);
-  font-size: 0.82rem; font-weight: 300; line-height: 1.55; color: var(--faint); }
-.rmg-tour-body { margin: 0 0 var(--sp-1); font-size: 0.96rem; font-weight: 300; line-height: 1.65; color: var(--muted); }
-.rmg-tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding-top: var(--sp-1); border-top: 1px solid var(--hair); }
-.rmg-tour-acts .rmg-ppl-act { font-size: 0.82rem; padding: 6px 14px; }
-.rmg-tour-dots { display: flex; gap: 5px; }
-.rmg-tour-dot { width: 5px; height: 5px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 16%, transparent); transition: background 200ms ease-out; }
-.rmg-tour-dot.on { background: color-mix(in srgb, var(--ink) 52%, transparent); }
-.rmg-tour-acts { display: flex; gap: 6px; }
-.rmg-tour-skip { position: absolute; top: 10px; right: 10px; border: 0; background: none; font: inherit; font-size: 0.72rem; color: var(--faint); cursor: pointer; padding: 2px 4px; border-radius: 6px; transition: color 170ms ease-out; }
-.rmg-tour-skip:hover { color: var(--muted); }
+/* 제목 — 카드에서 가장 먼저 읽히는 것. 흐리게 두지 않는다(불투명 100%). */
+.rmg-tour-title { margin: 0 0 14px; font-size: 1.34rem; font-weight: 600; line-height: 1.32; letter-spacing: -0.022em; color: var(--ink); }
+/* 본문 — 두 줄로 감겨도 답답하지 않게 행간을 넉넉히. */
+.rmg-tour-body { margin: 0 0 22px; font-size: 0.98rem; font-weight: 400; line-height: 1.7; color: color-mix(in srgb, var(--ink) 82%, transparent); }
+/* 예시 한 줄 — 아직 비어 있는 워크스페이스에서 '이렇게 된다' 를 보여 준다.
+   보조 정보지만 읽으라고 놓은 것이므로, 읽히는 선까지는 올린다. */
+.rmg-tour-eg { margin: 0 0 20px; padding: 10px 12px; border-left: 2px solid color-mix(in srgb, var(--ink) 24%, var(--hair)); border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  background: color-mix(in srgb, var(--ink) 5%, transparent);
+  font-size: 0.875rem; font-weight: 400; line-height: 1.62; color: color-mix(in srgb, var(--ink) 74%, transparent); }
+.rmg-tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--ink) 10%, var(--hair)); }
+.rmg-tour-acts { display: flex; gap: 8px; }
+.rmg-tour-acts .rmg-ppl-act { font-size: 0.875rem; font-weight: 500; padding: 7px 16px; color: color-mix(in srgb, var(--ink) 70%, transparent); border-color: color-mix(in srgb, var(--ink) 15%, var(--hair)); }
+.rmg-tour-acts .rmg-ppl-act:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, var(--hair)); }
+/* '다음' 은 이 카드에서 할 일이 하나뿐임을 말한다 — 채워서 분명히 하되,
+   색으로 소리치지 않는다(무채색 잉크. 이 화면에 액센트 컬러를 들이지 않는다). */
+.rmg-tour-acts .rmg-ppl-act.primary { background: color-mix(in srgb, var(--ink) 92%, transparent); border-color: transparent; color: var(--paper); }
+.rmg-tour-acts .rmg-ppl-act.primary:hover { background: var(--ink); color: var(--paper); border-color: transparent; }
+.rmg-tour-dots { display: flex; gap: 6px; }
+.rmg-tour-dot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 24%, transparent); transition: background 200ms ease-out; }
+.rmg-tour-dot.on { background: color-mix(in srgb, var(--ink) 88%, transparent); }
+/* 건너뛰기 — 강조하지 않되, 찾는 사람 눈에는 보여야 한다. */
+.rmg-tour-skip { position: absolute; top: 10px; right: 12px; border: 0; background: none; font: inherit; font-size: 0.85rem; font-weight: 400; color: color-mix(in srgb, var(--ink) 70%, transparent); cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: color 170ms ease-out; }
+.rmg-tour-skip:hover { color: var(--ink); }
 
 /* 열린 뒤 — 문이 있던 자리에 안내가 그대로 선다(새 창이 아니라 이 화면의 한 칸). */
 .rmg-guidepanel { position: sticky; top: var(--flow-top); display: flex; flex-direction: column; gap: var(--sp-3);
@@ -3645,9 +3810,12 @@ const CSS = `
 .rmg-pagebody[data-ctx="true"] { grid-template-columns: var(--ctx-w) minmax(0, var(--reading)) minmax(0, 1fr); }
 /* 캘린더에서 일정을 열면 본문 옆에 같은 칸이 생긴다(서랍으로 띄우지 않는다). */
 .rmg-pagebody[data-ctx="false"][data-aside="true"] { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
-/* 설정은 읽고 고르는 게 많다 — 420px 에 우겨넣으면 초라해 보인다. 작업면을 넉넉히 내준다. */
-.rmg-pagebody[data-settings="true"] { grid-template-columns: minmax(0, 1fr) minmax(0, 720px) !important; }
-@media (max-width: 1100px) { .rmg-pagebody[data-settings="true"] { grid-template-columns: minmax(0, 1fr) !important; } }
+/* 설정은 곁들이는 칸이 아니라 하나의 화면이다 — 작업면을 통째로 받는다.
+   본문을 옆에 남겨 두면 '설정을 보는 중'인지 '오늘을 보는 중'인지 눈이 두 곳으로 갈린다. */
+.rmg-pagebody[data-settings="true"] { grid-template-columns: minmax(0, 1fr) !important; }
+.rmg-pagebody[data-settings="true"] .rmg-pagemain { display: none; }
+/* 다만 끝까지 늘리지는 않는다 — 1440px 을 가로지르는 설정 행은 읽는 눈이 멀리 간다. */
+.rmg-pagebody[data-settings="true"] .rmg-pageaside { max-width: 780px; }
 /* 레일이 물러난 폭에서는 빈 컬럼을 남기지 않는다. */
 @media (max-width: 1239px) { .rmg-pagebody[data-ctx="true"] { grid-template-columns: minmax(0, var(--reading)) minmax(0, 1fr); } }
 @media (max-width: 880px) {
@@ -3766,9 +3934,10 @@ const CSS = `
    시선이 '시간축 → 일정 → 지금' 순으로 가도록 농도를 계단으로 둔다. */
 .rmg-dial-ring { fill: none; stroke: color-mix(in srgb, var(--ink) 12%, var(--hair)); stroke-width: 1; }
 .rmg-dial-ring.inner { stroke: color-mix(in srgb, var(--ink) 6%, var(--hair)); }
-.rmg-dial-tick { stroke: color-mix(in srgb, var(--ink) 12%, var(--hair)); stroke-width: 1; }
-.rmg-dial-tick.quarter { stroke: color-mix(in srgb, var(--ink) 6%, transparent); }
-.rmg-dial-tick.major { stroke: color-mix(in srgb, var(--ink) 26%, var(--hair)); }
+/* 눈금은 읽히되 앞에 나서지 않는다 — 일정보다 진하면 배경이 정보를 이긴다. */
+.rmg-dial-tick { stroke: color-mix(in srgb, var(--ink) 10%, var(--hair)); stroke-width: 1; }
+.rmg-dial-tick.quarter { stroke: color-mix(in srgb, var(--ink) 5%, transparent); }
+.rmg-dial-tick.major { stroke: color-mix(in srgb, var(--ink) 19%, var(--hair)); }
 .rmg-dial-num { fill: var(--faint); font-size: 9px; font-weight: 500; text-anchor: middle; dominant-baseline: middle; font-variant-numeric: tabular-nums; }
 
 /* 일정 — 면적을 잘라내는 wedge 가 아니라 곡률을 따라가는 얇은 띠.
@@ -3777,11 +3946,14 @@ const CSS = `
   --c0: 38 22% 58%;   /* amber  */
   --c1: 205 16% 56%;  /* blue   */
   --c2: 145 14% 52%;  /* sage   */
-  --c3: 285 12% 58%;  /* mauve  */
+  --c3: 18 24% 57%;   /* terracotta */
   --h: var(--c0);
-  fill: none; stroke: hsl(var(--h) / 0.42); stroke-linecap: butt; cursor: pointer;
+  fill: none; stroke: hsl(var(--h) / 0.42); stroke-linecap: round; cursor: pointer;
   transition: stroke 180ms ease-out, opacity 180ms ease-out;
 }
+/* 일정이 들어올 때만 한 번 — 사라질 때는 붙잡아 둘 곳이 없어 즉시 걷힌다. */
+.rmg-dial-ev { animation: rmg-dial-ev-in 420ms cubic-bezier(0.22,1,0.36,1) both; }
+@keyframes rmg-dial-ev-in { from { opacity: 0; } to { opacity: 1; } }
 .rmg-dial-arc.h1 { --h: var(--c1); }
 .rmg-dial-arc.h2 { --h: var(--c2); }
 .rmg-dial-arc.h3 { --h: var(--c3); }
@@ -3799,9 +3971,18 @@ const CSS = `
 /* 종일 — 시간대가 없으니 바깥을 한 바퀴 두른다. */
 .rmg-dial-allday { fill: none; stroke: color-mix(in srgb, var(--accent) 38%, transparent); stroke-width: 2; cursor: pointer; transition: stroke 0.2s; }
 .rmg-dial-allday:hover, .rmg-dial-allday.on { stroke: color-mix(in srgb, var(--accent) 70%, transparent); }
-/* 지금 — 가장 또렷하되 가장 얇게. 일정 위를 지날 때 색을 덮지 않는다. */
+/* 지금 — 가장 또렷하되 가장 얇게. 일정 위를 지날 때 색을 덮지 않는다.
+   축에서 나오는 안쪽 절반은 더 옅게 둔다: 바늘이 중심에 매여 있다는 것만 말하고,
+   읽는 눈은 바깥 끝(지금 시각)에 남는다. */
 .rmg-dial-now { stroke: color-mix(in srgb, var(--ink) 62%, transparent); stroke-width: 1.2; stroke-linecap: round; }
-.rmg-dial-hub { fill: color-mix(in srgb, var(--ink) 62%, transparent); }
+.rmg-dial-now.shaft { stroke: color-mix(in srgb, var(--ink) 24%, transparent); stroke-width: 1; }
+.rmg-dial-hub { fill: color-mix(in srgb, var(--ink) 55%, transparent); }
+/* 30초마다 갱신돼도 툭 옮겨지지 않게 — 그 사이를 회전으로 메운다. */
+.rmg-dial-hand { transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1); }
+@media (prefers-reduced-motion: reduce) {
+  .rmg-dial-hand { transition: none; }
+  .rmg-dial-ev { animation: none; }
+}
 .rmg-dial-empty { margin: 0; font-size: 0.86rem; color: var(--faint); }
 
 /* 툴팁 — 구간 한가운데에 붙는 한 줄. 클릭하면 붙잡힌다(popover). */
@@ -3817,7 +3998,7 @@ const CSS = `
 .rmg-dial-keyrow { display: flex; align-items: baseline; gap: var(--sp-1); cursor: pointer; border-radius: var(--r-sm); padding: 2px 4px; margin: 0 -4px; transition: background 0.15s; }
 .rmg-dial-keyrow:hover, .rmg-dial-keyrow.on { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 /* 목록 표식 — 원의 띠와 같은 색·같은 모양(짧은 호처럼 둥근 막대). */
-.rmg-dial-chip { --c0: 38 22% 58%; --c1: 205 16% 56%; --c2: 145 14% 52%; --c3: 285 12% 58%; --h: var(--c0);
+.rmg-dial-chip { --c0: 38 22% 58%; --c1: 205 16% 56%; --c2: 145 14% 52%; --c3: 18 24% 57%; --h: var(--c0);
   flex: 0 0 auto; width: 4px; height: 14px; border-radius: 999px; background: hsl(var(--h) / 0.55); border: 0; }
 .rmg-dial-chip.h1 { --h: var(--c1); }
 .rmg-dial-chip.h2 { --h: var(--c2); }
@@ -3905,6 +4086,16 @@ const CSS = `
 .rmg-ppl-searchin::placeholder { color: var(--faint); font-weight: 300; }
 .rmg-ppl-searchx { display: grid; place-items: center; width: 20px; height: 20px; border: 0; background: none; color: var(--faint); cursor: pointer; border-radius: 6px; }
 .rmg-ppl-searchx:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
+/* Comein 에서 찾은 사람 — 아직 내 목록에 없는 자리. 내 사람들과 한 칸 띄워 구분한다. */
+.rmg-ppl-find { margin-top: var(--sp-3); padding-top: var(--sp-2); border-top: 1px solid var(--hair); }
+.rmg-ppl-findeye { margin: 0 8px var(--sp-1); }
+/* 이 줄은 누르는 자리가 아니라 '연결' 하나만 누르는 자리다 — 손모양을 주지 않는다. */
+.rmg-ppl-findrow { cursor: default; }
+.rmg-ppl-findrow:hover { background: none; }
+/* 아무도 없을 때 — 큰 그림 대신 다음 한 걸음만. */
+.rmg-ppl-blank { padding: var(--sp-4) 8px; }
+.rmg-ppl-blank-t { margin: 0 0 6px; font-size: 0.98rem; font-weight: 500; color: var(--ink); }
+.rmg-ppl-blank-b { margin: 0; font-size: 0.88rem; font-weight: 400; line-height: 1.65; color: color-mix(in srgb, var(--ink) 66%, transparent); }
 /* 함께하는 일정 수 — 이 사람과 나의 접점. 숫자 하나면 충분하다. */
 .rmg-ppl-n { margin-left: auto; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 /* 고른 사람 — 레일과 같은 언어(뉴트럴 면 + 좌측 3px). 목록이 출렁이지 않는다. */
@@ -3945,6 +4136,9 @@ const CSS = `
 /* 어디서 들어왔는지 — 방만 덜렁 바뀌면 길을 잃는다. */
 .rmg-evback { display: inline-block; margin-bottom: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint); cursor: pointer; transition: color 170ms ease-out; }
 .rmg-evback:hover { color: var(--ink); }
+/* 페이지 헤더는 flex column 이라 버튼이 한 줄을 다 차지한다 — 그러면 button 의 기본
+   가운데 정렬 때문에 '‹ 오늘' 이 화면 한가운데로 밀려난다. 내용만큼만 폭을 준다. */
+.rmg-pageback { align-self: start; font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 58%, transparent); }
 
 /* ── 일정 상세 + 대화 (Drawer) ──
    오른쪽에서 한 겹. 화면을 덮는 모달이 아니라 워크스페이스가 잠깐 넓어지는 감각. */

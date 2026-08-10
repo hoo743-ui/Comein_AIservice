@@ -122,17 +122,25 @@ export interface Place {
   lng?: number;
 }
 
-// ── 연락처 / 외부 연동 (데모 · 테스트 데이터) ──
-export type ContactSource = "google" | "outlook" | "manual";
+// ── 사람 ──
+// "comein" 은 실제 계정이다 — id 가 곧 auth.uid() 라서 참여자·대화의 주체가 될 수 있다.
+// 나머지는 밖에서 가져온 이름표일 뿐이라, 일정에 부르거나 말을 걸 수는 없다.
+export type ContactSource = "comein" | "google" | "outlook" | "manual";
 
 export interface Contact {
   id: ID;
   name: string;
+  /** @handle — Comein 안에서 그 사람을 가리키는 이름. 계정이 있는 사람만 갖는다. */
+  handle?: string;
   org?: string;
   email?: string;
   phone?: string;
   source: ContactSource;
   lastMet?: string; // ISO
+  /** 서로 잇겠다고 한 사이인가. 같은 일정에서 만나기만 한 사람은 false 다. */
+  connected?: boolean;
+  /** 함께 있는 일정 수 */
+  sharedEvents?: number;
 }
 
 export interface Connections {

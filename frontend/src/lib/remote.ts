@@ -17,13 +17,14 @@
 import type { RealtimeChannel } from "@supabase/supabase-js";
 
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
-import { ME_ID, type ChatMessage, type ChatRoom, type EventParticipant, type ID, type Schedule } from "@/lib/types";
+import { ME_ID, type ChatMessage, type ChatRoom, type Contact, type EventParticipant, type ID, type Schedule } from "@/lib/types";
 
 export type RemoteSnapshot = {
   schedules: Schedule[];
   eventParticipants: EventParticipant[];
   chatRooms: ChatRoom[];
   chatMessages: ChatMessage[];
+  contacts: Contact[];
 };
 
 /** 지금 로그인한 사람의 uuid. 로그인 전이면 null.
@@ -155,7 +156,11 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
     : { data: [], error: null };
   if (ms.error) throw ms.error;
 
+  // 사람은 실패해도 나머지를 막지 않는다 — 아직 0004 를 올리지 않았을 수 있다.
+  const contacts = await fetchPeople().catch(() => []);
+
   return {
+    contacts,
     schedules: (ev.data ?? []).map((e: any): Schedule => ({
       id: e.id,
       title: e.title,
@@ -277,6 +282,57 @@ export async function pushMessage(roomId: ID, content: string): Promise<string |
     .single();
   if (error) { console.error("메시지 전송 실패:", error.message); return null; }
   return data?.id ?? null;
+}
+
+// ── 사람 ────────────────────────────────────────────────
+// 지어낸 연락처는 여기 들어오지 않는다. 여기 있는 사람은 전부 실재하는 계정이라
+// 일정에 부를 수 있고 말을 걸 수 있다(그래서 참여자 추가가 외래키에서 튕기지 않는다).
+
+/** 사람 찾기. 두 글자부터 찾고, 이메일은 정확히 같을 때만 맞는다(서버가 그렇게 정해 뒀다). */
+export async function searchPeople(q: string): Promise<Contact[]> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return [];
+  const { data, error } = await sb.rpc("search_people", { q, limit_n: 8 });
+  if (error) { console.error("사람 검색 실패:", error.message); return []; }
+  return (data ?? []).map((r: any): Contact => ({
+    id: r.id,
+    name: r.display_name,
+    handle: r.handle,
+    source: "comein",
+    connected: !!r.connected,
+  }));
+}
+
+/** 내 사람들 — 이은 사람과 같은 일정에서 만난 사람. */
+export async function fetchPeople(): Promise<Contact[]> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return [];
+  const { data, error } = await sb.rpc("my_people");
+  if (error) { console.error("사람 목록 실패:", error.message); return []; }
+  return (data ?? []).map((r: any): Contact => ({
+    id: r.id,
+    name: r.display_name,
+    handle: r.handle,
+    source: "comein",
+    connected: !!r.connected,
+    sharedEvents: r.shared_events ?? 0,
+  }));
+}
+
+export async function connectWith(peerId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("connect_with", { peer: peerId });
+  if (error) { console.error("연결 실패:", error.message); return false; }
+  return true;
+}
+
+export async function disconnectFrom(peerId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("disconnect_from", { peer: peerId });
+  if (error) { console.error("연결 해제 실패:", error.message); return false; }
+  return true;
 }
 
 // ── 실시간 ──────────────────────────────────────────────
