@@ -5284,8 +5284,10 @@ html { font-size: 17px; }
   /* 한 칸짜리 화면 — 고른 뒤에는 상세만 남긴다. 위아래로 쌓아 두면 목록을 지나쳐야
      대화가 나오고, 스크롤 위치가 매번 어긋난다. 아직 아무도 안 골랐으면 목록만 둔다
      (빈 자리 안내는 이 폭에서 할 말이 없다). */
-  .rmg-pagebody[data-view="people"][data-picked="true"] .rmg-pagemain { display: none; }
-  .rmg-pagebody[data-view="people"][data-picked="false"] .rmg-pageaside { display: none; }
+  /* 설정은 예외다. 설정은 '사람 화면의 오른쪽 칸' 이 아니라 하나의 화면이고,
+     그것까지 이 규칙에 걸리면 좁은 폭에서 설정이 통째로 사라진다(실제로 그랬다). */
+  .rmg-pagebody[data-view="people"][data-picked="true"]:not([data-settings="true"]) .rmg-pagemain { display: none; }
+  .rmg-pagebody[data-view="people"][data-picked="false"]:not([data-settings="true"]) .rmg-pageaside { display: none; }
 }
 .rmg-pagemain { min-width: 0; display: flex; flex-direction: column; gap: var(--flow-gap); }
 /* 세 번째 칸 — 사람의 맥락(일정 상세·대화)이 들어오는 자리. 행 높이를 다 받아야 sticky 가 붙는다. */
