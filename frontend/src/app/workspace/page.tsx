@@ -582,11 +582,14 @@ export default function Reimagine() {
       setAiOffline(true);
       const rows = file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
       const head = rows[0];
+      // 이 한 줄은 한 줄로만 서고 넘치면 뒤가 잘린다(rmg-flash-text). 그래서 순서가 중요하다:
+      // 제목은 방금 목록에 앉아 눈에 보이지만, "저장되지 않았다" 는 사실은 여기서만 말한다.
+      // 앞서는 제목을 앞세워 정작 그 말이 잘려 나갔다("… 이 화면에만 남…").
       showFlash(
         rows,
         lang === "en"
-          ? `${head?.title ?? ""} · filed here only — AI is unreachable`
-          : `${head?.title ?? ""} · AI 없이 정리했어요 — 이 화면에만 남아요`,
+          ? `Filed here only — AI is unreachable · ${head?.title ?? ""}`
+          : `AI 없이 정리했어요 — 이 화면에만 남아요 · ${head?.title ?? ""}`,
       );
     } finally {
       ignite();
@@ -3652,6 +3655,8 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setMinutes(0, 0, 0);
+    // 여기도 같은 이유로 — 새벽 시각을 기본값으로 권하지 않는다.
+    if (d.getHours() < 8 || d.getHours() > 20) d.setHours(10, 0, 0, 0);
     const p = (n: number) => String(n).padStart(2, "0");
     setDate(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
     setTime(`${p(d.getHours())}:00`);
@@ -3771,6 +3776,10 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
     const d = new Date();
     d.setDate(d.getDate() + 1);
     d.setMinutes(0, 0, 0);
+    // '내일 이 시간쯤' 이 기본이되, 사람이 만나지 않는 시각은 권하지 않는다.
+    // 새벽 두 시에 자리를 만들면 '내일 새벽 두 시' 가 기본값으로 앉는다 —
+    // 규칙으로는 맞지만 아무도 그 시각에 만나지 않는다(실제로 00:00 이 떠 있었다).
+    if (d.getHours() < 8 || d.getHours() > 20) d.setHours(10, 0, 0, 0);
     const p = (n: number) => String(n).padStart(2, "0");
     setNewDate(`${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`);
     setNewTime(`${p(d.getHours())}:00`);
@@ -3814,7 +3823,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
   })();
 
   return (
-    <aside className="rmg-evpanel rmg-ppanel" role="region" aria-label={person.name}>
+    <aside className="rmg-evpanel rmg-ppanel" data-tab={tab} role="region" aria-label={person.name}>
       {/* 돌아갈 길. 방만 덜렁 바뀌면 길을 잃는다.
           좁은 폭에서는 목록이 접혀 있으므로 요약에서도 '사람' 으로 돌아갈 길이 있어야 한다 —
           없으면 사람을 한 번 고른 뒤 목록으로 되돌아갈 방법이 사라진다(막다른 길이었다). */}
@@ -5739,6 +5748,13 @@ html { font-size: 17px; }
 .rmg-ppanel { gap: var(--sp-2); max-width: 720px; }
 /* 돌아가는 길은 왼쪽 끝에 — button 의 기본 가운데 정렬 때문에 한복판으로 밀려난다. */
 .rmg-ppanel > .rmg-evback { align-self: flex-start; }
+/* 요약은 대화창이 아니다.
+   대화창은 입력칸을 아래에 붙여 두려고 높이를 화면에 묶고 안쪽이 스크롤되는데,
+   그 틀이 요약에도 걸리면 네 줄짜리 글이 갑갑한 상자 안에서 스크롤된다
+   (짧은 화면에서 187px 안에 갇혀 있었다. 아래는 텅 비어 있는데도).
+   요약은 그냥 흐르게 두고, 넘치면 화면이 스크롤하면 된다. */
+.rmg-ppanel[data-tab="overview"] { position: static; max-height: none; }
+.rmg-ppanel[data-tab="overview"] .rmg-pov { overflow: visible; }
 /* 목록으로 돌아가는 길은 목록이 접혔을 때만 필요하다 — 넓은 화면에서는 왼쪽에 그대로 있다. */
 .rmg-backlist { display: none; }
 @media (max-width: 880px) { .rmg-backlist { display: inline-flex; } }
@@ -5897,6 +5913,15 @@ html { font-size: 17px; }
   .rmg-evgrip { display: none; }
   .rmg-evtl { padding-left: 0; border-top: 1px solid var(--hair); padding-top: var(--sp-2); margin-top: var(--sp-2); }
   .rmg-evsplit[data-split="true"] .rmg-drawer-chat { padding-right: 0; }
+
+  /* 그리고 높이의 틀도 함께 풀어야 한다.
+     이 칸은 화면 높이에 묶여 있다(대화 옆에 하루를 세워 두고 각자 자기 안에서만
+     스크롤하게 하려고). 그런데 둘이 위아래로 쌓이면 그 틀이 남는 높이를 나눠 갖게 되고,
+     짧은 화면에서는 대화 칸이 17px 까지 짓눌려 입력칸이 아래 일정 위로 흘러넘쳤다.
+     쌓인 뒤에는 각자 제 높이대로 서고, 넘치면 화면이 스크롤하면 된다. */
+  .rmg-evpanel { position: static; max-height: none; }
+  .rmg-evsplit[data-split="true"] .rmg-drawer-chat { min-height: 220px; }
+  .rmg-evsplit[data-split="true"] .rmg-drawer-msgs { max-height: 44vh; }
 }
 @media (prefers-reduced-motion: reduce) { .rmg-evgrip::before, .rmg-evtl-fold { transition: none; } }
 
