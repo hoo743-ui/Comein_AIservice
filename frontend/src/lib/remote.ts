@@ -519,6 +519,30 @@ export async function recordSuggestion(roomId: ID, start: string, end: string, r
   return (Array.isArray(data) ? data[0] : data) ?? null;
 }
 
+/** 둘 사이의 가능한 시간 — 일정이 아직 없을 때 쓴다.
+ *
+ *  돌아오는 것은 '이 시간대에 몇 명이 되는가' 뿐이다. 상대가 그때 무엇을 하는지도,
+ *  정확히 언제 바쁜지도 넘어오지 않는다 — 판정은 서버 안에서 끝난다(§11).
+ *  연결된 사이가 아니면 서버가 거절한다(§30). */
+export async function pairSlots(peerId: ID, winStart: Date, winEnd: Date, durationMin = 60) {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("pair_slots", {
+    peer: peerId,
+    win_start: winStart.toISOString(),
+    win_end: winEnd.toISOString(),
+    duration_min: durationMin,
+  });
+  if (error) { console.error("가능 시간 조회 실패:", error.message); return null; }
+  return ((data ?? []) as { slot_start: string; slot_end: string; available_count: number; total_count: number }[]).map((r) => ({
+    start: new Date(r.slot_start).toISOString(),
+    end: new Date(r.slot_end).toISOString(),
+    conflicts: Math.max(0, r.total_count - r.available_count),
+    // 순위는 서버가 이미 매겼다 — 앞에 올수록 좋은 자리다.
+    score: r.available_count * 100,
+  }));
+}
+
 /** 이 방에서 이미 답이 끝난 제안들의 열쇠(`start|end`).
  *  새로 들어와도 넘긴 제안이 다시 떠오르지 않게 하는 데 쓴다. */
 export async function fetchAnsweredSuggestions(roomId: ID): Promise<string[]> {

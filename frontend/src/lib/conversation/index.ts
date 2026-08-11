@@ -7,7 +7,7 @@
 // 이 파일 어디에서도 네트워크를 부르지 않는다. 화면이 재료(바쁜 구간)를 건네면
 // 결과(상태·제안)를 돌려준다 — 그래야 AI 가 죽어도 대화와 캘린더는 살아 있다(§32).
 
-import { commonSlots, type BusyInterval, type SlotCandidate } from "./availability";
+import { commonSlots, withinConstraints, type BusyInterval, type SlotCandidate } from "./availability";
 import { anchorToDay } from "./temporal";
 import { analyzeMessage, type MessageAnalysis } from "./intent";
 import { emptyMemory, foldConversation, type ConversationMemory } from "./state";
@@ -31,6 +31,10 @@ export interface ConversationInput {
   /** 이미 화면에 띄운 제안 key — 같은 것을 두 번 띄우지 않는다(§28). */
   shown?: string[];
   en?: boolean;
+  /** 서버가 이미 계산해 준 후보. 있으면 이걸 쓴다.
+   *  서버는 양쪽 달력을 볼 수 있고 우리는 볼 수 없다 — 그러니 사실은 저쪽이 더 정확하다.
+   *  (없으면 아는 달력만으로 계산한다. 그때도 '모른다' 를 '한가하다' 로 바꿔 읽지 않는다.) */
+  slots?: SlotCandidate[];
 }
 
 export interface AnalysisOutcome {
@@ -72,13 +76,16 @@ export function analyzeConversation(input: ConversationInput): AnalysisOutcome {
   const day = new Date(dayed.length ? dayed[dayed.length - 1].at : now);
   const constraints = memory.constraints.map((c) => anchorToDay(c, day));
 
-  const slots = commonSlots({
-    day,
-    durationMin: input.durationMin ?? 60,
-    participants: input.participants,
-    constraints,
-    now,
-  });
+  const slots = input.slots
+    ? // 서버가 준 후보에도 대화의 조건은 그대로 걸린다 — "3시 이후" 라고 했으면 3시 이후만 본다.
+      input.slots.filter((s) => withinConstraints(new Date(s.start), constraints))
+    : commonSlots({
+        day,
+        durationMin: input.durationMin ?? 60,
+        participants: input.participants,
+        constraints,
+        now,
+      });
 
   return {
     memory,

@@ -15,7 +15,7 @@ import { fmtTime, fmtDate } from "@/lib/format";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
 import { useRemoteSync, type RemoteState } from "@/lib/useRemoteSync";
-import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, recordSuggestion, saveConversationState, signInWithEmail, signInWithPassword, signInWithProvider, signOutRemote, signUpWithPassword } from "@/lib/remote";
+import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signInWithEmail, signInWithPassword, signInWithProvider, signOutRemote, signUpWithPassword } from "@/lib/remote";
 import type { ChatMessage, Contact, EventParticipant, Schedule, ScheduleProposal, TodoPriority } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 
@@ -834,6 +834,12 @@ export default function Reimagine() {
   const roomIsRemote = !!personRoomId && /^[0-9a-f-]{36}$/i.test(personRoomId);
   const [dismissed, setDismissed] = React.useState<string[]>([]);
 
+  // 서버가 계산해 준 후보. 서버는 양쪽 달력을 볼 수 있고 우리는 볼 수 없다 —
+  // 그러니 '언제가 되는가' 의 사실은 저쪽이 더 정확하다(§10).
+  // 못 받아 오면(로그인 전·연결 안 된 사이·장애) null 로 두고 아는 것만으로 판단한다(§32).
+  const [pairFree, setPairFree] = React.useState<{ start: string; end: string; conflicts: number; score: number }[] | null>(null);
+  React.useEffect(() => { setPairFree(null); }, [personId]);
+
   const personOutcome = React.useMemo(() => {
     if (!personId) return null;
     // 프라이버시(§11): 넘기는 것은 '차 있는 구간' 뿐이다. 제목은 넘기지 않는다.
@@ -846,11 +852,32 @@ export default function Reimagine() {
       // 아직 아는 달력은 내 것뿐이다. 상대의 가용 여부는 서버가 채운다 —
       // 그때까지도 '모른다' 를 '한가하다' 로 바꿔 읽지 않는다.
       participants: [busy],
+      slots: pairFree ?? undefined,
       now: new Date(),
       shown: dismissed,
       en: lang === "en",
     });
-  }, [personId, personMsgs, personEvents, dismissed, lang]);
+  }, [personId, personMsgs, personEvents, dismissed, lang, pairFree]);
+
+  // 조율이 열렸을 때만 서버에 묻는다 — 잡담에 달력을 열지 않는다(§34).
+  // 하루 창 하나만 본다: 여러 날을 훑으면 남의 하루가 재구성된다(§11, 서버도 거절한다).
+  const askedRef = React.useRef<string>("");
+  React.useEffect(() => {
+    const m = personOutcome?.memory;
+    if (!personId || !roomIsRemote || !m) return;
+    const open = m.state === "scheduling_detected" || m.state === "collecting_preferences" || m.state === "time_proposed";
+    if (!open) return;
+    const dayed = m.constraints.filter((c) => c.hasDay);
+    const day = new Date(dayed.length ? dayed[dayed.length - 1].at : Date.now());
+    const from = new Date(day); from.setHours(9, 0, 0, 0);
+    const to = new Date(day); to.setHours(22, 0, 0, 0);
+    const key = `${personId}|${from.toISOString()}`;
+    if (key === askedRef.current) return;
+    askedRef.current = key;
+    void pairSlots(personId, from, to)
+      .then((rows) => { if (rows) setPairFree(rows); })
+      .catch(() => track("engine.error"));
+  }, [personId, roomIsRemote, personOutcome]);
 
   // 방을 옮기면 그 방의 기억을 읽어 온다. 넘긴 제안은 다시 띄우지 않는다.
   React.useEffect(() => {

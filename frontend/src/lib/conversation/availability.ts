@@ -93,6 +93,17 @@ export function commonSlots(q: SlotQuery): SlotCandidate[] {
   return out.sort((a, b) => b.score - a.score);
 }
 
+/** 이 시각이 대화에서 걸린 조건들을 지키는가.
+ *  후보를 서버가 계산해 준 경우에도 조건은 우리가 건다 — 서버는 대화를 모른다. */
+export function withinConstraints(at: Date, constraints: TemporalConstraint[]): boolean {
+  for (const c of constraints) {
+    if (c.kind === "after" && +at < +c.at) return false;
+    if (c.kind === "before" && +at > +c.at) return false;
+    if (c.kind === "at" && Math.abs(+at - +c.at) > 30 * 60_000) return false;
+  }
+  return true;
+}
+
 /** 모두 되는 자리만. 하나도 없으면 빈 배열이고, 그때는 제안하지 않는 것이 맞다. */
 export const freeForAll = (slots: SlotCandidate[]) => slots.filter((s) => s.conflicts === 0);
 

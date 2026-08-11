@@ -300,3 +300,33 @@ describe("metrics", () => {
     setMetricSink(null);
   });
 });
+
+// ── 서버가 준 후보를 쓸 때 (§10) ───────────────────────
+
+describe("server slots", () => {
+  it("서버 후보를 쓰되, 대화의 조건은 우리가 건다", () => {
+    // 서버는 대화를 모른다 — 09시부터 아무 때나 된다고 답할 수 있다.
+    const fromServer = [9, 11, 15, 17].map((h) => ({
+      start: iso(12, h), end: iso(12, h + 1), conflicts: 0, score: 200,
+    }));
+    const out = analyzeConversation({
+      messages: say("내일 언제 볼까?", "나는 3시 이후 괜찮아"),
+      participants: [[]],
+      slots: fromServer,
+      now: NOW,
+    });
+    assert.ok(out.slots.every((s) => new Date(s.start).getHours() >= 15), "3시 이후만 남아야 한다");
+    assert.equal(out.suggestion?.start, iso(12, 15));
+  });
+
+  it("서버가 '겹친다' 고 한 자리는 권하지 않는다", () => {
+    const fromServer = [{ start: iso(12, 16), end: iso(12, 17), conflicts: 1, score: 100 }];
+    const out = analyzeConversation({
+      messages: say("내일 언제 볼까?", "나는 3시 이후 괜찮아"),
+      participants: [[]],
+      slots: fromServer,
+      now: NOW,
+    });
+    assert.equal(out.suggestion, null);
+  });
+});
