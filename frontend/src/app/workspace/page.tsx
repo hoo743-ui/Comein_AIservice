@@ -2660,6 +2660,12 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, onAnswer }: 
  *    · 확정      — 잉크. 정해진 것은 조용하고 분명하게
  *
  *  슬롯을 누르면 그 시각으로 제안이 열린다 — 대화하다가 손이 닿는 자리에서 시간이 정해진다. */
+// '함께 보는 일정' 칸의 폭 — 곁들이는 작은 달력이 아니라 대화와 나란히 서는 자리라
+// 일정 제목과 시각이 한 줄에 읽힐 만큼은 늘 확보한다.
+const TL_MIN = 340, TL_MAX = 520, TL_DEFAULT = 380;
+const TL_KEY = "comein:tlWidth", TL_OPEN_KEY = "comein:tlOpen";
+const clampTl = (w: number) => Math.max(TL_MIN, Math.min(TL_MAX, Math.round(w)));
+
 const SLOT_MIN = 30;          // 한 칸 = 30분
 const SLOT_H = 15;            // 한 칸의 높이(px)
 const DAY_FROM = 7;           // 07:00 부터
@@ -2705,8 +2711,24 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   const propStart = proposal ? new Date(proposal.start) : null;
   const propEnd = proposal ? new Date(proposal.end) : null;
 
+  const parts = participants.length;
+  const going = participants.filter((p) => p.status === "accepted").length;
+
   return (
     <div className="rmg-tl">
+      {/* 이 칸이 무엇의 시간인지 먼저 말한다 — 달력이 홀로 떠 있으면 부가 기능처럼 읽힌다. */}
+      <div className="rmg-tl-ctx">
+        <p className="rmg-tl-ctxeye">{en ? "Shared schedule" : "함께하는 일정"}</p>
+        <p className="rmg-tl-ctxt">{event.title}</p>
+        <p className="rmg-tl-ctxm">
+          {fmtDate(new Date(event.start))} · {fmtTime(new Date(event.start))}
+          {event.end ? `–${fmtTime(new Date(event.end))}` : ""}
+        </p>
+        <p className="rmg-tl-ctxm">
+          {en ? `${parts} people · ${going} going` : `참여자 ${parts}명 · 참석 ${going}`}
+        </p>
+      </div>
+
       <div className="rmg-tl-head">
         <button type="button" className="rmg-tl-nav" onClick={() => shift(-1)} aria-label={en ? "Previous day" : "이전 날"}>‹</button>
         <p className="rmg-tl-day">{fmtDate(day)}</p>
@@ -2836,6 +2858,36 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   const [adding, setAdding] = React.useState(false);
   // 요약은 기본으로 닫혀 있다 — 필요할 때만 펼친다(§9).
   const [sumOpen, setSumOpen] = React.useState(false);
+
+  // 오른쪽 '함께 보는 일정' 칸의 폭. 사용자가 정하고, 브라우저가 기억한다.
+  const [tlW, setTlW] = React.useState(TL_DEFAULT);
+  const [tlOpen, setTlOpen] = React.useState(true);
+  React.useEffect(() => {
+    try {
+      const w = Number(localStorage.getItem(TL_KEY));
+      if (w) setTlW(clampTl(w));
+      setTlOpen(localStorage.getItem(TL_OPEN_KEY) !== "0");
+    } catch { /* 못 읽어도 기본값으로 산다 */ }
+  }, []);
+  React.useEffect(() => { try { localStorage.setItem(TL_KEY, String(tlW)); } catch {} }, [tlW]);
+  React.useEffect(() => { try { localStorage.setItem(TL_OPEN_KEY, tlOpen ? "1" : "0"); } catch {} }, [tlOpen]);
+
+  // 끌기 — 포인터를 잡아 두면 커서가 칸 밖으로 나가도 끊기지 않는다.
+  const startDrag = React.useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    const el = e.currentTarget as HTMLElement;
+    el.setPointerCapture(e.pointerId);
+    const x0 = e.clientX;
+    const w0 = tlW;
+    const move = (ev: PointerEvent) => setTlW(clampTl(w0 - (ev.clientX - x0)));  // 왼쪽으로 끌면 넓어진다
+    const up = () => {
+      el.releasePointerCapture(e.pointerId);
+      el.removeEventListener("pointermove", move);
+      el.removeEventListener("pointerup", up);
+    };
+    el.addEventListener("pointermove", move);
+    el.addEventListener("pointerup", up);
+  }, [tlW]);
   const [draft, setDraft] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -2973,9 +3025,16 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
         )}
       </div>
 
-      {/* 대화 ‖ 함께 보는 하루 — 여럿이 모인 자리에서만 둘로 나뉜다.
-          말과 시간이 한 화면에 있어야 "그럼 금요일 저녁 어때?" 가 손이 닿는 거리에서 끝난다. */}
-      <div className="rmg-evsplit" data-split={!!timeline}>
+      {/* 대화 ‖ 함께 보는 일정 — 여럿이 모인 자리에서만 둘로 나뉜다.
+          말과 시간이 한 화면에 있어야 "그럼 금요일 저녁 어때?" 가 손이 닿는 거리에서 끝난다.
+          오른쪽은 곁들이는 작은 달력이 아니라 '이 대화와 이어진 시간' 이 서는 자리다 —
+          그래서 폭을 사용자가 쥔다(끌어서 조절, 접기, 다음에 와도 그대로). */}
+      <div
+        className="rmg-evsplit"
+        data-split={!!timeline}
+        data-tlopen={tlOpen}
+        style={{ ["--tl-w" as string]: `${tlW}px` }}
+      >
       <div className="rmg-drawer-chat">
         <div className="rmg-drawer-chathead">
           <p className="rmg-eyebrow rmg-drawer-eye">{en ? "Conversation" : "이 일정의 대화"}</p>
@@ -3019,7 +3078,42 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           </button>
         </form>
       </div>
-        {timeline && <div className="rmg-evtl">{timeline}</div>}
+        {timeline && tlOpen && (
+          <>
+            {/* 사이의 선 — 끌면 폭이 바뀐다. 평소엔 그냥 선이고, 손이 닿으면 그제야 손잡이가 된다. */}
+            <div
+              className="rmg-evgrip"
+              role="separator"
+              aria-orientation="vertical"
+              aria-label={en ? "Resize" : "폭 조절"}
+              onPointerDown={startDrag}
+              onDoubleClick={() => setTlW(TL_DEFAULT)}
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowLeft") setTlW((w) => clampTl(w + 24));
+                if (e.key === "ArrowRight") setTlW((w) => clampTl(w - 24));
+              }}
+            />
+            <div className="rmg-evtl">
+              <button
+                type="button"
+                className="rmg-evtl-fold"
+                onClick={() => setTlOpen(false)}
+                aria-label={en ? "Hide schedule" : "일정 접기"}
+              >›</button>
+              {timeline}
+            </div>
+          </>
+        )}
+        {/* 접혀 있을 때 — 돌아올 길 하나만 남긴다. */}
+        {timeline && !tlOpen && (
+          <button
+            type="button"
+            className="rmg-evtl-unfold"
+            onClick={() => setTlOpen(true)}
+            aria-label={en ? "Show schedule" : "일정 펼치기"}
+          >‹</button>
+        )}
       </div>
     </aside>
   );
@@ -5227,17 +5321,47 @@ html { font-size: 17px; }
 /* ── 대화 ‖ 함께 보는 하루 ──
    여럿이 모인 자리에서만 둘로 나뉜다. 대화가 주인공이고 하루는 곁에 선다. */
 .rmg-evsplit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-.rmg-evsplit[data-split="true"] { display: grid; grid-template-columns: minmax(0, 1fr) 268px; gap: var(--sp-4); }
-.rmg-evsplit[data-split="true"] .rmg-drawer-chat { min-width: 0; }
-.rmg-evtl { min-width: 0; border-left: 1px solid var(--hair); padding-left: var(--sp-3); }
-@media (max-width: 1100px) {
-  /* 좁아지면 하루가 대화 아래로 내려온다 — 나란히 두면 둘 다 못 읽는다. */
+/* 대화 | 손잡이 | 일정. 가운데가 먼저 줄고, 오른쪽은 읽을 수 있는 최소 폭을 지킨다. */
+.rmg-evsplit[data-split="true"] { display: grid; grid-template-columns: minmax(0, 1fr) 9px var(--tl-w, 380px); gap: 0; }
+.rmg-evsplit[data-split="true"][data-tlopen="false"] { grid-template-columns: minmax(0, 1fr) auto; }
+.rmg-evsplit[data-split="true"] .rmg-drawer-chat { min-width: 0; padding-right: var(--sp-2); }
+.rmg-evtl { position: relative; min-width: 0; padding-left: var(--sp-4); display: flex; flex-direction: column; }
+
+/* 사이의 선 — 평소엔 선, 손이 닿으면 손잡이. */
+.rmg-evgrip { position: relative; cursor: col-resize; touch-action: none; }
+.rmg-evgrip::before { content: ""; position: absolute; left: 4px; top: 0; bottom: 0; width: 1px;
+  background: var(--hair); transition: background 160ms ease-out; }
+.rmg-evgrip:hover::before, .rmg-evgrip:focus-visible::before { background: color-mix(in srgb, var(--ink) 26%, transparent); }
+.rmg-evgrip:focus-visible { outline: none; }
+
+/* 접기 — X 가 아니라 방향을 가리키는 홑화살괄호 하나. */
+.rmg-evtl-fold, .rmg-evtl-unfold { border: 0; background: none; color: var(--faint); font: inherit;
+  font-size: 0.95rem; line-height: 1; cursor: pointer; padding: 3px 6px; border-radius: 6px;
+  transition: color 160ms ease-out, background 160ms ease-out; }
+.rmg-evtl-fold { position: absolute; right: 0; top: -2px; z-index: 2; }
+.rmg-evtl-fold:hover, .rmg-evtl-unfold:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.rmg-evtl-unfold { align-self: flex-start; margin-left: var(--sp-1); border-left: 1px solid var(--hair);
+  border-radius: 0; padding-left: var(--sp-2); }
+
+@media (max-width: 1180px) {
+  /* 좁아지면 일정이 대화 아래로 내려온다 — 나란히 두면 둘 다 못 읽는다. */
   .rmg-evsplit[data-split="true"] { grid-template-columns: minmax(0, 1fr); }
-  .rmg-evtl { border-left: 0; padding-left: 0; border-top: 1px solid var(--hair); padding-top: var(--sp-2); }
+  .rmg-evgrip { display: none; }
+  .rmg-evtl { padding-left: 0; border-top: 1px solid var(--hair); padding-top: var(--sp-2); margin-top: var(--sp-2); }
+  .rmg-evsplit[data-split="true"] .rmg-drawer-chat { padding-right: 0; }
 }
+@media (prefers-reduced-motion: reduce) { .rmg-evgrip::before, .rmg-evtl-fold { transition: none; } }
 
 /* 하루는 자기 칸 안에서만 스크롤한다 — 페이지를 늘리면 대화와 하루의 바닥이 어긋난다. */
-.rmg-tl { display: flex; flex-direction: column; gap: var(--sp-1); max-height: 62vh; }
+/* 이 칸이 무엇의 시간인지 — 달력 위에 한 덩어리. 카드로 감싸지 않는다. */
+.rmg-tl-ctx { padding-bottom: var(--sp-2); margin-bottom: var(--sp-1); border-bottom: 1px solid var(--hair); }
+.rmg-tl-ctxeye { margin: 0 0 6px; font-size: 0.7rem; font-weight: 600; letter-spacing: 0.08em;
+  text-transform: uppercase; color: var(--faint); }
+.rmg-tl-ctxt { margin: 0; font-size: 1rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); }
+.rmg-tl-ctxm { margin: 3px 0 0; font-size: 0.8rem; font-weight: 300; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+/* 칸이 넓어진 만큼 하루도 길게 — 62vh 로 눌러 두면 넓힌 의미가 없다. */
+.rmg-tl { display: flex; flex-direction: column; gap: var(--sp-1); max-height: min(72vh, 760px); }
 .rmg-tl-scroll { overflow-y: auto; overscroll-behavior: contain; }
 .rmg-tl-scroll::-webkit-scrollbar { width: 6px; }
 .rmg-tl-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 3px; }
@@ -5263,10 +5387,11 @@ html { font-size: 17px; }
 .rmg-tl-slot.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
 .rmg-tl-slot:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; }
 
-/* 내 일정 — 잉크 면. 제목까지 보인다(내 것이므로). */
-.rmg-tl-ev { position: absolute; left: 2px; right: 34%; border-radius: var(--r-sm); overflow: hidden;
+/* 내 일정 — 잉크 면. 제목까지 보인다(내 것이므로).
+   칸이 넓어졌으니 블록도 제 폭을 쓴다(예전엔 오른쪽 34% 를 비워 두느라 제목이 잘렸다). */
+.rmg-tl-ev { position: absolute; left: 2px; right: 12%; border-radius: var(--r-sm); overflow: hidden;
   background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--bg);
-  padding: 1px 5px; pointer-events: none; }
+  padding: 2px 7px; pointer-events: none; }
 .rmg-tl-ev.self { background: color-mix(in srgb, var(--ink) 32%, transparent); color: var(--ink); }
 .rmg-tl-evt { font-size: 0.62rem; line-height: 1.25; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
