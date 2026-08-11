@@ -3815,10 +3815,16 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 
   return (
     <aside className="rmg-evpanel rmg-ppanel" role="region" aria-label={person.name}>
-      {/* 대화·일정에서는 요약으로 돌아갈 길을 한 줄 남긴다 — 방만 덜렁 바뀌면 길을 잃는다. */}
-      {tab !== "overview" && (
+      {/* 돌아갈 길. 방만 덜렁 바뀌면 길을 잃는다.
+          좁은 폭에서는 목록이 접혀 있으므로 요약에서도 '사람' 으로 돌아갈 길이 있어야 한다 —
+          없으면 사람을 한 번 고른 뒤 목록으로 되돌아갈 방법이 사라진다(막다른 길이었다). */}
+      {tab !== "overview" ? (
         <button type="button" className="rmg-evback" onClick={() => onTab("overview")}>
           ‹ {en ? "Overview" : "요약"}
+        </button>
+      ) : (
+        <button type="button" className="rmg-evback rmg-backlist" onClick={onClose}>
+          ‹ {en ? "People" : "사람"}
         </button>
       )}
 
@@ -5308,6 +5314,19 @@ html { font-size: 17px; }
 .rmg-ctx-k { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em; color: var(--faint); }
 .rmg-ctx-v { font-size: 1.06rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); line-height: 1.5; }
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
+/* 좁은 폭 — 라벨과 값을 나란히 두면 값 칸이 6.5em 남짓으로 짜부라져
+   "예정된 / 일정이 / 없어요" 처럼 한두 글자씩 끊긴다. 그때는 위아래로 쌓는다. */
+@media (max-width: 700px) {
+  .rmg-ctx-line { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .rmg-ctx-v { font-size: 1rem; }
+}
+/* 달력 머리 — 좁아지면 "2026 / 년 8월", "오 / 늘" 처럼 낱말 안에서 줄이 갈렸다.
+   글자를 쪼개서 폭을 맞추면 읽히지 않는다. 줄바꿈을 막고, 대신 머리 전체가 접히게 둔다. */
+.rmg-mc-title, .rmg-mc-today { white-space: nowrap; }
+@media (max-width: 700px) {
+  .rmg-cv-head { flex-wrap: wrap; gap: var(--sp-1); }
+  .rmg-mc-head { flex-wrap: wrap; row-gap: var(--sp-1); }
+}
 .rmg-ctx-reflect { color: var(--muted); }
 
 
@@ -5718,6 +5737,9 @@ html { font-size: 17px; }
 .rmg-ppanel { gap: var(--sp-2); max-width: 720px; }
 /* 돌아가는 길은 왼쪽 끝에 — button 의 기본 가운데 정렬 때문에 한복판으로 밀려난다. */
 .rmg-ppanel > .rmg-evback { align-self: flex-start; }
+/* 목록으로 돌아가는 길은 목록이 접혔을 때만 필요하다 — 넓은 화면에서는 왼쪽에 그대로 있다. */
+.rmg-backlist { display: none; }
+@media (max-width: 880px) { .rmg-backlist { display: inline-flex; } }
 /* 아무도 고르지 않았을 때 — 표식 하나와 한 줄이 칸 한가운데 선다. */
 .rmg-pnone { display: flex; flex-direction: column; align-items: center; justify-content: center;
   gap: var(--sp-2); min-height: min(52vh, 460px); padding: var(--sp-4) var(--sp-2); text-align: center; }
