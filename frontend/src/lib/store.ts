@@ -18,6 +18,7 @@ import type {
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
+  editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   connectWith, dayAvailability, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
@@ -214,6 +215,13 @@ interface WorkspaceState {
   findPeople: (q: string) => Promise<Contact[]>;
   /** 잇는다. 이어지면 사람 목록에 들어온다(멱등). */
   connectPerson: (peerId: ID) => Promise<boolean>;
+  /** 내가 쓴 말을 고친다. 화면에 먼저 반영하고 서버가 뒤따른다(실패하면 되돌린다). */
+  editMessage: (id: ID, content: string) => Promise<void>;
+  /** 내가 쓴 말을 지운다(soft delete — 서버에는 행이 남고 내용은 비워진다). */
+  deleteMessage: (id: ID) => Promise<void>;
+  /** Realtime 이 알려준 '지워진 말' — 그 자리를 걷는다. */
+  dropMessage: (id: ID) => void;
+
   /** Realtime 으로 들어온 메시지 한 건. 같은 id 가 이미 있으면 무시한다
    *  (내가 보낸 낙관적 메시지와 서버가 돌려준 것이 겹쳐 두 번 보이지 않게). */
   applyRemoteMessage: (m: ChatMessage) => void;
@@ -313,7 +321,43 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   applyRemoteMessage: (m) =>
-    set((st) => (st.chatMessages.some((x) => x.id === m.id) ? st : { chatMessages: [...st.chatMessages, m] })),
+    set((st) => {
+      const i = st.chatMessages.findIndex((x) => x.id === m.id);
+      // 이미 있는 말이면 '고쳐진 것' 이다 — 무시하지 않고 그 자리를 갈아 끼운다.
+      // (내가 보낸 낙관적 메시지가 서버 id 로 돌아온 경우에도 같은 자리를 덮는다.)
+      if (i >= 0) {
+        const next = [...st.chatMessages];
+        next[i] = { ...next[i], content: m.content, edited: m.edited, pending: false };
+        return { chatMessages: next };
+      }
+      return { chatMessages: [...st.chatMessages, m] };
+    }),
+
+  dropMessage: (id) => set((st) => ({ chatMessages: st.chatMessages.filter((m) => m.id !== id) })),
+
+  editMessage: async (id, content) => {
+    const text = content.trim();
+    if (!text) return;
+    const before = get().chatMessages.find((m) => m.id === id);
+    if (!before || before.content === text) return;
+
+    // 화면이 먼저 바뀐다. 서버가 거절하면 되돌린다 — 고쳐진 척 남아 있으면 그게 더 나쁘다.
+    set((st) => ({ chatMessages: st.chatMessages.map((m) => (m.id === id ? { ...m, content: text, edited: true } : m)) }));
+    if (!remoteReady()) return;
+    const ok = await editMessageRemote(id, text);
+    if (!ok) {
+      set((st) => ({ chatMessages: st.chatMessages.map((m) => (m.id === id ? { ...m, content: before.content, edited: before.edited } : m)) }));
+    }
+  },
+
+  deleteMessage: async (id) => {
+    const before = get().chatMessages.find((m) => m.id === id);
+    if (!before) return;
+    set((st) => ({ chatMessages: st.chatMessages.filter((m) => m.id !== id) }));
+    if (!remoteReady()) return;
+    const ok = await deleteMessageRemote(id);
+    if (!ok) set((st) => ({ chatMessages: [...st.chatMessages, before] }));   // 못 지웠으면 되돌려 놓는다
+  },
 
   unread: {},
   bumpUnread: (roomId) => set((st) => ({ unread: { ...st.unread, [roomId]: (st.unread[roomId] ?? 0) + 1 } })),

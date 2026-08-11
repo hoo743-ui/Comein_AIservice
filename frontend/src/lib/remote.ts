@@ -187,13 +187,21 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
       // dm_key 는 "uidA:uidB" — 나를 뺀 나머지가 상대다.
       peerId: r.dm_key ? String(r.dm_key).split(":").find((u: string) => u !== myUidOf()) : undefined,
     })),
-    chatMessages: (ms.data ?? []).map((m: any): ChatMessage => ({
-      id: m.id,
-      roomId: m.room_id,
-      senderId: toLocalUser(m.sender_id),
-      content: m.content,
-      createdAt: m.created_at,
-    })),
+    // 지워진 말은 가져오지 않는다 — 자리를 남길지는 화면이 정할 일이지만,
+    // 지금은 조용히 사라지는 편이 대화를 덜 어지럽힌다(행은 서버에 남아 있다).
+    chatMessages: (ms.data ?? []).filter((m: any) => !m.deleted_at).map(toMessage),
+  };
+}
+
+/** chat_messages 한 줄 → 화면이 쓰는 ChatMessage. 스냅샷과 실시간이 같은 변환을 쓴다. */
+function toMessage(m: any): ChatMessage {
+  return {
+    id: m.id,
+    roomId: m.room_id,
+    senderId: toLocalUser(m.sender_id),
+    content: m.content,
+    createdAt: m.created_at,
+    edited: !!m.is_edited,
   };
 }
 
@@ -454,10 +462,36 @@ export async function fetchOpenProposal(eventId: ID): Promise<ScheduleProposal |
   };
 }
 
+/** 남긴 말을 고친다. 서버가 내 말인지 다시 확인한다(0008 RLS) — 화면에서 버튼을 숨기는 걸로 끝내지 않는다. */
+export async function editMessage(messageId: ID, content: string): Promise<boolean> {
+  const sb = getSupabase();
+  const uid = await ensureUid();
+  if (!sb || !uid) return false;
+  const { error } = await sb
+    .from("chat_messages")
+    .update({ content })
+    .eq("id", messageId)
+    .eq("sender_id", uid);
+  if (error) { console.error("메시지 수정 실패:", error.message); return false; }
+  return true;
+}
+
+/** 지운다 — 행은 남고 내용만 비워진다(soft delete). 되돌릴 수 있게, 그러나 내용은 서버에도 남지 않게. */
+export async function deleteMessage(messageId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("delete_message", { m: messageId });
+  if (error) { console.error("메시지 삭제 실패:", error.message); return false; }
+  return true;
+}
+
 // ── 실시간 ──────────────────────────────────────────────
 
 export type RemoteHandlers = {
+  /** 새 말 · 고쳐진 말. 같은 id 면 그 자리를 갈아 끼운다. */
   onMessage: (m: ChatMessage) => void;
+  /** 지워진 말 — 그 자리를 걷는다. */
+  onMessageGone?: (id: ID) => void;
   onEventChange: () => void;
 };
 
@@ -471,14 +505,14 @@ export function subscribeRemote(handlers: RemoteHandlers): (() => void) | null {
   const ch: RealtimeChannel = sb
     .channel("comein-workspace")
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
+      handlers.onMessage(toMessage(payload.new));
+    })
+    // 고침과 지움도 같은 길로 온다 — 상대 화면에서 바뀐 말이 내 화면에서도 바뀌어야 한다.
+    // (지움은 hard delete 가 아니라 update 라서 UPDATE 로 도착한다.)
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "chat_messages" }, (payload) => {
       const m: any = payload.new;
-      handlers.onMessage({
-        id: m.id,
-        roomId: m.room_id,
-        senderId: toLocalUser(m.sender_id),
-        content: m.content,
-        createdAt: m.created_at,
-      });
+      if (m.deleted_at) handlers.onMessageGone?.(m.id);
+      else handlers.onMessage(toMessage(m));
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => handlers.onEventChange())
     .on("postgres_changes", { event: "*", schema: "public", table: "event_participants" }, () => handlers.onEventChange())

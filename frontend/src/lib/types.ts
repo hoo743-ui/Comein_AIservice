@@ -57,6 +57,8 @@ export interface ChatMessage {
   createdAt: string; // ISO
   /** 낙관적 반영 중인 메시지 — 서버/Realtime 이 같은 걸 돌려주면 이 자리를 대체한다. */
   pending?: boolean;
+  /** 한 번이라도 고쳐졌는가. 조용히 바뀌는 대화는 믿을 수 없으므로 흔적을 남긴다. */
+  edited?: boolean;
 }
 
 // ── 일정 제안 ──────────────────────────────────────────

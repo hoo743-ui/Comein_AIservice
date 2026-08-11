@@ -271,6 +271,9 @@ export default function Reimagine() {
   const connectPerson = useWorkspace((s) => s.connectPerson);
   const sendEventMessage = useWorkspace((s) => s.sendEventMessage);
   const sendDirectMessage = useWorkspace((s) => s.sendDirectMessage);
+  // 내가 쓴 말 고치기·지우기 — 서버도 같은 규칙을 다시 확인한다(0008 RLS).
+  const editMessage = useWorkspace((s) => s.editMessage);
+  const deleteMessage = useWorkspace((s) => s.deleteMessage);
   const setParticipantStatus = useWorkspace((s) => s.setParticipantStatus);
   const rebaseSeeds = useWorkspace((s) => s.rebaseSeeds);
   const addParticipant = useWorkspace((s) => s.addParticipant);
@@ -742,7 +745,9 @@ export default function Reimagine() {
   // ── 대화 요약 ──
   // 말이 쌓이면 뒤늦게 들어온 사람이 처음부터 읽어야 한다. 그걸 대신 읽어 준다.
   // 자동으로 계속 고쳐 쓰지는 않는다 — 요약이 스스로 움직이면 대화를 방해한다.
-  const [summaries, setSummaries] = React.useState<Record<string, string>>({});
+  // 요약은 줄인 글이 아니라 '행동할 수 있는 정보' 다 — 네 갈래로 받는다.
+  // 근거가 없는 갈래는 서버가 빈 채로 보낸다. 빈 갈래는 화면에도 서지 않는다.
+  const [summaries, setSummaries] = React.useState<Record<string, ChatSummary>>({});
   const [summaryBusy, setSummaryBusy] = React.useState(false);
 
   const summarizeEvent = React.useCallback(async (eventId: string) => {
@@ -766,8 +771,15 @@ export default function Reimagine() {
       });
       if (!res.ok) return;
       const data = await res.json();
-      const lines: string[] = Array.isArray(data?.lines) ? data.lines.filter((l: unknown) => typeof l === "string" && l.trim()) : [];
-      if (lines.length) setSummaries((m) => ({ ...m, [eventId]: lines.join("\n") }));
+      const s = (k: string) => (typeof data?.[k] === "string" ? data[k].trim() : "");
+      const sum: ChatSummary = { recap: s("recap"), decided: s("decided"), pending: s("pending"), next: s("next") };
+      // 네 갈래가 모두 비었으면(옛 서버거나 근거가 없거나) 예전 형태로 물러난다.
+      if (!sum.recap && !sum.decided && !sum.pending && !sum.next) {
+        const lines: string[] = Array.isArray(data?.lines) ? data.lines.filter((l: unknown) => typeof l === "string" && l.trim()) : [];
+        if (!lines.length) return;
+        sum.recap = lines.join(" ");
+      }
+      setSummaries((m) => ({ ...m, [eventId]: sum }));
     } catch { /* 닿지 않으면 조용히 둔다 — 요약은 없어도 대화는 그대로다 */ }
     finally { setSummaryBusy(false); }
   }, []);
@@ -1062,6 +1074,8 @@ export default function Reimagine() {
           }}
           onClose={closeEvent}
           onSend={(text) => sendEventMessageAndMaybePropose(openEventData.id, text)}
+          onEditMessage={(id, text) => void editMessage(id, text)}
+          onDeleteMessage={(id) => void deleteMessage(id)}
           onAddParticipant={(uid) => addParticipant(openEventData.id, uid)}
           onRemoveParticipant={(uid) => removeParticipant(openEventData.id, uid)}
           onRespond={(status) => setParticipantStatus(openEventData.id, ME_ID, status)}
@@ -1143,6 +1157,8 @@ export default function Reimagine() {
           focusChat={chatFocus}
           onClose={() => selectPerson(null)}
           onSend={(text) => sendDirectMessage(person.id, text)}
+          onEditMessage={(id, text) => void editMessage(id, text)}
+          onDeleteMessage={(id) => void deleteMessage(id)}
           onOpenEvent={(id) => openEvent(id, true)}
           onCreateEvent={(title, start) => createEventWith([person.id], title, start)}
         />
@@ -1477,7 +1493,16 @@ export default function Reimagine() {
         {/* 앰비언트 AI — 상주 챗박스가 아니라, 필요할 때만 펼쳐지는 떠다니는 문 (⌘K).
             전체 패널(캘린더·설정·가이드)이 열리면 컴포저는 물러난다(⌘K 충돌 방지).
             입력하면 확인 절차 없이 바로 정리된다 — 결과는 위 영수증에 남는다. */}
-        {!panel && <DoorInvoke view={view} lang={lang} organizing={organizing} onSubmit={capture} />}
+        {/* 대화를 열어 둔 동안에도 물러난다 — 아래에 이미 메시지 입력칸이 있어 둘이 겹친다. */}
+        {!panel && (
+          <DoorInvoke
+            view={view}
+            lang={lang}
+            organizing={organizing}
+            onSubmit={capture}
+            tuck={shownView === "people" && !!(personId || openEventId)}
+          />
+        )}
 
         {/* 전체 화면 란 — 이제 캘린더 하나만 남았다(설정은 오른쪽 칸으로 옮겼다). */}
         {panel === "calendar" && mounted && (
@@ -1568,7 +1593,11 @@ const HINTS = [
 ];
 
 /** Ask Comein — 항상 보이는 주 입력. 문(브랜드) + 명확한 필드 + 회전 예시. 1초 안에 '여기서 시작'임을 안다. */
-function DoorInvoke({ view, lang, organizing, onSubmit }: { view: View; lang: Lang; organizing: boolean; onSubmit: (v: string) => void }) {
+function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
+  view: View; lang: Lang; organizing: boolean; onSubmit: (v: string) => void;
+  /** 접힌 채로 물러나 있을 상황인가(대화가 열려 있어 입력칸이 겹칠 때 등). */
+  tuck?: boolean;
+}) {
   const tt = L(lang);
   const hints = tt.hints();
   const [draft, setDraft] = React.useState("");
@@ -1602,7 +1631,7 @@ function DoorInvoke({ view, lang, organizing, onSubmit }: { view: View; lang: La
   // 캘린더에서는 접힌 채로 물러나 있는다.
   // 하루의 시간을 보는 화면에서 넓은 입력창이 아래를 가로막으면, 정작 저녁 시간대가 가려진다.
   // 부를 때만 펼친다 — 누르거나 ⌘K. (문은 늘 거기 있지만, 열려 있진 않다.)
-  const tucked = view === "calendar" && !focused && !draft;
+  const tucked = (view === "calendar" || tuck) && !focused && !draft;
 
   return (
     <form
@@ -2072,14 +2101,10 @@ function spansOf(day: Date, schedules: any[], mine: Receipt[], base: Date | null
     const ok = raw && !Number.isNaN(+raw) && +raw > +st;
     add(String(s.id), s.title, st, ok ? raw! : new Date(+st + 3_600_000), s.status === "pending", !!ok);
   }
-  for (const r of mine) {
-    const d = r.date ?? base;
-    // 시각을 모르면 원 위에 놓을 자리가 없다 — 시간 없는 건은 원에서 빠진다.
-    if (!d || !r.time) continue;
-    const [hh, mm] = r.time.split(":").map(Number);
-    const st = new Date(d); st.setHours(hh, mm, 0, 0);
-    add(`r-${r.id}`, r.title, st, new Date(+st + 3_600_000), true, false);
-  }
+  // 영수증은 여기에 얹지 않는다.
+  // 시각이 있는 캡처는 이미 addSchedule 로 진짜 일정이 되어 위 반복문에 들어와 있다 —
+  // 여기서 한 번 더 그리면 같은 일정이 두 줄로 보인다("19:00 팀 회식" 이 두 번 뜨던 것).
+  // (calItems 는 같은 이유로 이미 영수증을 뺐는데, 원·시간표를 그리는 이쪽만 남아 있었다.)
   return out.sort((a, b) => a.from - b.from || a.to - b.to);
 }
 
@@ -2775,7 +2800,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   );
 }
 
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", proposal, proposalBusy, onAnswerProposal, summary, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline }: {
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, variant = "drawer", proposal, proposalBusy, onAnswerProposal, summary, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -2790,7 +2815,7 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   proposalBusy?: boolean;
   onAnswerProposal?: (r: "accepted" | "declined") => void;
   /** 대화 요약 — 스스로 갱신하지 않는다. 사람이 부를 때만 다시 읽는다. */
-  summary?: string | null;
+  summary?: ChatSummary | null;
   summaryBusy?: boolean;
   onSummarize?: () => void;
   onClose: () => void;
@@ -2803,9 +2828,14 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   onBack?: () => void;
   /** 여럿이 함께하는 자리에서만 서는 오른쪽 칸(함께 보는 하루). 없으면 대화만 그린다. */
   timeline?: React.ReactNode;
+  /** 내 말 고치기·지우기 */
+  onEditMessage?: (id: string, text: string) => void;
+  onDeleteMessage?: (id: string) => void;
 }) {
   const en = lang === "en";
   const [adding, setAdding] = React.useState(false);
+  // 요약은 기본으로 닫혀 있다 — 필요할 때만 펼친다(§9).
+  const [sumOpen, setSumOpen] = React.useState(false);
   const [draft, setDraft] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
   const endRef = React.useRef<HTMLDivElement>(null);
@@ -2950,28 +2980,28 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
         <div className="rmg-drawer-chathead">
           <p className="rmg-eyebrow rmg-drawer-eye">{en ? "Conversation" : "이 일정의 대화"}</p>
           {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다. */}
+          {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다.
+              'AI' 라고 크게 말하지 않는다. 정리된 것이 조용히 나타날 뿐이다(§12·§17). */}
           {onSummarize && messages.length >= 4 && (
-            <button type="button" className="rmg-ppl-act" disabled={summaryBusy} onClick={onSummarize}>
-              {summaryBusy ? (en ? "Reading…" : "읽는 중…") : summary ? (en ? "Update" : "다시 정리") : (en ? "Summarize" : "요약")}
+            <button
+              type="button"
+              className="rmg-ppl-make"
+              disabled={summaryBusy}
+              onClick={() => { if (!summary) onSummarize(); setSumOpen((v) => !v); }}
+            >
+              {summaryBusy ? (en ? "Reading…" : "읽는 중…") : sumOpen ? (en ? "Hide" : "요약 닫기") : (en ? "Summary" : "요약 보기")}
             </button>
           )}
         </div>
 
-        {/* AI 요약 — 대화를 밀어내지 않게 작게, 위에 한 겹만. 스스로 갱신하지 않는다. */}
-        {summary && (
-          <div className="rmg-sum">
-            <p className="rmg-eyebrow rmg-sum-eye">{en ? "AI summary" : "AI 요약"}</p>
-            {summary.split("\n").filter((l) => l.trim()).map((line, i) => (
-              <p key={i} className="rmg-sum-line">{line.replace(/^[•\-*]\s*/, "")}</p>
-            ))}
-          </div>
-        )}
+        {/* 요약 — 대화를 밀어내지 않게 위에 한 겹만. 스스로 갱신하지 않는다. */}
+        {sumOpen && summary && <SummaryBlock summary={summary} lang={lang} busy={!!summaryBusy} onRefresh={onSummarize} />}
 
         <div className="rmg-drawer-msgs">
           {messages.length === 0 ? (
             <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
           ) : (
-            <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} />
+            <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
           )}
           <div ref={endRef} />
         </div>
@@ -3041,12 +3071,158 @@ function dayDivider(prev: Date | null, cur: Date, lang: Lang): string | null {
   return fmtDate(cur);
 }
 
+/** 대화에서 건져 올린 네 갈래. 근거가 없는 갈래는 서버가 비워 보내고, 화면에도 서지 않는다. */
+type ChatSummary = { recap: string; decided: string; pending: string; next: string };
+
+/** 요약 한 겹 — 카드가 아니라 얇은 구획.
+ *
+ *  "AI 요약" 이라는 큰 라벨도, 아이콘도, 파란 상자도 두지 않는다(§16).
+ *  정리된 정보가 대화 위에 조용히 놓여 있을 뿐이다 — 말하는 존재가 아니라 정리하는 시스템(§17). */
+function SummaryBlock({ summary, lang, busy, onRefresh }: {
+  summary: ChatSummary;
+  lang: Lang;
+  busy: boolean;
+  onRefresh?: () => void;
+}) {
+  const en = lang === "en";
+  const rows: [string, string][] = [
+    [en ? "Recap" : "최근 대화", summary.recap],
+    [en ? "Decided" : "결정된 내용", summary.decided],
+    [en ? "Open" : "미정 사항", summary.pending],
+    [en ? "Next" : "다음 행동", summary.next],
+  ];
+  const shown = rows.filter(([, v]) => v);
+  if (!shown.length) return null;
+
+  return (
+    <section className="rmg-sum" aria-label={en ? "Summary" : "요약"}>
+      {shown.map(([k, v]) => (
+        <div key={k} className="rmg-sum-row">
+          <span className="rmg-sum-k">{k}</span>
+          <span className="rmg-sum-v">{v}</span>
+        </div>
+      ))}
+      {onRefresh && (
+        <button type="button" className="rmg-sum-again" disabled={busy} onClick={onRefresh}>
+          {busy ? (en ? "Reading…" : "읽는 중…") : (en ? "Refresh" : "다시 정리")}
+        </button>
+      )}
+    </section>
+  );
+}
+
+/** 내 말 한 줄에 붙는 조용한 손잡이 — 평소엔 없다.
+ *  마우스가 그 줄에 닿을 때만 점 세 개가 떠오르고, 거기서 고치거나 지운다.
+ *  버튼이 늘 떠 있으면 대화가 아니라 관리 화면이 된다(§1·§6). */
+function MessageLine({ m, mine, lang, onEdit, onDelete }: {
+  m: ChatMessage;
+  mine: boolean;
+  lang: Lang;
+  onEdit: (id: string, text: string) => void;
+  onDelete: (id: string) => void;
+}) {
+  const en = lang === "en";
+  const [menu, setMenu] = React.useState(false);
+  const [editing, setEditing] = React.useState(false);
+  const [asking, setAsking] = React.useState(false);   // 지울까요?
+  const [draft, setDraft] = React.useState(m.content);
+  const ref = React.useRef<HTMLTextAreaElement>(null);
+
+  React.useEffect(() => {
+    if (!editing) return;
+    setDraft(m.content);
+    const el = ref.current;
+    if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+  }, [editing]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 메뉴는 바깥을 누르면 닫힌다 — 열어 둔 채로 다른 걸 하다 잊게 두지 않는다.
+  React.useEffect(() => {
+    if (!menu) return;
+    const close = () => setMenu(false);
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [menu]);
+
+  const save = () => {
+    const text = draft.trim();
+    setEditing(false);
+    if (text && text !== m.content) onEdit(m.id, text);
+  };
+
+  if (editing) {
+    return (
+      <div className="rmg-mg-edit">
+        <textarea
+          ref={ref}
+          className="rmg-mg-editin"
+          value={draft}
+          rows={Math.min(6, draft.split("\n").length)}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); save(); }
+            if (e.key === "Escape") setEditing(false);
+          }}
+          aria-label={en ? "Edit message" : "메시지 수정"}
+        />
+        <div className="rmg-mg-editacts">
+          <button type="button" className="rmg-ppl-make" onClick={() => setEditing(false)}>{en ? "Cancel" : "취소"}</button>
+          <button type="button" className="rmg-ppl-act primary" onClick={save} disabled={!draft.trim()}>{en ? "Save" : "저장"}</button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rmg-mg-row">
+      <p className="rmg-mg-line">
+        {m.content}
+        {m.edited && <span className="rmg-mg-edited">{en ? "(edited)" : "(수정됨)"}</span>}
+      </p>
+
+      {mine && !asking && (
+        <div className="rmg-mg-act">
+          <button
+            type="button"
+            className="rmg-mg-more"
+            aria-label={en ? "Message actions" : "메시지 메뉴"}
+            aria-expanded={menu}
+            onClick={(e) => { e.stopPropagation(); setMenu((v) => !v); }}
+          >···</button>
+          {menu && (
+            <div className="rmg-mg-menu" role="menu" onClick={(e) => e.stopPropagation()}>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setEditing(true); }}>
+                {en ? "Edit" : "수정"}
+              </button>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setAsking(true); }}>
+                {en ? "Delete" : "삭제"}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* 지울까요 — 화면을 덮는 경고창을 띄우지 않는다. 그 줄 옆에서 한 번만 묻는다(§3). */}
+      {asking && (
+        <span className="rmg-mg-ask">
+          <span className="rmg-mg-askq">{en ? "Delete?" : "지울까요?"}</span>
+          <button type="button" className="rmg-ppl-make" onClick={() => setAsking(false)}>{en ? "Cancel" : "취소"}</button>
+          <button type="button" className="rmg-mg-del" onClick={() => { setAsking(false); onDelete(m.id); }}>
+            {en ? "Delete" : "삭제"}
+          </button>
+        </span>
+      )}
+    </div>
+  );
+}
+
 /** 묶인 말 한 뭉치. 1:1 방과 일정 방이 이 한 모양을 함께 쓴다. */
-function MessageGroups({ messages, nameOf, myName, lang }: {
+function MessageGroups({ messages, nameOf, myName, lang, onEdit, onDelete }: {
   messages: ChatMessage[];
   nameOf: (userId: string) => string;
   myName: string;
   lang: Lang;
+  onEdit?: (id: string, text: string) => void;
+  onDelete?: (id: string) => void;
 }) {
   const groups = React.useMemo(() => groupMessages(messages), [messages]);
   let prevDay: Date | null = null;
@@ -3065,7 +3241,14 @@ function MessageGroups({ messages, nameOf, myName, lang }: {
                 <span className="rmg-mg-at">{fmtTime(g.at)}</span>
               </p>
               {g.items.map((m) => (
-                <p key={m.id} className={`rmg-mg-line ${m.pending ? "pending" : ""}`}>{m.content}</p>
+                <MessageLine
+                  key={m.id}
+                  m={m}
+                  mine={g.senderId === ME_ID && !m.pending && !!onEdit}
+                  lang={lang}
+                  onEdit={(id, text) => onEdit?.(id, text)}
+                  onDelete={(id) => onDelete?.(id)}
+                />
               ))}
             </div>
           </React.Fragment>
@@ -3077,7 +3260,7 @@ function MessageGroups({ messages, nameOf, myName, lang }: {
 
 /** 대화 한 타래 — 1:1 방과 일정 방이 똑같은 모양을 쓴다.
  *  방이 달라도 '말이 쌓이는 방식'까지 달라지면 두 개의 다른 앱처럼 보인다. */
-function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend }: {
+function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend, onEditMessage, onDeleteMessage }: {
   messages: ChatMessage[];
   nameOf: (userId: string) => string;
   myName: string;
@@ -3085,6 +3268,9 @@ function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend
   focus: boolean;
   lang: Lang;
   onSend: (text: string) => void;
+  /** 내 말 고치기·지우기. 없으면 손잡이 자체가 나타나지 않는다. */
+  onEditMessage?: (id: string, text: string) => void;
+  onDeleteMessage?: (id: string) => void;
 }) {
   const en = lang === "en";
   const [draft, setDraft] = React.useState("");
@@ -3108,7 +3294,7 @@ function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend
         {messages.length === 0 ? (
           <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
         ) : (
-          <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} />
+          <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
         )}
         <div ref={endRef} />
       </div>
@@ -3229,7 +3415,7 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
 /** 고른 사람에 대한 모든 것 — 오른쪽 칸의 주인.
  *  둘만의 대화와 함께하는 일정을 한 지붕 아래 두고 위쪽 세그먼트로만 가른다.
  *  (예전처럼 목록 안에 버튼을 늘어놓으면 '대화' 가 두 가지를 뜻해 헷갈린다.) */
-function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent }: {
+function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage }: {
   person: Contact;
   tab: "chat" | "events";
   onTab: (t: "chat" | "events") => void;
@@ -3243,6 +3429,9 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
   onSend: (text: string) => void;
   onOpenEvent: (eventId: string) => void;
   onCreateEvent: (title: string, start: Date) => void;
+  /** 내 말 고치기·지우기 */
+  onEditMessage?: (id: string, text: string) => void;
+  onDeleteMessage?: (id: string) => void;
 }) {
   const en = lang === "en";
 
@@ -3306,6 +3495,8 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
             focus={focusChat}
             lang={lang}
             onSend={onSend}
+            onEditMessage={onEditMessage}
+            onDeleteMessage={onDeleteMessage}
           />
         </div>
       ) : (
@@ -4535,7 +4726,7 @@ html { font-size: 17px; }
 .rmg-pagebody[data-ctx="false"][data-aside="true"] { grid-template-columns: minmax(0, 1fr) minmax(320px, 420px); }
 /* 사람 — 달력을 걷어낸 폭을 목록과 대화가 나눠 갖는다.
    목록은 이름이 읽힐 만큼만 두고 나머지는 전부 대화에 준다. 오른쪽에 빈 벌판을 남기지 않는다. */
-.rmg-pagebody[data-view="people"][data-aside="true"] { grid-template-columns: minmax(240px, 20vw) minmax(0, 1fr); }
+.rmg-pagebody[data-view="people"][data-aside="true"]:not([data-settings="true"]) { grid-template-columns: minmax(240px, 20vw) minmax(0, 1fr); }
 /* 대화 칸이 화면 높이를 받아야 목록만 길고 오른쪽이 짧은 어긋남이 사라진다. */
 .rmg-pagebody[data-view="people"] .rmg-pageaside { min-height: min(70vh, 680px); }
 /* 아무도 고르지 않았을 때 — 목록이 가로로 늘어지지 않게 왼쪽 폭을 그대로 지킨다. */
@@ -4544,8 +4735,10 @@ html { font-size: 17px; }
    본문을 옆에 남겨 두면 '설정을 보는 중'인지 '오늘을 보는 중'인지 눈이 두 곳으로 갈린다. */
 .rmg-pagebody[data-settings="true"] { grid-template-columns: minmax(0, 1fr) !important; }
 .rmg-pagebody[data-settings="true"] .rmg-pagemain { display: none; }
-/* 다만 끝까지 늘리지는 않는다 — 1440px 을 가로지르는 설정 행은 읽는 눈이 멀리 간다. */
-.rmg-pagebody[data-settings="true"] .rmg-pageaside { max-width: 780px; }
+/* 설정은 한 화면이다 — 작업면을 넉넉히 쓴다.
+   780px 에 묶여 있어 좌우가 텅 빈 채 항목만 줄줄이 서 있었다. 다만 끝까지 늘리지는 않는다
+   (한 행이 1440px 을 가로지르면 라벨과 값 사이를 눈이 멀리 건너간다). */
+.rmg-pagebody[data-settings="true"] .rmg-pageaside { max-width: min(1180px, 100%); }
 /* 레일이 물러난 폭에서는 빈 컬럼을 남기지 않는다. */
 @media (max-width: 1239px) { .rmg-pagebody[data-ctx="true"] { grid-template-columns: minmax(0, var(--reading)) minmax(0, 1fr); } }
 @media (max-width: 880px) {
@@ -4878,6 +5071,15 @@ html { font-size: 17px; }
    '이건 사람이 한 말이 아니다' 만 구분한다. */
 .rmg-drawer-chathead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
 .rmg-drawer-chathead .rmg-ppl-act { font-size: 0.76rem; padding: 4px 10px; }
+/* 요약 — 갈래 이름과 내용이 두 칸으로. 카드가 아니라 얇은 구획 하나. */
+.rmg-sum-row { display: grid; grid-template-columns: 5.2em minmax(0, 1fr); gap: var(--sp-2); align-items: baseline; padding: 3px 0; }
+.rmg-sum-k { font-size: 0.7rem; font-weight: 500; letter-spacing: 0.02em; color: var(--faint); white-space: nowrap; }
+.rmg-sum-v { font-size: 0.84rem; font-weight: 300; line-height: 1.55; color: color-mix(in srgb, var(--ink) 82%, transparent); }
+.rmg-sum-again { align-self: flex-end; margin-top: 2px; border: 0; background: none; font: inherit;
+  font-size: 0.7rem; color: var(--faint); cursor: pointer; padding: 2px; }
+.rmg-sum-again:hover { color: var(--ink); }
+.rmg-sum-again:disabled { opacity: 0.5; cursor: default; }
+
 .rmg-sum { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-1) 10px;
   border-left: 2px solid color-mix(in srgb, var(--ink) 18%, var(--hair));
   background: color-mix(in srgb, var(--ink) 3%, transparent); border-radius: 0 var(--r-sm) var(--r-sm) 0; }
@@ -5123,6 +5325,40 @@ html { font-size: 17px; }
 /* 시각은 이름 옆에 한 번만 — 뭉치의 시작에만 적는다. */
 .rmg-mg-at { font-size: 0.68rem; color: var(--faint); font-variant-numeric: tabular-nums; }
 .rmg-mg-line { margin: 0; font-size: 0.95rem; font-weight: 300; line-height: 1.6; color: var(--ink); overflow-wrap: anywhere; }
+/* 한 줄과 그 손잡이 — 손잡이는 줄 밖(오른쪽)에 서서 글을 밀지 않는다. */
+.rmg-mg-row { position: relative; display: flex; align-items: flex-start; gap: var(--sp-1); }
+.rmg-mg-row .rmg-mg-line { flex: 1; min-width: 0; }
+.rmg-mg-edited { margin-left: 6px; font-size: 0.68rem; color: var(--faint); white-space: nowrap; }
+/* 평소엔 없다. 그 줄에 손이 닿을 때만 떠오른다(150ms). */
+.rmg-mg-act { position: relative; flex-shrink: 0; opacity: 0; transition: opacity 160ms ease-out; }
+.rmg-mg-row:hover .rmg-mg-act, .rmg-mg-act:focus-within { opacity: 1; }
+.rmg-mg-more { border: 0; background: none; color: var(--faint); font: inherit; font-size: 0.82rem; line-height: 1;
+  padding: 2px 5px; border-radius: 5px; cursor: pointer; letter-spacing: 0.06em; }
+.rmg-mg-more:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+.rmg-mg-menu { position: absolute; right: 0; top: 100%; z-index: 5; display: flex; flex-direction: column;
+  min-width: 92px; padding: 4px; border-radius: var(--r-sm); border: 1px solid var(--hair);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  box-shadow: 0 8px 20px -14px rgba(0,0,0,0.45); animation: rmg-pop 140ms cubic-bezier(0.22,1,0.36,1) both; }
+.rmg-mg-menu button { border: 0; background: none; font: inherit; font-size: 0.82rem; color: var(--muted);
+  text-align: left; padding: 6px 8px; border-radius: 4px; cursor: pointer; }
+.rmg-mg-menu button:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+@keyframes rmg-pop { from { opacity: 0; transform: scale(0.98) translateY(-2px); } to { opacity: 1; transform: none; } }
+
+/* 지울까요 — 그 줄 옆에서 한 번만 묻는다. 화면을 덮지 않는다. */
+.rmg-mg-ask { display: inline-flex; align-items: center; gap: var(--sp-1); flex-shrink: 0; }
+.rmg-mg-askq { font-size: 0.76rem; color: var(--muted); white-space: nowrap; }
+.rmg-mg-del { border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--hair)); background: none; font: inherit;
+  font-size: 0.76rem; font-weight: 500; color: var(--ink); padding: 3px 10px; border-radius: 999px; cursor: pointer; }
+.rmg-mg-del:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+
+/* 인라인 수정 — 자리를 옮기지 않는다. 그 줄이 그대로 입력칸이 된다. */
+.rmg-mg-edit { display: flex; flex-direction: column; gap: 6px; }
+.rmg-mg-editin { width: 100%; resize: none; border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--hair));
+  border-radius: var(--r-sm); background: color-mix(in srgb, var(--surface) 80%, transparent);
+  font: inherit; font-size: 0.95rem; font-weight: 300; line-height: 1.6; color: var(--ink);
+  padding: 6px 9px; outline: none; caret-color: var(--accent); }
+.rmg-mg-editacts { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); }
+@media (prefers-reduced-motion: reduce) { .rmg-mg-act, .rmg-mg-menu { transition: none; animation: none; } }
 .rmg-mg-line.pending { opacity: 0.5; }
 /* 날짜가 바뀌는 자리 — 선을 긋지 않고 글자 하나로만 */
 .rmg-msg-day { margin: var(--sp-3) 0 var(--sp-1); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.06em;

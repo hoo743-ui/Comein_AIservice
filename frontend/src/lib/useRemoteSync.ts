@@ -25,6 +25,7 @@ export type RemoteState = { configured: boolean; signedIn: boolean; ready: boole
 export function useRemoteSync(opts?: { onIncoming?: (m: ChatMessage) => void }): RemoteState {
   const hydrateRemote = useWorkspace((s) => s.hydrateRemote);
   const applyRemoteMessage = useWorkspace((s) => s.applyRemoteMessage);
+  const dropMessage = useWorkspace((s) => s.dropMessage);
   // 콜백이 매 렌더 새로 만들어져도 구독을 다시 걸지 않는다(소켓이 계속 끊겼다 붙는다).
   const onIncoming = React.useRef(opts?.onIncoming);
   onIncoming.current = opts?.onIncoming;
@@ -55,6 +56,7 @@ export function useRemoteSync(opts?: { onIncoming?: (m: ChatMessage) => void }):
         stop?.();
         stop = subscribeRemote({
           onMessage: (m) => { applyRemoteMessage(m); onIncoming.current?.(m); },
+          onMessageGone: (id) => dropMessage(id),
           // 일정·참여자는 관계가 얽혀 있어 한 건씩 깁지 않고 다시 받아 온다.
           onEventChange: () => { void fetchSnapshot().then((s) => s && alive && hydrateRemote(s)).catch(() => {}); },
         });
@@ -72,7 +74,7 @@ export function useRemoteSync(opts?: { onIncoming?: (m: ChatMessage) => void }):
       stop?.();
       data.subscription.unsubscribe();
     };
-  }, [hydrateRemote, applyRemoteMessage]);
+  }, [hydrateRemote, applyRemoteMessage, dropMessage]);
 
   return { configured: isSupabaseConfigured, signedIn, ready, error };
 }
