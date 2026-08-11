@@ -423,14 +423,142 @@ export async function openProposal(eventId: ID, title: string | null, start: str
   return data as string;
 }
 
-/** 답한다. 전원이 채워지면 서버가 그 자리에서 일정을 앉힌다(확정을 따로 부르지 않는다). */
+/** 답한다. 전원이 채워지면 서버가 그 자리에서 일정을 앉힌다(확정을 따로 부르지 않는다).
+ *
+ *  status 가 "conflict" 로 돌아올 수 있다 — 전원이 동의했지만, 그 사이 누군가 그 시간에
+ *  다른 일정을 잡은 경우다. 서버가 확정 직전에 다시 확인하기 때문에 알 수 있는 일이고,
+ *  이때 waiting 은 '겹치는 사람 수' 다. 확정은 일어나지 않았다. */
 export async function respondToProposal(proposalId: ID, response: "accepted" | "declined" | "alternative", alt?: string) {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return null;
   const { data, error } = await sb.rpc("respond_to_proposal", { p: proposalId, resp: response, alt: alt ?? null });
   if (error) { console.error("응답 실패:", error.message); return null; }
   const row = Array.isArray(data) ? data[0] : data;
-  return row ? { status: row.status as ProposalStatus, eventId: row.event_id as string, waiting: row.waiting as number } : null;
+  return row
+    ? { status: row.status as ProposalStatus | "conflict", eventId: row.event_id as string, waiting: row.waiting as number }
+    : null;
+}
+
+// ── 대화의 기억 · 제안 (0010) ───────────────────────────
+// 표를 직접 만지지 않는다. 서버의 함수만 부른다 — 권한 판정이 거기 있고,
+// '사람이 확인해야 일정이 된다' 는 약속도 거기서 지켜진다.
+
+export interface RemoteConversationState {
+  roomId: ID;
+  state: string;
+  constraints: unknown[];
+  proposed: string[];
+  rejected: string[];
+  confirmedAt: string | null;
+  lastMessageId: string | null;
+  version: number;
+}
+
+const toConvState = (row: Record<string, unknown> | null): RemoteConversationState | null =>
+  row && row.room_id
+    ? {
+        roomId: String(row.room_id),
+        state: String(row.state ?? "idle"),
+        constraints: Array.isArray(row.constraints) ? row.constraints : [],
+        proposed: (row.proposed as string[] | null) ?? [],
+        rejected: (row.rejected as string[] | null) ?? [],
+        confirmedAt: (row.confirmed_at as string | null) ?? null,
+        lastMessageId: (row.last_message_id as string | null) ?? null,
+        version: Number(row.version ?? 0),
+      }
+    : null;
+
+/** 이 대화가 지금 어디쯤 와 있는가. 아직 아무 일도 없었으면 null. */
+export async function fetchConversationState(roomId: ID): Promise<RemoteConversationState | null> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("get_conversation_state", { r: roomId });
+  if (error) { console.error("대화 상태 읽기 실패:", error.message); return null; }
+  return toConvState((Array.isArray(data) ? data[0] : data) ?? null);
+}
+
+/** 기억을 올린다.
+ *
+ *  version 을 함께 보내면 그 사이 다른 화면이 먼저 고쳤을 때 내 것은 들어가지 않는다.
+ *  그때도 오류가 아니라 **지금 저장돼 있는 줄**이 돌아온다 — 돌아온 version 이 내가 보낸 것과
+ *  다르면 내 것이 안 들어갔다는 뜻이고, 그때 할 일은 재시도가 아니라 다시 읽고 다시 판단하는 것이다.
+ *  (어긋남을 40001 로 던지면 풀러가 자동 재시도해 영원히 같은 결과를 되풀이한다 — 실제로 매달렸다.) */
+export async function saveConversationState(roomId: ID, patch: {
+  state: string;
+  constraints?: unknown[];
+  proposed?: string[];
+  rejected?: string[];
+  confirmedAt?: string | null;
+  lastMessageId?: string | null;
+  version?: number | null;
+}): Promise<RemoteConversationState | null> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("save_conversation_state", {
+    r: roomId,
+    p_state: patch.state,
+    p_constraints: patch.constraints ?? [],
+    p_proposed: patch.proposed ?? [],
+    p_rejected: patch.rejected ?? [],
+    p_confirmed_at: patch.confirmedAt ?? null,
+    p_last_message_id: patch.lastMessageId ?? null,
+    p_version: patch.version ?? null,
+  });
+  if (error) { console.error("대화 상태 저장 실패:", error.message); return null; }
+  return toConvState((Array.isArray(data) ? data[0] : data) ?? null);
+}
+
+/** 화면에 띄운 제안을 남긴다. 같은 자리를 두 번 남기면 서버가 있던 것을 그대로 돌려준다. */
+export async function recordSuggestion(roomId: ID, start: string, end: string, reason?: string, sourceMessageId?: ID) {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("record_suggestion", {
+    r: roomId, s: start, f: end, p_reason: reason ?? null, p_source_message_id: sourceMessageId ?? null,
+  });
+  if (error) { console.error("제안 기록 실패:", error.message); return null; }
+  return (Array.isArray(data) ? data[0] : data) ?? null;
+}
+
+/** 이 방에서 이미 답이 끝난 제안들의 열쇠(`start|end`).
+ *  새로 들어와도 넘긴 제안이 다시 떠오르지 않게 하는 데 쓴다. */
+export async function fetchAnsweredSuggestions(roomId: ID): Promise<string[]> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return [];
+  const { data, error } = await sb
+    .from("ai_suggestions")
+    .select("start_at,end_at")
+    .eq("room_id", roomId)
+    .in("status", ["dismissed", "accepted"]);
+  if (error || !data) return [];
+  // 서버의 표기(+00:00)와 화면의 표기(Z)를 같은 모양으로 맞춘다 — 아니면 영영 안 맞는다.
+  return data.map((r) => `${new Date(r.start_at).toISOString()}|${new Date(r.end_at).toISOString()}`);
+}
+
+/** 열쇠(`start|end`)로 그 방의 제안을 찾아 답한다. 못 찾으면 조용히 넘어간다. */
+export async function answerSuggestionForRoom(roomId: ID, key: string, verdict: "accepted" | "dismissed") {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const [start, end] = key.split("|");
+  if (!start || !end) return null;
+  const { data } = await sb
+    .from("ai_suggestions")
+    .select("id")
+    .eq("room_id", roomId)
+    .eq("start_at", start)
+    .eq("end_at", end)
+    .eq("status", "open")
+    .maybeSingle();
+  if (!data?.id) return null;
+  return answerSuggestion(data.id as string, verdict);
+}
+
+/** 사람이 답했다 — 받아들였거나 넘겼거나. */
+export async function answerSuggestion(suggestionId: ID, verdict: "accepted" | "dismissed") {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("answer_suggestion", { sug: suggestionId, verdict });
+  if (error) { console.error("제안 응답 실패:", error.message); return null; }
+  return (Array.isArray(data) ? data[0] : data) ?? null;
 }
 
 /** 이 일정에 열려 있는 제안 하나(없으면 null). 지난 제안은 가져오지 않는다. */

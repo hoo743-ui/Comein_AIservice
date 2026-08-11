@@ -31,6 +31,11 @@ export default function RootLayout({
           rel="stylesheet"
           href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.css"
         />
+        {/* 화면 제목(오늘·캘린더·사람) 전용 — SUIT. 본문은 그대로 Pretendard 가 맡는다. */}
+        <link
+          rel="stylesheet"
+          href="https://cdn.jsdelivr.net/gh/sun-typeface/SUIT@2.0.5/fonts/variable/woff2/SUIT-Variable.css"
+        />
         <ThemeProvider
           attribute="class"
           defaultTheme="light"

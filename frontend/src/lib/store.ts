@@ -2,6 +2,7 @@
 
 import { create } from "zustand";
 
+import type { UserMode } from "./mode";
 import type {
   ChatMessage,
   ChatRoom,
@@ -158,7 +159,10 @@ const seedChatMessages: ChatMessage[] = [];
 
 // ── 설정 ──
 export type Language = "ko" | "en";
-export type Mode = "student" | "office" | "general";
+/** 사용자 Context. 실제 값과 해석 규칙은 `lib/mode.ts` 가 쥔다 —
+ *  화면은 그쪽 훅(useCurrentMode)으로만 읽고, 여기는 저장되는 자리일 뿐이다.
+ *  (예전 값 office·general 은 normalizeMode 가 흡수한다.) */
+export type Mode = UserMode;
 /** 글자 크기 배율. 칸이 아니라 연속값 — 사람마다 편한 크기가 세 칸에 딱 떨어지지 않는다. */
 export type TextScale = number;
 export const TEXT_SCALE_MIN = 0.9;
@@ -257,6 +261,9 @@ interface WorkspaceState {
    *  못 찾으면 null 을 돌려준다 — 아무 때나 지어내 제안하지 않는다. */
   proposeTime: (eventId: ID, preferred: Date, durationMin?: number, title?: string) => Promise<ScheduleProposal | null>;
   answerProposal: (eventId: ID, proposalId: ID, response: "accepted" | "declined") => Promise<void>;
+  /** 전원 동의였는데 확정 직전 확인에서 막힌 자리. 겹친 사람 수까지만 담는다(§11).
+   *  null 이면 그런 일이 없었다는 뜻이다. */
+  proposalConflict: { eventId: ID; busy: number } | null;
 
   /** 대화방 옆 하루 — 슬롯별 '몇 명이 되는가'. 키는 `eventId|YYYY-MM-DD`.
    *  누가 바쁜지는 담기지 않는다(집계만). 내 일정은 schedules 에서 그대로 읽어 그린다. */
@@ -466,6 +473,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   // ── 일정 제안 ───────────────────────────────────────
   proposals: {},
+  proposalConflict: null,
 
   idAlias: {},
 
@@ -527,8 +535,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const snap = await fetchSnapshot();
       if (snap) get().hydrateRemote(snap);
       set((st) => ({ proposals: { ...st.proposals, [eventId]: null } }));
+      set({ proposalConflict: null });
       return;
     }
+    // 전원이 동의했는데도 확정되지 않은 경우 — 그 사이 누가 그 시간에 다른 일정을 잡았다.
+    // 조용히 넘어가지 않는다. 무슨 일이 있었는지는 사람이 알아야 다음을 정할 수 있다(§17).
+    // 다만 겹친 사람이 무엇을 하는지는 여기서도 말하지 않는다 — 몇 명인지까지다(§11).
+    set({ proposalConflict: res?.status === "conflict" ? { eventId, busy: res.waiting } : null });
     await get().loadProposal(eventId);
   },
 
