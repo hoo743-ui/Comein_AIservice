@@ -428,3 +428,72 @@ DB 에는 메시지 5건이 멀쩡히 있는데 화면은 "아직 대화가 없�
 4. 저장 경로 이원화 — 워크스페이스는 Supabase 직행이고 `POST /api/items`(SQLAlchemy) 는 쓰이지 않는다.
    `backend/app/models/*` 를 유지할지 걷을지 미결. **5절·8.4절의 "저장 연결" 항목은 이 경로에 한해 무효다.**
 5. `ai/agents/*` 스켈레톤 — 3절 그대로.
+
+---
+
+## 12. 카카오 로그인 — 어디까지 갔나 (2026-08-11)
+
+문이 안 열렸다. 로그인 버튼은 있는데 눌러도 카카오가 거절했다.
+오류를 하나씩 벗겨 보니 **코드 문제가 아니라 전부 카카오·Supabase 설정 문제**였다.
+
+확인 방법은 하나였다 — 실제로 브라우저에서 세션을 비우고 카카오 버튼을 눌러
+**밖으로 나가는 authorize URL 과 카카오가 돌려주는 오류 코드를 읽는다.**
+(`scratchpad/kakao_try.mjs`. 오류 화면의 '펼치기' 를 열면 카카오가 원인을 이름까지 짚어 준다.)
+
+| 오류 | 원인 | 조치 | 상태 |
+|---|---|---|---|
+| KOE101 | Client ID 에 REST API 키가 아닌 키가 들어감 | REST API 키로 교체 | ✅ |
+| KOE205 | `account_email` 이 비즈 앱 전용 동의항목 | 비즈 앱 전환 후 이메일 '선택 동의' | ✅ |
+| KOE205 | `profile_image` 미설정 | 동의항목에서 프로필 사진 켜기 | ✅ |
+| KOE006 | Redirect URI 미등록 | 아래 두 칸 — **진행 중** | ⬜ |
+
+### 12.1 Redirect URI — 칸이 둘이다
+
+혼동의 원인이 여기 있었다. 이름이 비슷한 칸이 두 개고, 둘 다 채워야 한다.
+
+```
+① 앱 설정 → 플랫폼 → Web        사이트 도메인 (경로 없이 도메인만)
+   https://mbamzjivpdzjnvzcbamp.supabase.co
+
+② 제품 설정 → 카카오 로그인 → Redirect URI   (경로까지 전부)
+   https://mbamzjivpdzjnvzcbamp.supabase.co/auth/v1/callback
+```
+
+①만 넣으면 KOE006 은 사라지지 않는다. ②가 안 보이면 그 페이지의 활성화 설정이 OFF 다.
+
+우리 도메인이 아니라 **Supabase 도메인**을 넣는 게 맞다 — 카카오가 돌려보내는 곳은
+우리 사이트가 아니라 Supabase 이고, Supabase 가 세션을 만든 뒤 `redirect_to` 로 넘긴다.
+
+### 12.2 scope 는 코드로 줄일 수 없다
+
+`signInWithOAuth({ options: { scopes } })` 로 `account_email` 을 빼려 했지만,
+Supabase 는 provider 기본 scope 에 **덧붙이기만** 한다. 실제로 나간 값:
+
+```
+scope = account_email profile_image profile_nickname profile_nickname profile_image
+```
+
+그래서 셋 다 카카오 콘솔에서 켜져 있어야 한다. 되돌렸고 `remote.ts` 에 주석으로 남겼다
+(다음 사람이 같은 길로 다시 들어서지 않도록).
+
+### 12.3 이메일이 없어도 사람은 이름을 가져야 한다 — 0009
+
+이메일 동의를 '선택' 으로 두면 사용자가 거부할 수 있다. 그런데 프로필 핸들을
+이메일 앞부분에서만 뽑고 있어서, 이메일이 없으면 전부 `comein`, `comein1`, `comein2` 로
+줄을 섰다. **핸들로 사람을 찾는 화면에서 순번 핸들은 서로를 못 찾게 만든다.**
+
+`0009_handle_without_email.sql` — 세 갈래로 짚는다:
+이메일 → provider 가 준 아이디 → 계정 uuid 앞 8자리(`u3f9a2b1`).
+한글 닉네임은 `[a-z0-9_]` 만 남기면 비므로 세 번째 갈래가 실제로 자주 쓰인다. **적용 완료.**
+
+### 12.4 이어서 할 것
+
+1. **KOE006 마저 닫기** — 12.1 의 두 칸. 닫히면 동의 화면이 떠야 한다.
+   그 뒤 실제 로그인해서 `profiles` 에 핸들·표시 이름이 어떻게 앉는지 확인.
+2. **`backend/.env` 의 `DATABASE_URL` 이 옛 프로젝트를 가리킨다** —
+   `postgres.jldpstmdzulwxuzolisq` (없는 테넌트). 실제는 `mbamzjivpdzjnvzcbamp`.
+   지금은 백엔드가 `/api/chat`·`/api/summary` 만 맡아 앱은 안 터지지만,
+   `/health/db` 는 실패하고 **Render 를 깨우려던 cron 도 무의미하다.**
+3. **Supabase → Redirect URLs** 에 `http://localhost:3000/**` 과 배포 주소가 있는지.
+   카카오를 통과해도 마지막에 여기서 튕긴다.
+4. 미착수 — `/api/chat` 역질문 + `context` 채우기, 모바일 웹 점검.
