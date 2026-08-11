@@ -96,6 +96,10 @@ export async function signInWithProvider(provider: "github" | "kakao", redirectT
   if (!sb) throw new Error("Supabase 설정이 없습니다.");
   return sb.auth.signInWithOAuth({
     provider,
+    // 카카오 scope 를 여기서 줄이려 해도 소용없다 — Supabase 는 provider 기본 scope
+    // (account_email profile_image profile_nickname) 에 우리 값을 '덧붙이기만' 한다.
+    // account_email 은 비즈 앱 전용 동의항목이므로, 개인 앱이면 카카오 콘솔에서
+    // 비즈 앱으로 전환해 이메일을 열어야 한다. 코드로 우회할 수 있는 자리가 아니다.
     options: { redirectTo: redirectTo ?? window.location.href },
   });
 }
