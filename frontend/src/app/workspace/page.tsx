@@ -4655,7 +4655,27 @@ html { font-size: 17px; }
 .rmg-set-d { margin: 4px 0 0; font-size: 0.84rem; font-weight: 300; line-height: 1.4; color: var(--muted); }
 /* 설정이 오른쪽 칸에 들어오면 좁아진다 — 라벨과 조작을 위아래로 접는다. */
 .rmg-setpanel-body { flex: 1; min-height: 0; overflow-y: auto; }
-.rmg-setpanel .rmg-set { max-width: none; }
+/* 설정은 곁들이는 칸이 아니라 하나의 화면이다 — 작업면을 그대로 쓴다.
+   한 줄씩 세로로만 쌓이면 넓은 화면에서 가운데 가느다란 띠 하나만 남는다.
+   폭이 되는 만큼 두 칸으로 흐르게 두되, 한 항목(라벨+조작)은 절대 쪼개지지 않는다. */
+.rmg-setpanel .rmg-set {
+  max-width: none;
+  display: grid;
+  /* 두 칸까지만. 세 칸이 되면 한 항목을 읽고 다음 항목으로 눈이 화면을 가로질러 건너간다
+     — 넓다고 다 쓰는 게 아니라, 읽는 거리가 유지되는 만큼만 쓴다. */
+  grid-template-columns: repeat(auto-fit, minmax(min(560px, 100%), 1fr));
+  max-width: 1240px;
+  column-gap: var(--sp-8, 64px);
+  align-content: start;
+}
+/* 두 칸이 되면 각 칸의 첫 줄에도 윗선이 필요 없다 — 칸마다 위가 뚫려 있어야 나란히 읽힌다. */
+.rmg-setpanel .rmg-set-row { border-top: 1px solid var(--hair); }
+.rmg-setpanel .rmg-set-row:first-child { border-top: 1px solid var(--hair); }
+/* 계정 줄은 폭을 넉넉히 쓴다(이메일·버튼이 함께 서는 자리라 좁으면 줄바꿈이 지저분하다). */
+.rmg-setpanel .rmg-set-row:has(.rmg-acct) { grid-column: 1 / -1; }
+@media (max-width: 1000px) {
+  .rmg-setpanel .rmg-set { grid-template-columns: minmax(0, 1fr); }
+}
 /* 넉넉해졌으니 라벨과 조작을 다시 좌우로 편다 — 좁을 때만 접는다. */
 .rmg-setpanel .rmg-set-row { padding: var(--sp-3) 0; }
 .rmg-setpanel .rmg-acct { max-width: 62%; }
@@ -4738,7 +4758,7 @@ html { font-size: 17px; }
 /* 설정은 한 화면이다 — 작업면을 넉넉히 쓴다.
    780px 에 묶여 있어 좌우가 텅 빈 채 항목만 줄줄이 서 있었다. 다만 끝까지 늘리지는 않는다
    (한 행이 1440px 을 가로지르면 라벨과 값 사이를 눈이 멀리 건너간다). */
-.rmg-pagebody[data-settings="true"] .rmg-pageaside { max-width: min(1180px, 100%); }
+.rmg-pagebody[data-settings="true"] .rmg-pageaside { max-width: none; }
 /* 레일이 물러난 폭에서는 빈 컬럼을 남기지 않는다. */
 @media (max-width: 1239px) { .rmg-pagebody[data-ctx="true"] { grid-template-columns: minmax(0, var(--reading)) minmax(0, 1fr); } }
 @media (max-width: 880px) {
