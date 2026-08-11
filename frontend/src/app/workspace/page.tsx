@@ -2512,6 +2512,9 @@ function DayDial({ spans, day, now, lang, onOpenEvent }: {
             };
             return (
               <g key={s.id} className="rmg-dial-ev">
+                {/* 그림에도 말을 붙인다 — 원을 못 보는 사람에게도 이 띠가 무엇인지 남는다(§37).
+                    아래 목록이 본래의 텍스트 대안이지만, 원 자체가 침묵할 이유는 없다. */}
+                <title>{`${s.title} · ${spanRange(s, lang)}`}</title>
                 {edge(s.from, "from")}
                 {edge(s.to, "to")}
                 {/* 면 — 중심까지 채운 부채꼴. 하루에서 이 일정이 차지한 몫이 그대로 보인다.
@@ -2564,19 +2567,27 @@ function DayDial({ spans, day, now, lang, onOpenEvent }: {
             // 캡처로 만들어진 임시 항목(r-…)은 아직 일정이 아니라 열 상세가 없다.
             const eventId = s.id.startsWith("r-") ? null : s.id;
             return (
-              <li
-                key={s.id}
-                className={`rmg-dial-keyrow ${activeId === s.id ? "on" : ""}`}
-                onMouseEnter={() => setHover(s.id)}
-                onMouseLeave={() => setHover(null)}
-                onClick={() => (eventId && onOpenEvent ? onOpenEvent(eventId) : setPinned((p) => (p === s.id ? null : s.id)))}
-              >
-                {/* 목록의 표식과 원의 띠는 같은 색 — 눈이 둘을 하나로 잇는다. */}
-                <span className={`rmg-dial-chip h${hueOf.get(s.id) ?? 0} ${s.pending ? "pending" : ""} ${s.allDay ? "allday" : ""}`} />
-                <span className="rmg-dial-keytime">{s.allDay ? (lang === "en" ? "All day" : "종일") : hhmm(s.startAt)}</span>
-                {/* 접힌 상태에서 말하는 것은 시각과 제목뿐이다 — 참여자·메모·대화는
-                    눌러서 열었을 때 그 일정의 맥락으로 한꺼번에 따라온다. */}
-                <span className="rmg-dial-keytitle">{s.title}</span>
+              // 원은 눈으로 읽는 그림이고, 이 목록이 그 그림의 말(text alternative)이다.
+              // 그래서 목록은 반드시 키보드로 닿아야 한다 — 캘린더에서 일정을 여는 길이
+              // 여기뿐이기 때문이다. 예전엔 li 에 onClick 만 걸려 있어 마우스로만 열렸다(§37).
+              <li key={s.id}>
+                <button
+                  type="button"
+                  className={`rmg-dial-keyrow ${activeId === s.id ? "on" : ""}`}
+                  aria-current={activeId === s.id}
+                  onMouseEnter={() => setHover(s.id)}
+                  onMouseLeave={() => setHover(null)}
+                  onFocus={() => setHover(s.id)}
+                  onBlur={() => setHover(null)}
+                  onClick={() => (eventId && onOpenEvent ? onOpenEvent(eventId) : setPinned((p) => (p === s.id ? null : s.id)))}
+                >
+                  {/* 목록의 표식과 원의 띠는 같은 색 — 눈이 둘을 하나로 잇는다. */}
+                  <span className={`rmg-dial-chip h${hueOf.get(s.id) ?? 0} ${s.pending ? "pending" : ""} ${s.allDay ? "allday" : ""}`} />
+                  <span className="rmg-dial-keytime">{s.allDay ? (lang === "en" ? "All day" : "종일") : hhmm(s.startAt)}</span>
+                  {/* 접힌 상태에서 말하는 것은 시각과 제목뿐이다 — 참여자·메모·대화는
+                      눌러서 열었을 때 그 일정의 맥락으로 한꺼번에 따라온다. */}
+                  <span className="rmg-dial-keytitle">{s.title}</span>
+                </button>
               </li>
             );
           })}
@@ -5527,7 +5538,10 @@ html { font-size: 17px; }
 .rmg-dial-tip-t { font-size: 0.8rem; font-weight: 500; color: var(--ink); }
 .rmg-dial-tip-r { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rmg-dial-key { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--sp-1); }
-.rmg-dial-keyrow { display: flex; align-items: baseline; gap: var(--sp-1); cursor: pointer; border-radius: var(--r-sm); padding: 2px 4px; margin: 0 -4px; transition: background 0.15s; }
+.rmg-dial-keyrow { display: flex; align-items: baseline; gap: var(--sp-1); width: 100%; text-align: left;
+  border: 0; background: none; font: inherit; cursor: pointer; border-radius: var(--r-sm);
+  padding: 2px 4px; margin: 0 -4px; transition: background 0.15s; }
+.rmg-dial-keyrow:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 1px; }
 .rmg-dial-keyrow:hover, .rmg-dial-keyrow.on { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 /* 목록 표식 — 원의 띠와 같은 색·같은 모양(짧은 호처럼 둥근 막대). */
 .rmg-dial-chip { --c0: 38 22% 58%; --c1: 205 16% 56%; --c2: 145 14% 52%; --c3: 18 24% 57%; --h: var(--c0);
