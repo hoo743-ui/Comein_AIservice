@@ -603,9 +603,22 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       if (!rid) return;
       const realId = await pushMessage(rid, text);
       set((st) => ({
+        // 방 자체도 진짜 id 로 갈아 끼운다.
+        //
+        // 이걸 빠뜨리면 이런 일이 생긴다(실제로 그랬다): 말은 서버에 잘 저장되는데
+        // 화면에는 "아직 대화가 없어요" 가 뜬다. 메시지만 진짜 방 id 로 옮겨 놓고
+        // 방 목록은 지역 이름(dm_…)을 그대로 들고 있으니, 화면이 찾는 방과
+        // 말이 앉은 방이 서로 다른 곳이 된다. 새로고침해야 비로소 보였다.
+        chatRooms: st.chatRooms.some((r) => r.id === rid)
+          ? st.chatRooms.filter((r) => !(r.peerId === peerId && r.id !== rid))
+          : st.chatRooms.map((r) => (r.peerId === peerId ? { ...r, id: rid } : r)),
         chatMessages: realId
           ? st.chatMessages.map((m) => (m.id === msg.id ? { ...m, id: realId, roomId: rid, pending: false } : m))
           : st.chatMessages.filter((m) => m.id !== msg.id),
+      }));
+      // 지역 id 로 앉아 있던 옛 말들도 함께 옮긴다 — 로그인 전에 나눈 말이 여기 있을 수 있다.
+      set((st) => ({
+        chatMessages: st.chatMessages.map((m) => (m.roomId === roomId && roomId !== rid ? { ...m, roomId: rid } : m)),
       }));
     })();
   },

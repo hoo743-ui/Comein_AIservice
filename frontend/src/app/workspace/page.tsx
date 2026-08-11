@@ -871,6 +871,16 @@ export default function Reimagine() {
     const day = new Date(dayed.length ? dayed[dayed.length - 1].at : Date.now());
     const from = new Date(day); from.setHours(9, 0, 0, 0);
     const to = new Date(day); to.setHours(22, 0, 0, 0);
+    // 창을 대화의 조건에 맞춰 좁힌다. 서버는 대화를 모르므로 이른 시각부터 순서대로
+    // 돌려주는데, "3시 이후" 라고 했으면 그 앞의 후보들은 받아 봐야 전부 버려진다
+    // (실제로 그래서 제안이 하나도 안 떴다). 좁혀 묻는 편이 정확하고, 덜 들여다본다.
+    for (const c of m.constraints) {
+      const at = c.hasDay ? c.at : (() => { const x = new Date(day); x.setHours(c.at.getHours(), c.at.getMinutes(), 0, 0); return x; })();
+      if (c.kind === "after" && +at > +from) from.setTime(+at);
+      if (c.kind === "before" && +at < +to) to.setTime(+at);
+      if (c.kind === "at") { if (+at > +from) from.setTime(+at); }
+    }
+    if (+to - +from < 30 * 60_000) return;
     const key = `${personId}|${from.toISOString()}`;
     if (key === askedRef.current) return;
     askedRef.current = key;
@@ -1288,6 +1298,10 @@ export default function Reimagine() {
         />
       );
     }
+    // 고를 사람이 아직 없으면 이 칸은 아무 말도 하지 않는다.
+    // 왼쪽이 "아직 연결된 사람이 없어요" 라고 이미 말했는데 오른쪽이 "사람을 선택하세요" 라고
+    // 하면, 화면이 서로 어긋난 말을 하는 셈이다(할 수 없는 일을 시킨다).
+    if (!contacts.length) return null;
     // 아무도 고르지 않았을 때 — 벌판을 남기지도, 억지로 채우지도 않는다.
     // 한가운데 표식 하나와 한 줄. 이 칸이 '아직 비어 있다'가 아니라 '기다리고 있다'로 읽히게.
     return (
@@ -4161,9 +4175,15 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
       ) : contacts.length === 0 && !q ? (
         // 큰 그림 대신 다음 한 걸음만 말해 준다.
         <div className="rmg-ppl-blank">
-          <p className="rmg-ppl-blank-t">{en ? "No one here yet." : "아직 연결된 사람이 없어요."}</p>
+          <p className="rmg-ppl-blank-t">
+            {lane === "dm"
+              ? (en ? "No conversations yet." : "아직 나눈 대화가 없어요.")
+              : (en ? "No one here yet." : "아직 연결된 사람이 없어요.")}
+          </p>
           <p className="rmg-ppl-blank-b">
-            {en ? "Find someone on Comein by name or @handle, and start there." : "이름이나 @핸들로 Comein에서 사람을 찾아보세요."}
+            {lane === "dm"
+              ? (en ? "Pick someone from Contacts and say something." : "연락처에서 사람을 골라 말을 걸어보세요.")
+              : (en ? "Find someone on Comein by name or @handle, and start there." : "이름이나 @핸들로 Comein에서 사람을 찾아보세요.")}
           </p>
         </div>
       ) : shown.length === 0 && newcomers.length === 0 && !finding ? (
@@ -5804,7 +5824,9 @@ html { font-size: 17px; }
 .rmg-newroom-chip.on { color: var(--ink); font-weight: 600; background: color-mix(in srgb, var(--ink) 8%, transparent); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
 .rmg-ppl-act:disabled { opacity: 0.45; cursor: default; }
 /* 어디서 들어왔는지 — 방만 덜렁 바뀌면 길을 잃는다. */
-.rmg-evback { display: inline-block; margin-bottom: 4px; padding: 0; border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint); cursor: pointer; transition: color 170ms ease-out; }
+/* 돌아가는 길 — 글씨는 작아도 손이 닿는 자리는 작지 않아야 한다(24px 미만이었다). */
+.rmg-evback { display: inline-flex; align-items: center; min-height: 26px; margin: 0 -6px 4px; padding: 0 6px; border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint); cursor: pointer; border-radius: var(--r-sm); transition: color 170ms ease-out, background 170ms ease-out; }
+.rmg-evback:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .rmg-evback:hover { color: var(--ink); }
 /* 페이지 헤더는 flex column 이라 버튼이 한 줄을 다 차지한다 — 그러면 button 의 기본
    가운데 정렬 때문에 '‹ 오늘' 이 화면 한가운데로 밀려난다. 내용만큼만 폭을 준다. */
