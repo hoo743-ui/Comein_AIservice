@@ -18,10 +18,36 @@ import type {
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
-  connectWith, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot, openProposal,
-  pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus, remoteReady,
-  respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
+  connectWith, dayAvailability, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot,
+  openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
+  remoteReady, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
 } from "@/lib/remote";
+
+/** 하루를 가리키는 키 — 시간대 문제를 피해 로컬 연·월·일로 만든다. */
+export const dayKeyOf = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+// ── 아직 서버에 없는 일정 ──
+// 일정은 화면에 먼저 서고(지역 id) 저장은 뒤따른다. 그 사이에 사람을 부르면
+// 서버에는 없는 일정에 참여자를 넣는 셈이라 조용히 실패한다(FK 위반).
+// 실제로 그랬다: 여럿이 모이는 자리를 만들어도 부른 사람이 붙지 않았다.
+// 그래서 아직 서버에 없는 동안의 초대는 여기 모아 뒀다가, 진짜 id 를 받은 뒤 한꺼번에 보낸다.
+const unsynced = new Set<ID>();
+const pendingInvites = new Map<ID, ID[]>();
+
+const queueInvite = (eventId: ID, userId: ID) => {
+  const list = pendingInvites.get(eventId) ?? [];
+  if (!list.includes(userId)) list.push(userId);
+  pendingInvites.set(eventId, list);
+};
+
+/** 지역 id 가 진짜 id 로 바뀐 순간 — 밀렸던 초대를 그 id 로 보낸다. */
+const flushInvites = (localId: ID, realId: ID) => {
+  unsynced.delete(localId);
+  const list = pendingInvites.get(localId);
+  pendingInvites.delete(localId);
+  for (const userId of list ?? []) void pushParticipant(realId, userId);
+};
 
 // ── 유틸 ───────────────────────────────────────────────
 const uid = (): ID =>
@@ -164,6 +190,13 @@ interface WorkspaceState {
   /** Supabase 에 붙어 있는가. 붙으면 시드 데모 데이터를 걷어내고 서버의 것만 본다. */
   remoteLive: boolean;
 
+  /** 지역 id → 서버가 준 진짜 id.
+   *  일정은 화면에 먼저 서고 저장이 뒤따르므로, 그 사이 화면이 쥔 id 는 곧 낡는다.
+   *  (실제로 그랬다: 자리를 만들자마자 방이 통째로 사라졌다 — 열어 둔 id 가 어느 일정과도 안 맞아서.) */
+  idAlias: Record<ID, ID>;
+  /** 화면이 쥔 id 로 지금의 일정을 찾는다. 낡았으면 대응표를 한 번 거친다. */
+  resolveEventId: (id: ID | null) => ID | null;
+
   /** 시드 날짜를 오늘 기준으로 한 번만 옮긴다(화면이 뜬 뒤 호출). 두 번 불러도 안전하다. */
   rebaseSeeds: (today: Date) => void;
 
@@ -216,6 +249,11 @@ interface WorkspaceState {
    *  못 찾으면 null 을 돌려준다 — 아무 때나 지어내 제안하지 않는다. */
   proposeTime: (eventId: ID, preferred: Date, durationMin?: number, title?: string) => Promise<ScheduleProposal | null>;
   answerProposal: (eventId: ID, proposalId: ID, response: "accepted" | "declined") => Promise<void>;
+
+  /** 대화방 옆 하루 — 슬롯별 '몇 명이 되는가'. 키는 `eventId|YYYY-MM-DD`.
+   *  누가 바쁜지는 담기지 않는다(집계만). 내 일정은 schedules 에서 그대로 읽어 그린다. */
+  dayAvail: Record<string, { start: string; available: number; total: number }[]>;
+  loadDayAvail: (eventId: ID, day: Date) => Promise<void>;
 
   // 일정 대화 — 일정 하나당 방 하나
   /** 없으면 만들고 있으면 그대로 돌려준다(중복 생성 금지). */
@@ -316,9 +354,12 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // 서버에 붙어 있으면 곧바로 밀어 넣고, 서버가 준 진짜 id 로 지역 id 를 바꿔 단다.
     // (화면은 이미 그려졌다 — 저장은 뒤에서 따라온다. 실패해도 화면은 멈추지 않는다.)
     if (remoteReady()) {
+      unsynced.add(id); // 진짜 id 를 받기 전까지, 이 일정에 붙는 초대는 밀어 둔다
       void pushEvent({ ...s, id } as Schedule).then((realId) => {
-        if (!realId) return;
+        if (!realId) { unsynced.delete(id); pendingInvites.delete(id); return; }
+        flushInvites(id, realId);
         set((st) => ({
+          idAlias: { ...st.idAlias, [id]: realId },
           schedules: st.schedules.map((x) => (x.id === id ? { ...x, id: realId } : x)),
           eventParticipants: st.eventParticipants.map((p) => (p.eventId === id ? { ...p, eventId: realId } : p)),
           chatRooms: st.chatRooms.map((r) => (r.eventId === id ? { ...r, eventId: realId, id: `room_${realId}` } : r)),
@@ -356,7 +397,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     );
     // 참여자가 되면 그 일정의 대화에 들어올 수 있어야 한다.
     get().ensureRoom(eventId);
-    if (remoteReady()) void pushParticipant(eventId, userId);
+    if (!remoteReady()) return;
+    // 아직 서버에 없는 일정이면 지금 보내 봐야 FK 위반으로 사라진다 — 진짜 id 를 받은 뒤에 보낸다.
+    if (unsynced.has(eventId)) queueInvite(eventId, userId);
+    else void pushParticipant(eventId, userId);
   },
 
   removeParticipant: (eventId, userId) => {
@@ -378,6 +422,28 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   // ── 일정 제안 ───────────────────────────────────────
   proposals: {},
+
+  idAlias: {},
+
+  resolveEventId: (id) => {
+    if (!id) return null;
+    const st = get();
+    if (st.schedules.some((s) => s.id === id)) return id;
+    const real = st.idAlias[id];
+    return real && st.schedules.some((s) => s.id === real) ? real : id;
+  },
+
+  dayAvail: {},
+
+  loadDayAvail: async (eventId, day) => {
+    if (!remoteReady()) return;
+    // 하루의 창은 07:00–23:00 — 새벽까지 훑으면 그것도 남의 하루를 넓게 되묻는 일이 된다.
+    const from = new Date(day); from.setHours(7, 0, 0, 0);
+    const to = new Date(day); to.setHours(23, 0, 0, 0);
+    const rows = await dayAvailability(eventId, from, to, 30);
+    const key = `${eventId}|${dayKeyOf(day)}`;
+    set((st) => ({ dayAvail: { ...st.dayAvail, [key]: rows } }));
+  },
 
   loadProposal: async (eventId) => {
     if (!remoteReady()) return;

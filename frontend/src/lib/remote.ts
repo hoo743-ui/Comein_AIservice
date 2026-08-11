@@ -323,6 +323,36 @@ export async function fetchPeople(): Promise<Contact[]> {
   }));
 }
 
+/** 하루를 슬롯으로 잘라 "몇 명이 되는가" 만 받아 온다.
+ *
+ *  누가 바쁜지도, 무엇 때문인지도 오지 않는다 — 숫자뿐이다(0006 마이그레이션).
+ *  내 일정은 이미 스토어에 있으므로, 화면은 '내 것은 제목까지 · 남의 것은 숫자만' 으로 그린다.
+ *  0006 이 아직 적용되지 않은 서버에서는 빈 배열을 돌려주고 화면은 내 일정만 그린다. */
+export async function dayAvailability(
+  eventId: ID,
+  dayStart: Date,
+  dayEnd: Date,
+  slotMin = 30,
+): Promise<{ start: string; available: number; total: number }[]> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return [];
+  const { data, error } = await sb.rpc("day_availability", {
+    e: eventId,
+    day_start: dayStart.toISOString(),
+    day_end: dayEnd.toISOString(),
+    slot_min: slotMin,
+  });
+  if (error) {
+    console.warn("가용 시간 조회 실패(0006 마이그레이션 확인):", error.message);
+    return [];
+  }
+  return (data ?? []).map((r: any) => ({
+    start: r.slot_start,
+    available: r.available_count ?? 0,
+    total: r.total_count ?? 0,
+  }));
+}
+
 export async function connectWith(peerId: ID): Promise<boolean> {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return false;
