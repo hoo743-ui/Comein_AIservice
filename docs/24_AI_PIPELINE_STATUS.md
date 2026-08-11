@@ -445,24 +445,39 @@ DB 에는 메시지 5건이 멀쩡히 있는데 화면은 "아직 대화가 없�
 | KOE101 | Client ID 에 REST API 키가 아닌 키가 들어감 | REST API 키로 교체 | ✅ |
 | KOE205 | `account_email` 이 비즈 앱 전용 동의항목 | 비즈 앱 전환 후 이메일 '선택 동의' | ✅ |
 | KOE205 | `profile_image` 미설정 | 동의항목에서 프로필 사진 켜기 | ✅ |
-| KOE006 | Redirect URI 미등록 | 아래 두 칸 — **진행 중** | ⬜ |
+| KOE006 | Redirect URI 미등록 | 아래 12.1 의 자리에 등록 | ✅ |
+| 500 `Unable to exchange external code` | Supabase 의 Client Secret 칸에 카카오 시크릿이 아닌 값 | 카카오 클라이언트 시크릿 코드로 교체 | ✅ |
+| 로그인은 됐는데 문 앞으로 되돌아옴 | `/experience` 가 문턱 플래그를 안 세우고 나감 | `experience/page.tsx` `social()` 수정 | ✅ |
 
-### 12.1 Redirect URI — 칸이 둘이다
+**2026-08-11 종료 — 카카오로 실제 입장 확인.** `/experience → Continue with 카카오 → /workspace`,
+동의 재요구 없이 한 번에. 세션 `provider: kakao`, `profiles` 에 `handle=tngns743`,
+`display_name=수훈` 이 앉았다(0009 의 ① 이메일 앞부분 갈래).
 
-혼동의 원인이 여기 있었다. 이름이 비슷한 칸이 두 개고, 둘 다 채워야 한다.
+### 12.1 Redirect URI — 칸을 찾는 데 오래 걸렸다
+
+**Redirect URI 는 `제품 설정 → 카카오 로그인` 에 없다.** 지금 콘솔에서는 키 단위로 관리한다:
 
 ```
-① 앱 설정 → 플랫폼 → Web        사이트 도메인 (경로 없이 도메인만)
-   https://mbamzjivpdzjnvzcbamp.supabase.co
-
-② 제품 설정 → 카카오 로그인 → Redirect URI   (경로까지 전부)
+앱 설정 → 플랫폼 키 → [REST API 키] 수정 → 카카오 로그인 리다이렉트 URI
    https://mbamzjivpdzjnvzcbamp.supabase.co/auth/v1/callback
 ```
 
-①만 넣으면 KOE006 은 사라지지 않는다. ②가 안 보이면 그 페이지의 활성화 설정이 OFF 다.
+입력칸에 치는 것만으로는 등록되지 않는다 — 오른쪽 `+` 로 목록에 올린 뒤 맨 아래 **저장**.
+등록되면 플랫폼 키 화면의 그 키 카드에 `로그인 리다이렉트 URI` 태그가 붙는다(등록 여부를 한눈에).
 
-우리 도메인이 아니라 **Supabase 도메인**을 넣는 게 맞다 — 카카오가 돌려보내는 곳은
+넣는 주소는 우리 도메인이 아니라 **Supabase 도메인**이다 — 카카오가 돌려보내는 곳은
 우리 사이트가 아니라 Supabase 이고, Supabase 가 세션을 만든 뒤 `redirect_to` 로 넘긴다.
+그래서 로컬(`localhost:3000`)을 위해 따로 등록할 것은 없다. 카카오에 나가는 `redirect_uri` 는
+언제나 이 하나뿐이고, 로컬이냐 배포냐는 그 뒤 Supabase 가 `redirect_to` 로 가른다.
+
+확인은 콘솔을 믿지 말고 실제로 나가는 URL 로 한다:
+
+```bash
+curl -s -o /dev/null -w "%{redirect_url}\n" \
+  "https://<project>.supabase.co/auth/v1/authorize?provider=kakao&redirect_to=<...>"
+```
+
+`redirect_uri=` 로 실려 나가는 값이 곧 카카오에 등록돼 있어야 하는 문자열이다.
 
 ### 12.2 scope 는 코드로 줄일 수 없다
 
@@ -486,14 +501,47 @@ scope = account_email profile_image profile_nickname profile_nickname profile_im
 이메일 → provider 가 준 아이디 → 계정 uuid 앞 8자리(`u3f9a2b1`).
 한글 닉네임은 `[a-z0-9_]` 만 남기면 비므로 세 번째 갈래가 실제로 자주 쓰인다. **적용 완료.**
 
-### 12.4 이어서 할 것
+### 12.4 동의는 통과했는데 세션이 없던 자리 — 시크릿
 
-1. **KOE006 마저 닫기** — 12.1 의 두 칸. 닫히면 동의 화면이 떠야 한다.
-   그 뒤 실제 로그인해서 `profiles` 에 핸들·표시 이름이 어떻게 앉는지 확인.
-2. **`backend/.env` 의 `DATABASE_URL` 이 옛 프로젝트를 가리킨다** —
-   `postgres.jldpstmdzulwxuzolisq` (없는 테넌트). 실제는 `mbamzjivpdzjnvzcbamp`.
-   지금은 백엔드가 `/api/chat`·`/api/summary` 만 맡아 앱은 안 터지지만,
-   `/health/db` 는 실패하고 **Render 를 깨우려던 cron 도 무의미하다.**
-3. **Supabase → Redirect URLs** 에 `http://localhost:3000/**` 과 배포 주소가 있는지.
-   카카오를 통과해도 마지막에 여기서 튕긴다.
-4. 미착수 — `/api/chat` 역질문 + `context` 채우기, 모바일 웹 점검.
+KOE006 을 닫자 동의 화면이 떴고, 동의했는데도 로그인 화면으로 되돌아왔다.
+화면에는 아무 말이 없었다. **답은 Supabase 쪽 로그에 있었다:**
+
+```
+Dashboard → Logs → Auth
+  /callback | 500: Unable to exchange external code
+```
+
+카카오는 인가 코드를 정상 발급했고, 그 코드를 토큰으로 바꾸는 단계에서 막힌 것이다.
+`Authentication → Sign In / Providers → Kakao` 의 **Client Secret Code** 에
+카카오 시크릿(32자)이 아니라 다른 값(11자)이 들어 있었다.
+
+카카오에서 **클라이언트 시크릿이 활성화(ON)** 이면 Supabase 에도 그 코드가 정확히 있어야 한다.
+값은 `앱 설정 → 플랫폼 키 → [REST API 키] 수정 → 클라이언트 시크릿 → 코드`.
+쓰지 않을 거면 카카오에서 OFF 로 두고 Supabase 칸을 비우는 것도 답이다 — **둘 중 하나로 맞추면 된다.**
+
+> 화면에 오류가 안 뜨면 브라우저를 더 노려보지 말고 Auth 로그를 연다.
+> 이 단계의 실패는 서버끼리의 대화라 브라우저에는 흔적이 거의 남지 않는다.
+
+### 12.5 마지막 문턱 — 로그인은 됐는데 문 앞으로 되돌아온 이유
+
+시크릿까지 고치자 세션은 생겼는데(`provider: kakao`) 화면은 여전히 `/experience` 였다.
+이건 인증이 아니라 **우리 라우팅**이었다.
+
+`/workspace` 는 `sessionStorage["comein:reimagine"]` 이 없으면 인트로를 거치라고
+`/experience` 로 되돌린다. `/enter` 는 소셜로 나가기 전에 이 플래그를 세우는데,
+`/experience` 의 소셜 버튼은 세우지 않았다. 사람들이 실제로 쓰는 문이 `/experience` 쪽이라
+**소셜 로그인은 항상 제자리로 돌아왔다.** 이메일 로그인은 `cross()` 를 거쳐 플래그를 세우므로 멀쩡했고,
+그래서 "카카오만 안 되는" 것처럼 보였다.
+
+`experience/page.tsx` `social()` 이 나가기 전에 플래그를 세우도록 고쳤다(실패하면 되돌린다).
+
+> 외부로 나갔다 돌아오는 로그인은 **떠나기 전에** 돌아올 자리를 준비해야 한다.
+> `sessionStorage` 는 같은 탭이면 왕복을 견딘다 — 그래서 이 방식이 성립한다.
+
+### 12.6 이어서 할 것
+
+1. **`backend/.env` 의 `DATABASE_URL`** — 로컬 파일은 지금 `localhost:5432/comein`(플레이스홀더)라
+   `/health/db` 는 여전히 실패한다. 배포(Render) 쪽 값도 함께 봐야 한다.
+2. Supabase → Redirect URLs 는 확인 완료 — `localhost:3000` 하위 경로와 배포 주소 모두 통과,
+   미등록 주소는 Site URL 로 떨어진다.
+3. 미착수 — `/api/chat` 역질문 + `context` 채우기, 모바일 웹 점검.

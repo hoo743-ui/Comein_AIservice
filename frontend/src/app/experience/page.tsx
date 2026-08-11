@@ -86,9 +86,16 @@ export default function Opening() {
     setBusy(p);
     setErr(null);
     try {
+      // 이 순간이 곧 '문턱' — 제공자를 거쳐 돌아온 워크스페이스가 우리를 다시 문 앞에
+      // 세우지 않게(플래그가 없으면 /workspace 는 /experience 로 되돌린다).
+      try { sessionStorage.setItem("comein:reimagine", "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
       const { error } = await signInWithProvider(p, `${window.location.origin}/workspace`);
       if (error) throw error;
-    } catch (e: any) { setErr(e?.message ?? "연결에 문제가 생겼어요."); setBusy(null); }
+    } catch (e: any) {
+      // 나가지 못했으면 문턱도 되돌린다 — 아직 들어온 게 아니다.
+      try { sessionStorage.removeItem("comein:reimagine"); sessionStorage.removeItem("comein:justEntered"); } catch {}
+      setErr(e?.message ?? "연결에 문제가 생겼어요."); setBusy(null);
+    }
   };
   const submitAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -307,12 +314,22 @@ const CSS = `
 .opn-div::before, .opn-div::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,0.07); }
 .opn-div span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); }
 .opn-form { display: flex; flex-direction: column; gap: 10px; }
+/* 아이디·비밀번호 칸만 흰 종이로 — 어두운 문 앞에서 여기만 '적는 자리' 라는 걸
+   색 하나로 말한다. 브라우저 자동완성이 제 파란 면을 칠하던 것도 같은 흰색으로 덮는다
+   (그대로 두면 두 칸만 푸르게 떠서 화면이 어그러진다). */
 .opn-field { width: 100%; min-height: 52px; padding: 0 15px; border-radius: 13px;
-  background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.08);
-  font-family: inherit; font-size: 0.94rem; font-weight: 400; color: var(--ink); outline: none;
+  background: #FFFFFF; border: 1px solid rgba(255,255,255,0.16);
+  font-family: inherit; font-size: 0.94rem; font-weight: 400; color: #26221D; caret-color: #26221D; outline: none;
   transition: border-color 0.25s, box-shadow 0.25s; }
-.opn-field::placeholder { color: var(--faint); }
-.opn-field:focus { border-color: color-mix(in srgb, var(--accent) 40%, rgba(255,255,255,0.08)); box-shadow: 0 0 0 3px var(--glow); }
+.opn-field::placeholder { color: #9A948B; font-weight: 300; }
+.opn-field:focus { border-color: rgba(255,255,255,0.42); box-shadow: 0 0 0 3px rgba(255,255,255,0.10); }
+.opn-field:-webkit-autofill,
+.opn-field:-webkit-autofill:hover,
+.opn-field:-webkit-autofill:focus {
+  -webkit-text-fill-color: #26221D;
+  -webkit-box-shadow: 0 0 0 1000px #FFFFFF inset;
+  caret-color: #26221D;
+}
 .opn-err { margin: 2px 0 0; font-size: 0.82rem; color: #E57373; text-align: left; }
 .opn-submit { margin-top: 6px; width: 100%; min-height: 52px; border: 0; border-radius: 13px;
   background: var(--accent); color: #17140F; font-family: inherit; font-size: 0.96rem; font-weight: 600; cursor: pointer;
@@ -338,8 +355,11 @@ const CSS = `
 .opn-tree-item::before { content: ""; position: absolute; left: 9px; top: 0; bottom: 0; width: 1.5px; background: color-mix(in srgb, var(--accent) 45%, var(--hair)); }
 .opn-tree-item:last-child::before { bottom: 50%; }
 .opn-tree-item::after { content: ""; position: absolute; left: 9px; top: 50%; width: 16px; height: 1.5px; background: color-mix(in srgb, var(--accent) 45%, var(--hair)); }
-.opn-tree-word { display: block; font-weight: 300; letter-spacing: -0.02em; color: var(--ink); line-height: 1.15; }
-.opn-tree-word .opn-frag { color: var(--accent); font-weight: 600; }
+/* Co·Me·In 이 밝고 나머지가 가라앉는다 — 눈이 먼저 앞글자를 줍고, 그 셋이 곧 Comein 이 된다.
+   (반대로 두면 'ntext' 가 더 밝아 브랜드가 뒤에 숨는다.) */
+.opn-tree-word { display: block; font-weight: 300; letter-spacing: -0.02em; line-height: 1.15;
+  color: color-mix(in srgb, var(--accent) 72%, var(--paper)); }
+.opn-tree-word .opn-frag { color: var(--ink); font-weight: 600; }
 .opn-tree-desc { display: block; margin-top: 4px; font-weight: 300; color: var(--muted); line-height: 1.4; }
 
 /* 리빌 변형 — 크게 + 순차 강조 */
