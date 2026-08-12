@@ -225,7 +225,9 @@ function L(lang: Lang) {
       }
       return fmtDate(d);
     },
-    dayNoEvent: en ? "Nothing today — add one with ⌘K." : "오늘은 비어 있습니다 — ⌘K로 추가해보세요.",
+    // 빈 날에 건네는 말은 기기를 가리지 않아야 한다 — 누를 키가 없는 손에게 키를 안내하지 않는다.
+    // 캡처 바는 펼쳐졌든 접혔든 늘 아래에 있으므로, 자리로 가리키는 편이 언제나 맞다.
+    dayNoEvent: en ? "Nothing today — add one below." : "오늘은 비어 있습니다 — 아래에서 하나 더해보세요.",
     asLineNext: en ? "One moment to prepare today." : "오늘 준비해 둘 순간이 하나 있어요.",
     asLineQuiet: (w: number) => (en ? `Someone's been quiet for ${w} week${w > 1 ? "s" : ""}.` : `${w}주째 조용한 분이 있어요.`),
     asLineLight: en ? "Today feels lighter than yesterday." : "오늘은 어제보다 가벼워요.",
@@ -1749,6 +1751,20 @@ const HINTS = [
 ];
 
 /** Ask Comein — 항상 보이는 주 입력. 문(브랜드) + 명확한 필드 + 회전 예시. 1초 안에 '여기서 시작'임을 안다. */
+/** 키캡은 기기마다 다른 말이다 — 맥은 ⌘, 그 밖은 Ctrl. 우리 손잡이는 처음부터 둘 다 받는데
+    (metaKey || ctrlKey) 그림에는 ⌘ 만 그려 두고 있었다. 서버는 어느 기기인지 모르므로
+    첫 그림은 ⌘ 로 두고 붙은 뒤에 고친다(그래야 hydration 이 어긋나지 않는다).
+    물리 키보드가 아예 없는 기기는 글자를 바꿀 일이 아니라 감출 일이라 CSS 가 맡는다. */
+function useKeyHint() {
+  const [hint, setHint] = React.useState("⌘K");
+  React.useEffect(() => {
+    const ua = navigator.userAgent || "";
+    const plat = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || "";
+    if (!/Mac|iPhone|iPad|iPod/.test(plat + ua)) setHint("Ctrl K");
+  }, []);
+  return hint;
+}
+
 function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
   view: View; lang: Lang; organizing: boolean; onSubmit: (v: string) => void;
   /** 접힌 채로 물러나 있을 상황인가(대화가 열려 있어 입력칸이 겹칠 때 등). */
@@ -1759,6 +1775,7 @@ function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
   const [draft, setDraft] = React.useState("");
   const [focused, setFocused] = React.useState(false);
   const [hi, setHi] = React.useState(0);
+  const kbd = useKeyHint();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -1814,7 +1831,12 @@ function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
       {draft.trim() ? (
         <button type="submit" className="rmg-ask-send" aria-label={lang === "en" ? "Send" : "보내기"}><ArrowUp className="rmg-railicon" /></button>
       ) : (
-        <span className="rmg-ask-kbd">⌘K</span>
+        <>
+          <span className="rmg-ask-kbd">{kbd}</span>
+          {/* 손가락만 있는 기기에서는 키캡이 감춰진다. 접힌 알약은 그러면 빈 채로 떠 있게 되므로
+              — 접혔을 때만 — 무엇을 여는지 낱말로 남긴다(문 표식은 접히면 걸지 않는다, 위 참고). */}
+          {tucked && <span className="rmg-ask-tap">{lang === "en" ? "Ask" : "입력"}</span>}
+        </>
       )}
     </form>
   );
@@ -1978,6 +2000,7 @@ function MonthCalendar({ base, events, selected, onSelect, big = false, lang = "
   const [peek, setPeek] = React.useState<{ day: Date; top: number; left: number } | null>(null);
   const [ym, setYm] = React.useState({ y: base.getFullYear(), m: base.getMonth() });
   const [picker, setPicker] = React.useState(false);
+  const kbd = useKeyHint();
   const [anim, setAnim] = React.useState<"" | "l" | "r">("");
 
   // AI 탐색 등 외부에서 지정한 날짜의 달로 이동
@@ -2025,9 +2048,9 @@ function MonthCalendar({ base, events, selected, onSelect, big = false, lang = "
           <button type="button" className="rmg-mc-arrow" onClick={() => shift(-1)} aria-label={en ? "Previous month" : "이전 달"}>‹</button>
           <button type="button" className="rmg-mc-arrow" onClick={() => shift(1)} aria-label={en ? "Next month" : "다음 달"}>›</button>
           {onSearch && (
-            <button type="button" className="rmg-mc-search" onClick={onSearch} aria-label={en ? "Search dates (Cmd K)" : "날짜 탐색 (⌘K)"}>
+            <button type="button" className="rmg-mc-search" onClick={onSearch} aria-label={en ? "Search dates" : "날짜 탐색"}>
               <Search className="rmg-mc-search-ic" />
-              <span className="rmg-mc-kbd">⌘K</span>
+              <span className="rmg-mc-kbd">{kbd}</span>
             </button>
           )}
         </div>
@@ -2864,9 +2887,25 @@ const TL_KEY = "comein:tlWidth", TL_OPEN_KEY = "comein:tlOpen";
 const clampTl = (w: number) => Math.max(TL_MIN, Math.min(TL_MAX, Math.round(w)));
 
 const SLOT_MIN = 30;          // 한 칸 = 30분
-const SLOT_H = 15;            // 한 칸의 높이(px)
+const SLOT_H = 15;            // 한 칸의 높이(px) — 마우스 기준
+// 손가락 기준의 한 칸. 15px 은 커서 끝으로는 정확하지만 손끝(~40px)으로는 옆 칸이 눌린다.
+// 30분을 고르려다 30분 뒤가 잡히면, 그건 못 고르는 것과 같다. 하루가 길어져도 이 칸은 스크롤한다.
+const SLOT_H_TOUCH = 28;
 const DAY_FROM = 7;           // 07:00 부터
 const DAY_TO = 23;            // 23:00 까지
+
+/** 손가락으로 쓰는 기기인가. 서버는 모르므로 붙은 뒤에 답한다(첫 그림은 마우스 기준). */
+function useCoarsePointer() {
+  const [coarse, setCoarse] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const sync = () => setCoarse(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return coarse;
+}
 
 function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, participants, lang, onPropose, proposing }: {
   event: Schedule;
@@ -2884,8 +2923,11 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   const [picked, setPicked] = React.useState<Date | null>(null);
   React.useEffect(() => { setPicked(null); }, [day]);
 
+  // 칸 높이는 기기가 정한다 — 아래 좌표 계산은 전부 이 하나를 따른다.
+  const slotH = useCoarsePointer() ? SLOT_H_TOUCH : SLOT_H;
+
   const slots = ((DAY_TO - DAY_FROM) * 60) / SLOT_MIN;
-  const top = (d: Date) => ((d.getHours() * 60 + d.getMinutes() - DAY_FROM * 60) / SLOT_MIN) * SLOT_H;
+  const top = (d: Date) => ((d.getHours() * 60 + d.getMinutes() - DAY_FROM * 60) / SLOT_MIN) * slotH;
 
   // 이 날에 걸치는 내 일정만 — 하루 밖은 잘라 그린다(없는 길이를 그리지 않는다).
   const dayStart = new Date(day); dayStart.setHours(DAY_FROM, 0, 0, 0);
@@ -2937,10 +2979,10 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
       </p>
 
       <div className="rmg-tl-scroll">
-      <div className="rmg-tl-grid" style={{ height: slots * SLOT_H }}>
+      <div className="rmg-tl-grid" style={{ height: slots * slotH }}>
         {/* 시간 눈금 */}
         {Array.from({ length: DAY_TO - DAY_FROM + 1 }, (_, i) => (
-          <div key={i} className="rmg-tl-hour" style={{ top: (i * 60 / SLOT_MIN) * SLOT_H }}>
+          <div key={i} className="rmg-tl-hour" style={{ top: (i * 60 / SLOT_MIN) * slotH }}>
             <span className="rmg-tl-hourl">{String(DAY_FROM + i).padStart(2, "0")}</span>
           </div>
         ))}
@@ -2957,7 +2999,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
                 key={i}
                 type="button"
                 className={`rmg-tl-slot ${on ? "on" : ""}`}
-                style={{ top: i * SLOT_H, height: SLOT_H, ["--fill" as string]: ratio == null ? "0" : String(ratio) }}
+                style={{ top: i * slotH, height: slotH, ["--fill" as string]: ratio == null ? "0" : String(ratio) }}
                 onClick={() => setPicked(on ? null : at)}
                 title={
                   a
@@ -2975,7 +3017,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
           <div
             key={b.id}
             className={`rmg-tl-ev ${b.self ? "self" : ""}`}
-            style={{ top: top(b.from), height: Math.max(SLOT_H - 2, top(b.to) - top(b.from) - 2) }}
+            style={{ top: top(b.from), height: Math.max(slotH - 2, top(b.to) - top(b.from) - 2) }}
             title={`${b.title} · ${fmtTime(b.from)}`}
           >
             <span className="rmg-tl-evt">{b.title}</span>
@@ -2986,7 +3028,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
         {propStart && propEnd && propStart < dayEnd && propEnd > dayStart && (
           <div
             className="rmg-tl-prop"
-            style={{ top: top(propStart < dayStart ? dayStart : propStart), height: Math.max(SLOT_H, top(propEnd > dayEnd ? dayEnd : propEnd) - top(propStart < dayStart ? dayStart : propStart)) }}
+            style={{ top: top(propStart < dayStart ? dayStart : propStart), height: Math.max(slotH, top(propEnd > dayEnd ? dayEnd : propEnd) - top(propStart < dayStart ? dayStart : propStart)) }}
           >
             <span className="rmg-tl-propl">{en ? "Proposed" : "제안"} {fmtTime(propStart)}</span>
           </div>
@@ -5390,7 +5432,15 @@ html { font-size: 17px; }
 .rmg-ask-doormark { width: 19px; height: 25px; }
 .rmg-ask-input { flex: 1; min-width: 0; background: transparent; border: 0; outline: none; padding: 9px 0; font-family: inherit; font-size: 1.04rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); caret-color: var(--accent); }
 .rmg-ask-input::placeholder { color: var(--muted); font-weight: 300; opacity: 1; }
-.rmg-ask-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--faint); border: 1px solid var(--hair); border-radius: 6px; padding: 3px 7px; flex-shrink: 0; }
+.rmg-ask-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; font-weight: 600; letter-spacing: 0.02em; color: var(--faint); border: 1px solid var(--hair); border-radius: 6px; padding: 3px 7px; flex-shrink: 0; white-space: nowrap; }
+/* 손가락만 있는 기기 — 키캡은 지킬 수 없는 약속이다. 누를 키가 없다.
+   펼쳐진 바에서는 그냥 감춘다(placeholder 가 이미 무엇을 하는 자리인지 말한다).
+   접힌 알약에서는 낱말이 대신 선다 — 감추기만 하면 빈 알약이 떠 있게 된다. */
+.rmg-ask-tap { display: none; font-size: 12px; font-weight: 500; letter-spacing: -0.01em; color: var(--faint); flex-shrink: 0; white-space: nowrap; }
+@media (hover: none) and (pointer: coarse) {
+  .rmg-ask-kbd, .rmg-mc-kbd { display: none; }
+  .rmg-ask-tap { display: inline; }
+}
 .rmg-ask-send { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 10px; background: var(--accent); color: #141210; cursor: pointer; flex-shrink: 0; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1); }
 .rmg-ask-send:hover { transform: translateY(-1px); }
 .rmg-ask-send:active { transform: scale(0.95); }
@@ -5964,6 +6014,8 @@ html { font-size: 17px; }
 .rmg-tl-nav { width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: none;
   color: var(--faint); font-size: 1rem; cursor: pointer; border-radius: 6px; }
 .rmg-tl-nav:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+/* 날을 넘기는 화살표도 손끝을 받아야 한다 — 글자 크기는 그대로, 닿는 자리만 넓힌다. */
+@media (hover: none) and (pointer: coarse) { .rmg-tl-nav { width: 36px; height: 36px; } }
 .rmg-tl-note { margin: 0 0 2px; font-size: 0.7rem; font-weight: 300; color: var(--faint); line-height: 1.4; }
 
 /* 하루 — 눈금 위에 세 겹이 겹친다: 가능 농도 · 내 일정 · 제안 */
