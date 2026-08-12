@@ -440,18 +440,23 @@ export async function cancelConnectionRequest(peerId: ID): Promise<boolean> {
   return true;
 }
 
-/** 내 핸들 — 남에게 알려 줄 이름.
- *  핸들이 곧 친구코드인데 정작 자기 것을 볼 자리가 없었다. 남의 핸들은 검색·프로필에서
- *  보이는데 내 것만 어디에도 없으니, 이어 달라고 청할 수는 있어도 청해 달라고 할 수는 없었다.
- *  profiles 의 RLS 는 id = auth.uid() 를 이미 열어 준다 — 함수를 새로 세우지 않는다. */
-export async function fetchMyHandle(): Promise<string | null> {
+/** 핸들을 바꾼다. 막혔으면 왜 막혔는지 그대로 옮긴다 —
+ *  "실패했습니다" 만 있으면 사용자는 자기가 뭘 잘못했는지 모른 채 같은 걸 또 시도한다. */
+export async function changeMyHandle(next: string): Promise<{ ok: boolean; handle?: string; message?: string }> {
   const sb = getSupabase();
-  const me = myUidOf();
-  if (!sb || !me) return null;
-  try {
-    const rows = await rest(`profiles?select=handle&id=eq.${me}`);
-    return rows?.[0]?.handle ?? null;
-  } catch (e: any) { console.error("내 핸들 조회 실패:", e?.message); return null; }
+  if (!sb || !(await ensureUid())) return { ok: false };
+  const { data, error } = await sb.rpc("change_handle", { new_handle: next });
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, handle: data as string };
+}
+
+/** 언제 다시 바꿀 수 있는가 — 30일 규칙을 화면이 미리 말해 줄 수 있게. */
+export async function fetchHandleState(): Promise<{ handle: string; canChangeAt: string } | null> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return null;
+  const { data, error } = await sb.rpc("my_handle_state");
+  if (error || !data?.[0]) return null;
+  return { handle: data[0].handle, canChangeAt: data[0].can_change_at };
 }
 
 /** 내가 보내 두고 아직 답을 못 받은 요청의 상대들.

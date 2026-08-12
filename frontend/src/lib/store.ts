@@ -21,8 +21,9 @@ import type {
 import { ME_ID } from "@/lib/types";
 import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
-  answerConnectionRequest, cancelConnectionRequest, dayAvailability, ensureDmRoomRemote,
-  fetchConnectionRequests, fetchMyHandle, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
+  answerConnectionRequest, cancelConnectionRequest, changeMyHandle, dayAvailability, ensureDmRoomRemote,
+  fetchHandleState,
+  fetchConnectionRequests, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
   confirmEvent, deleteEvent, renameEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
@@ -232,6 +233,10 @@ interface WorkspaceState {
   outgoingRequests: ID[];
   /** 내 핸들 — 남에게 알려 줄 이름. 로그인 전에는 null. */
   myHandle: string | null;
+  /** 언제 다시 바꿀 수 있는가(ISO). 30일 규칙을 화면이 미리 말해 준다. */
+  handleChangeableAt: string | null;
+  /** 이름을 바꾼다. 막혔으면 왜 막혔는지 그대로 돌려준다. */
+  changeHandle: (next: string) => Promise<{ ok: boolean; message?: string }>;
   /** 받은 요청을 다시 읽어 온다. */
   loadRequests: () => Promise<void>;
   /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다. */
@@ -359,13 +364,25 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   connectionRequests: [],
   outgoingRequests: [],
   myHandle: null,
+  handleChangeableAt: null,
+
+  changeHandle: async (next) => {
+    if (!remoteReady()) return { ok: false };
+    const r = await changeMyHandle(next);
+    if (r.ok) {
+      const st = await fetchHandleState();
+      set({ myHandle: r.handle ?? next, handleChangeableAt: st?.canChangeAt ?? null });
+    }
+    return { ok: r.ok, message: r.message };
+  },
 
   loadRequests: async () => {
     if (!remoteReady()) return;
     const [incoming, outgoing, handle] = await Promise.all([
-      fetchConnectionRequests(), fetchOutgoingRequests(), fetchMyHandle(),
+      fetchConnectionRequests(), fetchOutgoingRequests(), fetchHandleState(),
     ]);
-    set({ connectionRequests: incoming, outgoingRequests: outgoing, myHandle: handle });
+    set({ connectionRequests: incoming, outgoingRequests: outgoing,
+      myHandle: handle?.handle ?? null, handleChangeableAt: handle?.canChangeAt ?? null });
   },
 
   answerRequest: async (id, accept) => {

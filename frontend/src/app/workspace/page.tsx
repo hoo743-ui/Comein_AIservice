@@ -286,6 +286,8 @@ export default function Reimagine() {
   const connectionRequests = useWorkspace((s) => s.connectionRequests);
   const outgoingRequests = useWorkspace((s) => s.outgoingRequests);
   const myHandle = useWorkspace((s) => s.myHandle);
+  const handleChangeableAt = useWorkspace((s) => s.handleChangeableAt);
+  const changeHandle = useWorkspace((s) => s.changeHandle);
   const loadRequests = useWorkspace((s) => s.loadRequests);
   const answerRequest = useWorkspace((s) => s.answerRequest);
   const sendEventMessage = useWorkspace((s) => s.sendEventMessage);
@@ -1325,6 +1327,9 @@ export default function Reimagine() {
               mounted={mounted}
               lang={lang}
               onReplayGuide={() => { setPanel(null); setView("today"); setTourStep(0); }}
+              handle={myHandle}
+              handleAt={handleChangeableAt}
+              onHandle={changeHandle}
               remote={remote}
             />
           </div>
@@ -4699,10 +4704,82 @@ function AccountRow({ lang, remote }: { lang: Lang; remote: RemoteState }) {
   );
 }
 
+/** 핸들 한 줄 — 평소엔 읽기만 하고, 눌러야 고칠 수 있다.
+ *  늘 입력칸으로 열어 두면 실수로 바꾸기 쉬운데, 이건 30일에 한 번뿐인 일이다. */
+function HandleRow({ lang, handle, at, onChange }: {
+  lang: Lang; handle: string; at: string | null;
+  onChange: (next: string) => Promise<{ ok: boolean; message?: string }>;
+}) {
+  const en = lang === "en";
+  const [editing, setEditing] = React.useState(false);
+  const [draft, setDraft] = React.useState(handle);
+  const [busy, setBusy] = React.useState(false);
+  const [err, setErr] = React.useState<string | null>(null);
+  const ref = React.useRef<HTMLInputElement>(null);
+
+  React.useEffect(() => { if (editing) { setDraft(handle); setErr(null); ref.current?.focus(); } }, [editing, handle]);
+
+  const locked = !!at && +new Date(at) > Date.now();
+  const daysLeft = locked ? Math.ceil((+new Date(at!) - Date.now()) / 86_400_000) : 0;
+
+  const save = async () => {
+    const next = draft.trim().toLowerCase().replace(/^@+/, "");
+    if (!next || next === handle) { setEditing(false); return; }
+    setBusy(true); setErr(null);
+    const r = await onChange(next);
+    setBusy(false);
+    if (r.ok) setEditing(false);
+    else setErr(r.message ?? (en ? "Couldn't change it." : "바꾸지 못했어요."));
+  };
+
+  return (
+    <div className="rmg-set-row">
+      <div className="rmg-set-label">
+        <p className="rmg-set-k">{en ? "Handle" : "핸들"}</p>
+        <p className="rmg-set-d">
+          {err
+            ? err
+            : locked
+              ? (en ? `Others find you by this. Changeable again in ${daysLeft} day(s).` : `남이 나를 찾는 이름이에요. ${daysLeft}일 뒤에 다시 바꿀 수 있어요.`)
+              : (en ? "Others find you by this — it's your invite code." : "남이 나를 찾는 이름이에요 — 이게 곧 초대코드입니다.")}
+        </p>
+      </div>
+      {editing ? (
+        <div className="rmg-acct">
+          <input
+            ref={ref}
+            className="rmg-set-input rmg-handle-in"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") void save(); if (e.key === "Escape") setEditing(false); }}
+            placeholder="handle"
+            aria-label={en ? "Handle" : "핸들"}
+          />
+          <button type="button" className="rmg-ppl-act" onClick={() => setEditing(false)}>{en ? "Cancel" : "취소"}</button>
+          <button type="button" className="rmg-ppl-act primary" disabled={busy} onClick={() => void save()}>
+            {busy ? "…" : (en ? "Save" : "저장")}
+          </button>
+        </div>
+      ) : (
+        <div className="rmg-acct">
+          <span className="rmg-handle-v">@{handle}</span>
+          <button type="button" className="rmg-ppl-act" disabled={locked} onClick={() => setEditing(true)}>
+            {en ? "Change" : "바꾸기"}
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 /** 설정 — 가로 옵션의 '설정 란'. 워크스페이스 스토어 설정을 그대로 편집(이름·언어·유형·주 시작·테마·알림). */
-function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onReplayGuide, remote }: {
+function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onReplayGuide, remote, handle, handleAt, onHandle }: {
   onReplayGuide: () => void;
   remote: RemoteState;
+  /** 내 핸들과, 언제 다시 바꿀 수 있는지. 로그인 전에는 null. */
+  handle: string | null;
+  handleAt: string | null;
+  onHandle: (next: string) => Promise<{ ok: boolean; message?: string }>;
   settings: Settings;
   onChange: (patch: Partial<SettingsPanelProps>) => void;
   theme: string | undefined;
@@ -4723,6 +4800,12 @@ function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onRe
           {lang === "en" ? "Replay" : "다시 보기"}
         </button>
       </div>
+      {/* 핸들 — 남이 나를 찾는 이름이자 초대코드.
+          가입할 때 이메일 앞부분에서 기계가 뽑아 붙인 것이라(0004), 한 번은
+          자기가 정할 수 있어야 남에게 알려 줄 이름이 된다. 다만 자주 바뀌면
+          초대코드가 아니게 되므로 30일에 한 번이고, 놓아준 이름은 아무도 못 가져간다. */}
+      {handle && <HandleRow lang={lang} handle={handle} at={handleAt} onChange={onHandle} />}
+
       <div className="rmg-set-row">
         <div className="rmg-set-label"><p className="rmg-set-k">{t.setName}</p><p className="rmg-set-d">{t.setNameD}</p></div>
         <input
@@ -5444,6 +5527,8 @@ html { font-size: 17px; }
 .rmg-acct { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 60%; }
 .rmg-acct-mail { width: min(150px, 28vw); padding: 6px 10px; font-size: 0.84rem; }
 .rmg-acct-pw { width: min(120px, 24vw); padding: 6px 10px; font-size: 0.84rem; }
+.rmg-handle-v { font-size: 0.94rem; font-weight: 500; color: var(--ink); }
+.rmg-handle-in { width: min(200px, 40vw); }
 .rmg-acct-off { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); flex-shrink: 0; }
 .rmg-set-input { width: min(240px, 46vw); padding: 10px 14px; border-radius: 11px; background: color-mix(in srgb, var(--surface) 60%, transparent); border: 1px solid var(--hair); font-family: inherit; font-size: 0.94rem; color: var(--ink); outline: none; transition: border-color 0.25s, box-shadow 0.25s; }
 .rmg-set-input:focus { border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); box-shadow: 0 0 0 3px var(--glow); }
