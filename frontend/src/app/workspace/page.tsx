@@ -5301,9 +5301,13 @@ html { font-size: 17px; }
 @media (max-width: 1239px) { .rmg-pagebody[data-ctx="true"] { grid-template-columns: minmax(0, var(--reading)) minmax(0, 1fr); } }
 @media (max-width: 880px) {
   .rmg-pagebody[data-ctx="true"], .rmg-pagebody[data-ctx="false"][data-aside="true"] { grid-template-columns: minmax(0, 1fr); }
-  /* 좁은 화면에서 목록과 대화를 나란히 두면 둘 다 못 읽는다 — 목록 → 대화로 넘어간다. */
-  .rmg-pagebody[data-view="people"][data-aside="true"],
-  .rmg-pagebody[data-view="people"][data-aside="false"] { grid-template-columns: minmax(0, 1fr); }
+  /* 좁은 화면에서 목록과 대화를 나란히 두면 둘 다 못 읽는다 — 목록 → 대화로 넘어간다.
+     :not() 은 장식이 아니라 저울추다. 미디어 쿼리는 명시도를 얹어 주지 않으므로,
+     위(§사람)의 규칙이 :not([data-settings]) 로 한 단계 무거워지면 이 규칙은 그대로 진다.
+     같은 무게로 맞춰야 뒤에 선 이 규칙이 이긴다 — 실제로 졌었고, 목록이 380px 를 고집해
+     좁은 폭에서 오른쪽이 잘렸다('새 그룹' 이 화면 밖으로 나가 눌리지 않았다). */
+  .rmg-pagebody[data-view="people"][data-aside="true"]:not([data-settings="true"]),
+  .rmg-pagebody[data-view="people"][data-aside="false"]:not([data-settings="true"]) { grid-template-columns: minmax(0, 1fr); }
   /* 한 칸짜리 화면 — 고른 뒤에는 상세만 남긴다. 위아래로 쌓아 두면 목록을 지나쳐야
      대화가 나오고, 스크롤 위치가 매번 어긋난다. 아직 아무도 안 골랐으면 목록만 둔다
      (빈 자리 안내는 이 폭에서 할 말이 없다). */
