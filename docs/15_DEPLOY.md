@@ -119,10 +119,21 @@ alembic upgrade head
 |---|---|---|
 | 첫 요청 30초~1분 | Render 무료: 15분 무요청 시 슬립 | 외부 cron 으로 `/health` 10분마다 GET (UptimeRobot·cron-job.org). self-ping 은 안 됨 |
 | DB 첫 쿼리 지연 | 커넥션 풀 미생성 | 기동 시 `SELECT 1` 워밍업 (`app/main.py` lifespan) — 적용됨 |
-| 1주 뒤 DB 정지 | Supabase 무료: 무활동 시 일시정지 | keep-alive 를 `/health/db` 로 걸어 DB까지 깨움 |
+| 1주 뒤 DB 정지 | Supabase 무료: 7일간 DB 활동이 적으면 일시정지 | GitHub Actions 가 하루 2회 **PostgREST 를 직접** 친다 (`.github/workflows/keepalive.yml`) — 적용됨 |
 | 커넥션 끊김 오류 | 풀러가 유휴 커넥션 종료 | `pool_pre_ping` + `pool_recycle=1800` (`app/core/database.py`) — 적용됨 |
 
-- 무료 750시간/월 = 서비스 1개 24/7 가능. keep-alive 를 켜도 한도 안.
+> **"깨운다" 가 아니라 "재우지 않는다".** 정지된 Supabase 프로젝트는 요청으로 복구되지 않는다 —
+> 대시보드에서 사람이 직접 되살려야 한다(복구 창 1년). keep-alive 는 정지를 *막는* 장치다.
+
+**`/health/db` 로 걸지 않은 이유.** 원래 계획은 그거였는데, 프로덕션에서 그 엔드포인트는
+`{"status":"ok","db":"down"}` 을 **0.5초** 만에 돌려준다 — DB 왕복이 아예 없다는 뜻이다.
+그 상태로 10분마다 때려도 Supabase 에는 아무 일도 일어나지 않는다. 백엔드 `DATABASE_URL` 이
+살아나면 그때 한 번의 ping 으로 둘을 다 챙길 수 있다(§6 체크리스트).
+지금 제품이 실제로 쓰는 DB 경로는 **브라우저 → Supabase 직행**이라, 거길 그대로 친다.
+
+**Render 는 일부러 안 걸었다.** 무료 750시간/월인데 10분 간격으로 24/7 깨워 두면 744h —
+한도를 거의 다 쓴다. 그러면 이후 다른 서비스를 하나도 못 붙인다.
+첫 요청 30초를 받아들이고 인스턴스 시간을 남겨 두기로 했다(2026-08-12 결정).
 - 근본 해결: Render Starter $7/월(슬립 없음) 또는 Fly.io / Cloud Run.
 
 ---
@@ -155,4 +166,10 @@ npm run dev
 - [ ] Supabase 프로젝트 생성 → `DATABASE_URL` 입력 → `alembic upgrade head`
 - [ ] `/health/db` 가 `db: ok`
 - [ ] `/api/chat` 결과를 `POST /api/items` 로 저장 연결 (지금은 화면 상태에만 존재)
-- [ ] keep-alive cron 등록 (`/health/db`, 10분)
+- [x] Supabase keep-alive — `.github/workflows/keepalive.yml` (하루 2회, PostgREST 직접)
+- [ ] **그 워크플로가 돌려면 레포 시크릿 두 개가 필요하다** —
+      `Settings → Secrets and variables → Actions → New repository secret`
+      · `SUPABASE_URL` = `https://<project>.supabase.co`
+      · `SUPABASE_ANON_KEY` = anon 공개 키(브라우저에 이미 나가는 그 값. service_role 아님)
+      넣은 뒤 `Actions → keepalive-supabase → Run workflow` 로 한 번 손으로 돌려 초록불 확인.
+      **없으면 워크플로는 통과하지 않고 실패한다** — 조용히 죽은 keep-alive 는 없느니만 못하다.
