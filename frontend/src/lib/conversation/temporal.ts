@@ -130,3 +130,25 @@ export function readConstraints(text: string, now: Date): TemporalConstraint[] {
   if (dayHit) out.push({ kind: "day", at: dayHit.day, text: dayHit.text, hasDay: true });
   return out;
 }
+
+/** 지금을, 사용자가 보고 있는 벽시계 그대로 적는다.
+ *
+ * `toISOString()` 은 언제나 UTC(`…Z`)로 적는다 — 같은 순간을 가리키지만 **벽시계가 사라진다.**
+ * 그 값을 AI 에게 "지금" 이라고 건네면 "내일 3시" 가 UTC 3시로 잡힌다. 서울에서는 9시간 어긋나
+ * 다음 날 자정이 된다(실제로 그랬다: `2026-08-13T15:00:00+00:00`).
+ *
+ * 그래서 날짜·시각은 로컬로 적고, 오프셋을 뒤에 붙여 어느 자리의 시각인지 함께 보낸다.
+ * 시간대 이름(`Asia/Seoul`)만 보내는 것으로는 부족하다 — 받는 쪽이 그 이름을 풀 수 있어야 하고,
+ * 서버 OS 에 따라 그러지 못한다. 오프셋은 어디서나 읽힌다.
+ */
+export function localIsoNow(now: Date = new Date()): string {
+  const p = (n: number) => String(n).padStart(2, "0");
+  const offMin = -now.getTimezoneOffset();          // 분 단위, 동쪽이 +
+  const sign = offMin >= 0 ? "+" : "-";
+  const abs = Math.abs(offMin);
+  return (
+    `${now.getFullYear()}-${p(now.getMonth() + 1)}-${p(now.getDate())}` +
+    `T${p(now.getHours())}:${p(now.getMinutes())}:${p(now.getSeconds())}` +
+    `${sign}${p(Math.floor(abs / 60))}:${p(abs % 60)}`
+  );
+}

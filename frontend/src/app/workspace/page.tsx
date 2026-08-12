@@ -10,7 +10,7 @@ import {
 
 import { useWorkspace, dayKeyOf, TEXT_SCALE_MAX, TEXT_SCALE_MIN, type Settings } from "@/lib/store";
 import { MODE_CONFIG, USER_MODES, categoryLabel, classifyEvent, normalizeMode, useCurrentMode, type EventCategory } from "@/lib/mode";
-import { analyzeConversation, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
+import { analyzeConversation, localIsoNow, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
 import { fmtTime, fmtDate } from "@/lib/format";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
@@ -315,6 +315,10 @@ export default function Reimagine() {
   const [newRoom, setNewRoom] = React.useState(false); // 여러 명과 함께할 자리 만들기
   // AI 가 되묻는 한 줄 — 확신이 없으면 멋대로 만들지 않고 물어본다.
   const [ask, setAsk] = React.useState<{ text: string; dest?: View } | null>(null);
+  // 되물은 질문과 그때의 원래 말. 다음 한 줄과 함께 서버로 돌아가 답으로 이어진다 —
+  // 이게 없으면 사용자가 "3시" 라고만 답했을 때 그 한 마디는 아무것도 아니게 된다.
+  // ref 인 이유: 답을 보내는 시점에만 읽고, 이 값 때문에 화면이 다시 그려질 이유는 없다.
+  const pendingAsk = React.useRef<{ message: string; ask: string } | null>(null);
   const [receipts, setReceipts] = React.useState<Receipt[]>([]);
   // 방금 정리한 한 건 — 목록으로 쌓지 않고 잠깐 스쳤다 사라진다(자취는 목적지 뷰에 남는다).
   const [flash, setFlash] = React.useState<{ text: string; dest: View | null; ids: number[] } | null>(null);
@@ -522,16 +526,39 @@ export default function Reimagine() {
     setFlash(null);
     setAiOffline(false); // 이번 한 줄은 아직 실패하지 않았다 — 지난 실패 표시를 걷는다
 
+    // 답을 기다리던 질문이 있었다면 이번 한 줄이 그 답이다 — 물어본 쪽이 함께 가야 말이 된다.
+    const pending = pendingAsk.current;
+    pendingAsk.current = null;
+
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: t }),
+        body: JSON.stringify({
+          message: t,
+          // 화면만 아는 것들. 서버 시계는 UTC 로 돌고 사용자는 제 시간대로 말한다.
+          // 지금은 벽시계 + 오프셋으로 적는다(toISOString 이 아니다 — localIsoNow 의 주석 참고).
+          context: {
+            now: localIsoNow(),
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            ...(pending ? { pending } : {}),
+          },
+        }),
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
       const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+      const asked = typeof data.ask === "string" ? data.ask.trim() : "";
+
+      // 되물었다 — 시각 없이 일정을 지어내지 않았다는 뜻이다.
+      // 여기서 지역 규칙으로라도 정리해 버리면(아래 폴백처럼) 방금 묻지 않기로 한 것을
+      // 그 자리에서 지어내는 셈이 된다. 아무것도 세우지 않고, 답을 기다린다.
+      if (asked && !items.length) {
+        setAsk({ text: asked });
+        pendingAsk.current = { message: t, ask: asked };
+        return;
+      }
 
       // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
       // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
@@ -539,6 +566,7 @@ export default function Reimagine() {
       const rows = file(parsed.length ? parsed : [{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
       const said = typeof data.reply === "string" ? data.reply.trim() : "";
       showFlash(rows, said || undefined);
+      setAsk(null); // 답이 됐다 — 기다리던 질문은 화면에서도 내린다
 
       // ── 말 한 줄이 실제 일정과 대화방이 된다 ──
       // 여기까지 오면 화면에 '스침'만 남기고 끝났었다. 이제 시각이 있는 건 진짜 일정으로 세우고,
@@ -1618,11 +1646,12 @@ export default function Reimagine() {
             <AiDoor active className="rmg-flash-door" />
             <span className="rmg-flash-text">{ask.text}</span>
             {ask.dest && (
-              <button type="button" className="rmg-flash-act" onClick={() => { setView(ask.dest!); setAsk(null); }}>
+              <button type="button" className="rmg-flash-act" onClick={() => { setView(ask.dest!); setAsk(null); pendingAsk.current = null; }}>
                 {lang === "en" ? "Go" : "가기"}
               </button>
             )}
-            <button type="button" className="rmg-flash-x" onClick={() => setAsk(null)} aria-label={lang === "en" ? "Dismiss" : "닫기"}>
+            {/* 닫으면 질문도 잊는다 — 남겨 두면 한참 뒤의 엉뚱한 한 줄이 이 질문의 답으로 붙는다. */}
+            <button type="button" className="rmg-flash-x" onClick={() => { setAsk(null); pendingAsk.current = null; }} aria-label={lang === "en" ? "Dismiss" : "닫기"}>
               <X className="rmg-flash-xic" />
             </button>
           </div>

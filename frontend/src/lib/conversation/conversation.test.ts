@@ -10,7 +10,7 @@ import { analyzeConversation } from "./index";
 import { analyzeMessage } from "./intent";
 import { commonSlots, freeForAll } from "./availability";
 import { emptyMemory, foldConversation, reduceConversation } from "./state";
-import { readClock, readConstraints, readDay } from "./temporal";
+import { localIsoNow, readClock, readConstraints, readDay } from "./temporal";
 import { summarize } from "./summary";
 import { acceptanceRate, resetMetrics, setMetricSink, snapshot, track } from "./metrics";
 
@@ -50,6 +50,18 @@ describe("temporal", () => {
     assert.equal(readConstraints("내일 5시까지는 돼", NOW)[0].kind, "before");
     assert.equal(readConstraints("내일 3시에 보자", NOW)[0].kind, "at");
     assert.equal(readConstraints("내일 언제 볼까", NOW)[0].kind, "day");
+  });
+
+  it("AI 에게 건네는 '지금' 은 벽시계로 적힌다 — UTC 로 접히지 않는다", () => {
+    const at = new Date(2026, 7, 12, 16, 45, 3);   // 로컬 8/12 16:45:03
+    const iso = localIsoNow(at);
+
+    // 날짜와 시각은 사람이 보고 있는 그대로여야 한다.
+    assert.match(iso, /^2026-08-12T16:45:03[+-]\d{2}:\d{2}$/);
+    // 그리고 어느 자리의 시각인지 오프셋이 함께 실린다(이게 없으면 받는 쪽이 UTC 로 읽는다).
+    assert.notEqual(iso.slice(-6), "");
+    // 같은 순간을 가리키는지도 확인 — 벽시계로 적었다고 순간이 달라지지는 않는다.
+    assert.equal(new Date(iso).getTime(), at.getTime());
   });
 });
 
