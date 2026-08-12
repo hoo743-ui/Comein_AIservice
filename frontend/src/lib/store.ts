@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatRoom,
   ClassEntry,
+  ConnectionRequest,
   Contact,
   EventParticipant,
   Place,
@@ -20,9 +21,13 @@ import type {
 import { ME_ID } from "@/lib/types";
 import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
-  connectWith, dayAvailability, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot,
+  answerConnectionRequest, cancelConnectionRequest, changeMyHandle, dayAvailability, ensureDmRoomRemote,
+  fetchHandleState,
+  fetchConnectionRequests, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
+  confirmEvent, deleteEvent, renameEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
-  remoteReady, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
+  remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
+  type RequestOutcome,
 } from "@/lib/remote";
 
 /** 하루를 가리키는 키 — 시간대 문제를 피해 로컬 연·월·일로 만든다. */
@@ -217,8 +222,25 @@ interface WorkspaceState {
   refreshPeople: () => Promise<void>;
   /** Comein 계정 검색 — 지역 상태를 건드리지 않고 결과만 돌려준다. */
   findPeople: (q: string) => Promise<Contact[]>;
-  /** 잇는다. 이어지면 사람 목록에 들어온다(멱등). */
-  connectPerson: (peerId: ID) => Promise<boolean>;
+  /** 잇자고 청한다 — 즉시 잇지 않는다. 상대가 받아야 이어진다.
+   *  상대도 나에게 보내 두었다면 그 자리에서 이어진다("accepted"). */
+  requestPerson: (peerId: ID) => Promise<{ outcome: RequestOutcome; message?: string }>;
+  /** 보낸 요청을 무른다. */
+  cancelRequest: (peerId: ID) => Promise<void>;
+  /** 나에게 온, 아직 답하지 않은 요청들. */
+  connectionRequests: ConnectionRequest[];
+  /** 내가 보내 두고 아직 답을 못 받은 상대들 — 줄이 '요청' 을 다시 내밀지 않게. */
+  outgoingRequests: ID[];
+  /** 내 핸들 — 남에게 알려 줄 이름. 로그인 전에는 null. */
+  myHandle: string | null;
+  /** 언제 다시 바꿀 수 있는가(ISO). 30일 규칙을 화면이 미리 말해 준다. */
+  handleChangeableAt: string | null;
+  /** 이름을 바꾼다. 막혔으면 왜 막혔는지 그대로 돌려준다. */
+  changeHandle: (next: string) => Promise<{ ok: boolean; message?: string }>;
+  /** 받은 요청을 다시 읽어 온다. */
+  loadRequests: () => Promise<void>;
+  /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다. */
+  answerRequest: (id: ID, accept: boolean) => Promise<void>;
   /** 내가 쓴 말을 고친다. 화면에 먼저 반영하고 서버가 뒤따른다(실패하면 되돌린다). */
   editMessage: (id: ID, content: string) => Promise<void>;
   /** 내가 쓴 말을 지운다(soft delete — 서버에는 행이 남고 내용은 비워진다). */
@@ -237,6 +259,12 @@ interface WorkspaceState {
 
   // Schedule
   addSchedule: (s: Omit<Schedule, "id">) => ID;
+  /** AI 가 놓아 둔 제안(pending)을 사람이 확정한다. 이미 확정된 것은 아무 일도 일어나지 않는다. */
+  confirmSchedule: (id: ID) => void;
+  /** 없던 일로 — 일정과 그에 매달린 것(참여자·방·말)까지 함께 걷는다. */
+  removeSchedule: (id: ID) => void;
+  /** 이름을 고쳐 단다. 방 이름은 곧 일정 제목이다(서버는 주최자만 받는다). */
+  renameSchedule: (id: ID, title: string) => void;
 
   // Todo
   addTodo: (t: Omit<Todo, "id">) => void;
@@ -261,6 +289,14 @@ interface WorkspaceState {
    *  못 찾으면 null 을 돌려준다 — 아무 때나 지어내 제안하지 않는다. */
   proposeTime: (eventId: ID, preferred: Date, durationMin?: number, title?: string) => Promise<ScheduleProposal | null>;
   answerProposal: (eventId: ID, proposalId: ID, response: "accepted" | "declined") => Promise<void>;
+  /** 방금 전원 동의로 확정된 일정. 화면이 그 순간을 알아채고 한 번 정리한다.
+   *  proposals[id] 로는 알 수 없다 — 확정되면 그 자리를 곧바로 비우고(아래 answerProposal),
+   *  fetchOpenProposal 도 proposed·pending 만 가져오기 때문에 status 가 confirmed 로
+   *  서 있는 순간이 없다. 그래서 확정됐다 는 사실을 따로 한 번 알린다. */
+  justConfirmed: ID | null;
+  /** 그 신호를 받아 갔다고 알린다(같은 확정으로 두 번 정리하지 않게). */
+  clearJustConfirmed: () => void;
+
   /** 전원 동의였는데 확정 직전 확인에서 막힌 자리. 겹친 사람 수까지만 담는다(§11).
    *  null 이면 그런 일이 없었다는 뜻이다. */
   proposalConflict: { eventId: ID; busy: number } | null;
@@ -320,11 +356,50 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   findPeople: async (q) => (remoteReady() ? searchPeople(q) : []),
 
-  connectPerson: async (peerId) => {
-    if (!remoteReady()) return false;
-    const ok = await connectWith(peerId);
-    if (ok) await get().refreshPeople();
-    return ok;
+  requestPerson: async (peerId) => {
+    if (!remoteReady()) return { outcome: "error" as const };
+    const r = await requestConnection(peerId);
+    // 그 자리에서 이어졌을 때만 목록이 달라진다 — 보내기만 한 경우는 아직 남의 차례다.
+    if (r.outcome === "accepted" || r.outcome === "connected") await get().refreshPeople();
+    return r;
+  },
+
+  cancelRequest: async (peerId) => {
+    if (!remoteReady()) return;
+    await cancelConnectionRequest(peerId);
+  },
+
+  connectionRequests: [],
+  outgoingRequests: [],
+  myHandle: null,
+  handleChangeableAt: null,
+
+  changeHandle: async (next) => {
+    if (!remoteReady()) return { ok: false };
+    const r = await changeMyHandle(next);
+    if (r.ok) {
+      const st = await fetchHandleState();
+      set({ myHandle: r.handle ?? next, handleChangeableAt: st?.canChangeAt ?? null });
+    }
+    return { ok: r.ok, message: r.message };
+  },
+
+  loadRequests: async () => {
+    if (!remoteReady()) return;
+    const [incoming, outgoing, handle] = await Promise.all([
+      fetchConnectionRequests(), fetchOutgoingRequests(), fetchHandleState(),
+    ]);
+    set({ connectionRequests: incoming, outgoingRequests: outgoing,
+      myHandle: handle?.handle ?? null, handleChangeableAt: handle?.canChangeAt ?? null });
+  },
+
+  answerRequest: async (id, accept) => {
+    // 답한 줄은 화면에서 곧바로 걷는다 — 서버를 기다리는 동안 남아 있으면
+    // 두 번 누르게 되고, 두 번째 호출은 'gone' 으로 조용히 흘러간다.
+    set((st) => ({ connectionRequests: st.connectionRequests.filter((r) => r.id !== id) }));
+    if (!remoteReady()) return;
+    const ok = await answerConnectionRequest(id, accept);
+    if (ok && accept) await get().refreshPeople();
   },
 
   applyRemoteMessage: (m) =>
@@ -420,6 +495,39 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     return id;
   },
+  confirmSchedule: (id) => {
+    const real = get().resolveEventId(id) ?? id;
+    set((st) => ({
+      schedules: st.schedules.map((s) => (s.id === real ? { ...s, status: "confirmed" } : s)),
+    }));
+    if (remoteReady() && !unsynced.has(real)) void confirmEvent(real);
+  },
+
+  removeSchedule: (id) => {
+    const real = get().resolveEventId(id) ?? id;
+    // 일정이 사라지면 그 자리에 매달려 있던 것들도 함께 사라진다 —
+    // 남겨 두면 주인 없는 방과 참여자가 목록에 유령으로 선다.
+    set((st) => {
+      const roomIds = st.chatRooms.filter((r) => r.eventId === real).map((r) => r.id);
+      return {
+        schedules: st.schedules.filter((s) => s.id !== real),
+        eventParticipants: st.eventParticipants.filter((p) => p.eventId !== real),
+        chatRooms: st.chatRooms.filter((r) => r.eventId !== real),
+        chatMessages: st.chatMessages.filter((m) => !roomIds.includes(m.roomId)),
+      };
+    });
+    // 서버의 events 행만 지운다 — 참여자·방·말은 DB 가 on delete cascade 로 따라 지운다.
+    if (remoteReady() && !unsynced.has(real)) void deleteEvent(real);
+  },
+
+  renameSchedule: (id, title) => {
+    const real = get().resolveEventId(id) ?? id;
+    const name = title.trim();
+    if (!name) return;
+    set((st) => ({ schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: name } : s)) }));
+    if (remoteReady() && !unsynced.has(real)) void renameEvent(real, name);
+  },
+
   addTodo: (t) => set((st) => ({ todos: [{ ...t, id: uid() }, ...st.todos] })),
   updateTodo: (id, patch) =>
     set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
@@ -474,6 +582,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   // ── 일정 제안 ───────────────────────────────────────
   proposals: {},
   proposalConflict: null,
+  justConfirmed: null,
+  clearJustConfirmed: () => set({ justConfirmed: null }),
 
   idAlias: {},
 
@@ -535,7 +645,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const snap = await fetchSnapshot();
       if (snap) get().hydrateRemote(snap);
       set((st) => ({ proposals: { ...st.proposals, [eventId]: null } }));
-      set({ proposalConflict: null });
+      set({ proposalConflict: null, justConfirmed: eventId });
       return;
     }
     // 전원이 동의했는데도 확정되지 않은 경우 — 그 사이 누가 그 시간에 다른 일정을 잡았다.

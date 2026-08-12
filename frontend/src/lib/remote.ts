@@ -19,9 +19,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   ME_ID,
-  type Availability, type ChatMessage, type ChatRoom, type Contact, type EventParticipant,
-  type ID, type ProposalResponse, type ProposalStatus, type Schedule, type ScheduleProposal,
-  type SlotSuggestion,
+  type Availability, type ChatMessage, type ChatRoom, type ConnectionRequest, type Contact,
+  type EventParticipant, type ID, type ProposalResponse, type ProposalStatus, type Schedule,
+  type ScheduleProposal, type SlotSuggestion,
 } from "@/lib/types";
 
 export type RemoteSnapshot = {
@@ -233,6 +233,40 @@ export async function pushEvent(s: Schedule): Promise<string | null> {
   } catch (e: any) { console.error("일정 저장 실패:", e?.message); return null; }
 }
 
+/** AI 가 놓아 둔 제안(pending)을 사람이 확정한다. 확정은 언제나 사람의 손에서 일어난다. */
+export async function confirmEvent(eventId: ID): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" }),
+    });
+    return true;
+  } catch (e: any) { console.error("일정 확정 실패:", e?.message); return false; }
+}
+
+/** 이름을 고쳐 단다. 서버는 주최자만 받아 준다(0001 events_update) —
+ *  방 이름은 곧 일정 제목이라, 남의 일정 이름을 바꿀 수 있으면 안 된다. */
+export async function renameEvent(eventId: ID, title: string): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, { method: "PATCH", body: JSON.stringify({ title }) });
+    return true;
+  } catch (e: any) { console.error("일정 이름 변경 실패:", e?.message); return false; }
+}
+
+/** 되돌린다 — 방금 만든 것을 없던 일로. 서버에서도 지운다(화면에서만 지우면 다음에 다시 나타난다). */
+export async function deleteEvent(eventId: ID): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, { method: "DELETE" });
+    return true;
+  } catch (e: any) { console.error("일정 삭제 실패:", e?.message); return false; }
+}
+
 export async function pushParticipant(eventId: ID, userId: ID) {
   const sb = getSupabase();
   const me = await ensureUid();
@@ -308,7 +342,11 @@ export async function pushMessage(roomId: ID, content: string): Promise<string |
 export async function searchPeople(q: string): Promise<Contact[]> {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return [];
-  const { data, error } = await sb.rpc("search_people", { q, limit_n: 8 });
+  // 화면은 "@핸들로 찾기" 라고 권하는데 서버는 handle 을 '@' 없이 들고 있다.
+  // 그대로 넘기면 "@fapp1004" 가 'handle like @fapp1004%' 가 되어 한 건도 안 나온다 —
+  // 시킨 대로 쳤는데 아무도 없다고 답하는 셈이었다. 앞의 @ 는 여기서 벗긴다.
+  const needle = q.replace(/^@+/, "");
+  const { data, error } = await sb.rpc("search_people", { q: needle, limit_n: 8 });
   if (error) { console.error("사람 검색 실패:", error.message); return []; }
   return (data ?? []).map((r: any): Contact => ({
     id: r.id,
@@ -316,6 +354,8 @@ export async function searchPeople(q: string): Promise<Contact[]> {
     handle: r.handle,
     source: "comein",
     connected: !!r.connected,
+    requested: !!r.requested,
+    incomingRequestId: r.incoming ?? undefined,
   }));
 }
 
@@ -365,12 +405,87 @@ export async function dayAvailability(
   }));
 }
 
-export async function connectWith(peerId: ID): Promise<boolean> {
+/** 요청이 어떻게 끝났는가. 화면이 "보냈어요" 와 "이어졌어요" 를 다르게 말해야 한다. */
+export type RequestOutcome = "sent" | "accepted" | "pending" | "connected" | "error";
+
+/** 잇자고 청한다 — 즉시 잇지 않는다. 상대가 받아야 이어진다.
+ *  상대도 나에게 보내 두었다면 그 자리에서 이어진다("accepted"). */
+export async function requestConnection(peerId: ID): Promise<{ outcome: RequestOutcome; message?: string }> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return { outcome: "error" };
+  const { data, error } = await sb.rpc("request_connection", { peer: peerId });
+  if (error) {
+    // 거절 뒤 곧바로 다시 보낸 경우처럼, 서버가 이유를 말해 주면 그대로 옮긴다.
+    console.error("연결 요청 실패:", error.message);
+    return { outcome: "error", message: error.message };
+  }
+  return { outcome: (data as RequestOutcome) ?? "sent" };
+}
+
+/** 받은 요청에 답한다 — 받은 사람만 부를 수 있다(서버가 다시 확인한다). */
+export async function answerConnectionRequest(id: ID, accept: boolean): Promise<boolean> {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return false;
-  const { error } = await sb.rpc("connect_with", { peer: peerId });
-  if (error) { console.error("연결 실패:", error.message); return false; }
+  const { data, error } = await sb.rpc("answer_connection_request", { req: id, accept });
+  if (error) { console.error("요청 응답 실패:", error.message); return false; }
+  return data === "accepted" || data === "declined";
+}
+
+/** 보낸 요청을 무른다. */
+export async function cancelConnectionRequest(peerId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("cancel_connection_request", { peer: peerId });
+  if (error) { console.error("요청 취소 실패:", error.message); return false; }
   return true;
+}
+
+/** 핸들을 바꾼다. 막혔으면 왜 막혔는지 그대로 옮긴다 —
+ *  "실패했습니다" 만 있으면 사용자는 자기가 뭘 잘못했는지 모른 채 같은 걸 또 시도한다. */
+export async function changeMyHandle(next: string): Promise<{ ok: boolean; handle?: string; message?: string }> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return { ok: false };
+  const { data, error } = await sb.rpc("change_handle", { new_handle: next });
+  if (error) return { ok: false, message: error.message };
+  return { ok: true, handle: data as string };
+}
+
+/** 언제 다시 바꿀 수 있는가 — 30일 규칙을 화면이 미리 말해 줄 수 있게. */
+export async function fetchHandleState(): Promise<{ handle: string; canChangeAt: string } | null> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return null;
+  const { data, error } = await sb.rpc("my_handle_state");
+  if (error || !data?.[0]) return null;
+  return { handle: data[0].handle, canChangeAt: data[0].can_change_at };
+}
+
+/** 내가 보내 두고 아직 답을 못 받은 요청의 상대들.
+ *  my_people() 은 이것을 모르므로, 연락처 줄은 새로고침하면 '요청' 을 다시 내밀었다 —
+ *  이미 보냈는데 안 눌린 줄 알고 또 누르게 된다. RLS 가 from_user = 나 인 줄을 이미
+ *  열어 주므로 함수를 새로 세우지 않고 그대로 읽는다. */
+export async function fetchOutgoingRequests(): Promise<ID[]> {
+  const sb = getSupabase();
+  const me = myUidOf();
+  if (!sb || !me) return [];
+  try {
+    const rows = await rest(`connection_requests?select=to_user&status=eq.pending&from_user=eq.${me}`);
+    return (rows ?? []).map((r: any) => r.to_user as ID);
+  } catch (e: any) { console.error("보낸 요청 조회 실패:", e?.message); return []; }
+}
+
+/** 나에게 온, 아직 답하지 않은 요청들. */
+export async function fetchConnectionRequests(): Promise<ConnectionRequest[]> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return [];
+  const { data, error } = await sb.rpc("my_connection_requests");
+  if (error) { console.error("받은 요청 조회 실패:", error.message); return []; }
+  return (data ?? []).map((r: any): ConnectionRequest => ({
+    id: r.id,
+    fromId: r.from_id,
+    name: r.display_name,
+    handle: r.handle,
+    createdAt: r.created_at,
+  }));
 }
 
 // 연결 해제(disconnect_from)와 확정 후 개인 일정 충돌(my_conflicts_with)은

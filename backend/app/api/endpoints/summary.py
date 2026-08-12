@@ -44,6 +44,9 @@ class SummaryResponse(BaseModel):
     `lines` 는 예전 화면과의 호환을 위해 네 갈래를 이어 붙인 것이다.
     """
     lines: list[str]
+    # 이 자리를 뭐라고 부를까 — 대화에서 끌어낸 한 마디.
+    # 방을 만드는 순간에는 무슨 얘기를 할지 아직 모른다. 이름은 이야기가 쌓인 뒤에야 지을 수 있다.
+    title: str = ""      # 제안하는 이름(근거가 없으면 빈 칸)
     recap: str = ""      # 최근 대화
     decided: str = ""    # 결정된 내용
     pending: str = ""    # 미정 사항
@@ -52,6 +55,7 @@ class SummaryResponse(BaseModel):
 
 # 모델이 붙여 올 머리말 → 우리 갈래. 한국어·영어 둘 다 받는다.
 _SECTIONS = {
+    "title": ("제목", "title", "topic"),
     "recap": ("최근 대화", "recap"),
     "decided": ("결정", "decided"),
     "pending": ("미정", "pending"),
@@ -114,6 +118,7 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
         (
             f"다음은 {where} 에 대한 대화입니다. 뒤늦게 들어온 사람이 흐름을 잡을 수 있도록 "
             "네 갈래로 정리해 주세요.\n"
+            "제목: 이 자리를 부를 이름. 무엇에 대한 자리인지 드러나는 명사구\n"
             "최근 대화: 무슨 이야기를 했는지 한 문장\n"
             "결정: 확정된 것 한 문장\n"
             "미정: 아직 정해지지 않은 것 한 문장\n"
@@ -121,6 +126,8 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
             "규칙\n"
             "- 위 네 줄의 형식(`갈래: 내용`)을 그대로 지킵니다.\n"
             "- 대화에 근거가 없는 갈래는 **그 줄을 아예 쓰지 않습니다**. 칸을 채우려고 지어내지 않습니다.\n"
+            "- 제목은 12자 이내의 명사구. 문장도 인사도 따옴표도 없이.(예: 캡스톤 발표 준비, 팀 회식)\n"
+            "- 제목에 날짜나 시각을 넣지 않습니다. 그건 일정이 이미 들고 있습니다.\n"
             "- 각 줄은 40자 이내, 한 가지만.\n"
             "- 불릿 기호·번호는 붙이지 않습니다.\n\n"
             f"{transcript}"
@@ -128,6 +135,7 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
         if korean
         else (
             f"Summarize the conversation about {where} so someone joining late can catch up.\n"
+            "title: a short noun phrase naming what this gathering is about\n"
             "recap: what was discussed, one sentence\n"
             "decided: what is settled\n"
             "pending: what is still open\n"
@@ -135,6 +143,7 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
             "Rules\n"
             "- Keep the exact `key: value` format above.\n"
             "- Omit a line entirely when the conversation gives no basis for it. Never invent.\n"
+            "- title: at most 4 words, a noun phrase. No dates or times — the event already has those.\n"
             "- One point per line, short.\n\n"
             f"{transcript}"
         )
@@ -151,5 +160,8 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
     # lines 는 채워진 갈래만 이어 붙인다 — 빈 칸을 줄로 만들지 않는다.
     return SummaryResponse(
         lines=[v for v in (parts["recap"], parts["decided"], parts["pending"], parts["next"]) if v],
+        # 모델이 따옴표나 괄호를 붙여 오는 일이 잦다 — 이름으로 쓸 것이므로 벗겨서 넘긴다.
+        # 길이도 여기서 자른다: 방 이름이 한 줄을 넘어가면 목록에서 잘려 무엇인지 못 읽는다.
+        title=parts["title"].strip(" \"'“”‘’「」<>[]")[:24],
         recap=parts["recap"], decided=parts["decided"], pending=parts["pending"], next=parts["next"],
     )

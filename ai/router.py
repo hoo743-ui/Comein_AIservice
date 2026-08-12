@@ -110,6 +110,15 @@ Required fields per category:
 - todo: `title`
 - memo: `content`
 
+PEOPLE (meeting only):
+- If the message names other people to meet with, put their names in `participants`
+  as a list of strings, e.g. "이하늘, 김민수랑 내일 2시 회의" -> participants: ["이하늘", "김민수"].
+- Keep those names OUT of `title`. The title is what the meeting is about, not who is in it
+  ("회의", "면담"), so "이하늘, 김민수 회의" is wrong — title "회의", participants ["이하늘","김민수"].
+- Role words used as a name are still names ("교수님", "팀장님"). The speaker themselves
+  ("나", "저") is never a participant.
+- If nobody else is named, leave `participants` null. Do not invent people.
+
 ASK BACK INSTEAD OF GUESSING:
 - A schedule or a meeting needs a specific date AND time. If the message does not let you
   determine one, DO NOT invent it and DO NOT fall back to a default hour.

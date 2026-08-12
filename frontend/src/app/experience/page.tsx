@@ -49,8 +49,18 @@ export default function Opening() {
   const [name, setName] = React.useState("");
   const [pw, setPw] = React.useState("");
   const [err, setErr] = React.useState<string | null>(null);
+  // 인트로를 걷어내는 중 — 로고·문이 옅어지는 짧은 한 순간.
+  const [skipping, setSkipping] = React.useState(false);
 
   React.useEffect(() => {
+    // 곧바로 로그인 칸을 여는 길. 워크스페이스에서 '나가기' 로 온 사람은 인트로를 보러
+    // 온 것이 아니다 — 계정을 바꾸거나 다시 들어오려는 것이다.
+    // useSearchParams 대신 여기서 읽는다: 그쪽은 Suspense 경계를 요구해 정적 렌더가 풀린다.
+    if (new URLSearchParams(window.location.search).get("auth") === "1") {
+      setPhase("auth");
+      return;
+    }
+
     // 리빌(Context·Memory·Insight → Comein)은 이 경험의 핵심이라 항상 거친다.
     // reduced-motion에선 CSS 모션만 죽이고(정적 표시) 흐름은 유지 — 대신 대기를 짧게.
     const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches;
@@ -76,10 +86,15 @@ export default function Opening() {
   /** 건너뛰기 — 인트로만 넘긴다. 다른 페이지로 내보내지 않고, 이 화면의 로그인 카드로 바로 간다.
    *  이미 들어와 있으면 그대로 통과. */
   const skip = React.useCallback(() => {
+    if (phase === "auth" || phase === "entering") return;
+    // 인트로를 통째로 걷어내되 툭 끊지는 않는다. 예전엔 누르는 순간 로고·문이
+    // display:none 으로 사라지고 카드가 그 자리에 나타나 한 프레임에 화면이 갈렸다.
+    // 먼저 옅어지게 두고(340ms) 그 다음 카드로 넘긴다 — 넘기는 것도 하나의 장면이다.
+    setSkipping(true);
+    window.setTimeout(() => setPhase("auth"), 360);
     // 먼저 반응하고 나서 확인한다 — 세션 조회(네트워크)를 기다리면 누른 게 씹힌 것처럼 느껴진다.
-    setPhase("auth");
     void refreshSession().then((uid) => { if (uid) cross(); });
-  }, [cross]);
+  }, [cross, phase]);
 
   const social = async (p: Provider) => {
     if (busy || phase === "entering") return;
@@ -110,7 +125,7 @@ export default function Opening() {
   const doorOpen = phase === "open" || phase === "reveal" || phase === "auth" || phase === "entering";
 
   return (
-    <div className={`opn phase-${phase}`}>
+    <div className={`opn phase-${phase} ${skipping ? "skipping" : ""}`}>
       <style>{CSS}</style>
       <div className="opn-bg" aria-hidden />
       <div className="opn-light" aria-hidden />
@@ -341,6 +356,13 @@ const CSS = `
 .opn-switch { margin: 18px 0 0; text-align: center; font-size: 0.84rem; font-weight: 300; color: var(--muted); }
 .opn-switch button { background: none; border: 0; cursor: pointer; font-family: inherit; font-size: 0.84rem; font-weight: 600; color: var(--ink); text-decoration: underline; text-underline-offset: 2px; }
 .opn-switch button:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 3px; }
+
+/* 건너뛰기 — 인트로가 사라지는 한 순간. 지우기 전에 옅어질 시간을 준다. */
+.opn.skipping .opn-logo, .opn.skipping .opn-tag, .opn.skipping .opn-door, .opn.skipping .opn-reveal {
+  opacity: 0; transition: opacity 340ms ease; }
+@media (prefers-reduced-motion: reduce) {
+  .opn.skipping .opn-logo, .opn.skipping .opn-tag, .opn.skipping .opn-door, .opn.skipping .opn-reveal { transition: none; }
+}
 
 /* 리빌 — Comein(위 로고) 아래로 Context·Memory·Insight 세 단어가 가지처럼 강조되며 나타난다. (Comein 은 하나뿐) */
 .opn.phase-reveal .opn-light { opacity: 1; transform: translate(-50%, -50%) scale(1.08); }
