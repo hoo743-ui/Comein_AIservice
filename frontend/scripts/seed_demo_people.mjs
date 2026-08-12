@@ -156,63 +156,51 @@ const busy = [
 for (const [uid, title, s, e] of busy) await ensureEvent(uid, title, s, e);
 console.log(`  ${busy.length}건`);
 
-console.log("그 방의 대화");
+// ── 대화는 심지 않는다 ────────────────────────────────────────────────
+//
+// 한때 여기서 아홉 줄을 심었다. 요약이 네 갈래(recap·decided·pending·next)로
+// 갈려 나오도록 '정한 것 한 줄 · 못 정한 것 한 줄 · 할 일 한 줄' 을 일부러 섞어서.
+// 그건 시험 문제를 보고 답을 심어 둔 것이다 — 그렇게 만든 요약이 잘 나와도
+// **AI 가 잘하는지는 하나도 증명되지 않는다.**
+//
+// 대화는 데모하는 자리에서 직접 친다. 방은 비어 있는 채로 둔다.
+// (요약을 눌러 볼 재료가 급히 필요하면 SEED_CHAT=1 로 몇 줄 넣을 수 있게 해 뒀다.
+//  그 줄들은 일부러 네 갈래에 맞추지 않았다 — 그래야 나온 요약이 진짜 결과다.)
 const room = await sb.from("chat_rooms").select("id").eq("event_id", eventId).single();
 if (room.error) throw room.error;
 
-// 요약이 네 갈래(recap · decided · pending · next)로 나오도록, 네 가지가 실제로 오간 대화를 심는다.
-// 정한 것 · 아직 못 정한 것 · 누가 무엇을 할지 — 이 셋이 없으면 요약은 한 갈래로만 나온다.
-const script = [
-  [0, "내일 리뷰 전에 각자 맡은 부분 정리해 오면 좋을 것 같아요."],
-  [1, "저는 파서 쪽 정리해서 올릴게요. 지난주에 고친 것들 포함해서요."],
-  [2, "저는 화면 쪽이요. 좁은 폭에서 잘리던 것들은 다 잡았습니다."],
-  [0, "좋아요. 그럼 리뷰에서는 데모를 먼저 보고 얘기하는 걸로 하죠."],
-  [3, "데모는 15분 안쪽으로 부탁드려요. 뒤에 회의가 붙어 있어서요."],
-  [1, "네. 그런데 배포 얘기는 이번에 할까요, 다음으로 미룰까요?"],
-  [0, "그건 아직 못 정하겠네요. 비용 확인이 먼저라서요."],
-  [2, "그럼 제가 무료 티어 한도만 정리해서 내일 아침까지 공유할게요."],
-  [3, "다음 주 일정은 리뷰 끝나고 다시 잡죠. 저는 화요일 오후가 비어요."],
-];
-const existing = await sb.from("chat_messages").select("id").eq("room_id", room.data.id).limit(1);
-if (existing.data?.length) {
-  console.log("  이미 대화가 있다 — 건너뛴다");
+if (process.env.SEED_CHAT === "1") {
+  const existing = await sb.from("chat_messages").select("id").eq("room_id", room.data.id).limit(1);
+  if (existing.data?.length) {
+    console.log("대화: 이미 있다 — 건너뛴다");
+  } else {
+    // 그냥 사람들이 주고받을 법한 말. 무엇이 요약될지는 모델이 정한다.
+    const lines = [
+      [0, "내일 리뷰 몇 시에 시작하죠?"],
+      [1, "저는 3시라고 알고 있었어요."],
+      [2, "아 저는 4시로 알고 있었는데요."],
+      [0, "그럼 3시로 하고, 늦는 사람은 중간에 들어오는 걸로 해요."],
+      [3, "네 저는 그때 괜찮습니다."],
+      [1, "자료는 어디에 올리면 되나요?"],
+      [2, "예전에 쓰던 폴더에 올려두면 될 것 같아요."],
+    ];
+    const senders = [demoId, ...guests];
+    const base = Date.now() - lines.length * 4 * 60 * 1000;
+    await sb
+      .from("chat_messages")
+      .insert(
+        lines.map(([who, content], i) => ({
+          room_id: room.data.id,
+          sender_id: senders[who],
+          content,
+          created_at: new Date(base + i * 4 * 60 * 1000).toISOString(),
+        })),
+      )
+      .throwOnError();
+    console.log(`대화: ${lines.length}줄 (SEED_CHAT=1)`);
+  }
 } else {
-  const senders = [demoId, ...guests];
-  const base = Date.now() - script.length * 4 * 60 * 1000; // 4분 간격으로 방금 전까지
-  const rows = script.map(([who, content], i) => ({
-    room_id: room.data.id,
-    sender_id: senders[who],
-    content,
-    created_at: new Date(base + i * 4 * 60 * 1000).toISOString(),
-  }));
-  await sb.from("chat_messages").insert(rows).throwOnError();
-  console.log(`  ${rows.length}줄`);
-}
-
-console.log("1:1 대화 한 자리");
-// 사람 탭의 '개인 채팅' 이 비어 있지 않게. dm_key 는 두 uid 를 정렬해 잇는다(remote.ts 와 같은 규칙).
-const dmKey = [demoId, guests[0]].sort().join(":");
-let dm = await sb.from("chat_rooms").select("id").eq("dm_key", dmKey).maybeSingle();
-if (!dm.data?.id) {
-  const made = await sb.from("chat_rooms").insert({ dm_key: dmKey }).select("id").single();
-  if (made.error) throw made.error;
-  dm = made;
-  await sb
-    .from("chat_room_members")
-    .upsert([{ room_id: dm.data.id, user_id: demoId }, { room_id: dm.data.id, user_id: guests[0] }], {
-      onConflict: "room_id,user_id",
-    })
-    .throwOnError();
-  await sb
-    .from("chat_messages")
-    .insert([
-      { room_id: dm.data.id, sender_id: guests[0], content: "리뷰 자료 초안 올려뒀어요. 한 번 봐주세요." },
-      { room_id: dm.data.id, sender_id: demoId, content: "확인했어요. 마지막 장만 같이 다듬죠." },
-    ])
-    .throwOnError();
-  console.log("  2줄");
-} else {
-  console.log("  이미 있다 — 건너뛴다");
+  console.log("대화: 심지 않음 — 데모에서 직접 친다");
 }
 
 const { data: profiles, error } = await sb
@@ -225,11 +213,14 @@ console.log("\n심은 사람들 (핸들은 트리거가 이메일 앞부분에�
 for (const p of profiles) console.log(`  ${p.display_name} · @${p.handle}`);
 console.log(`\n데모 계정으로 로그인: ${DEMO_EMAIL}`);
 console.log(`
-데모에서 이렇게 보인다:
-  사람 → 연락처       다섯 명
-  사람 → 그룹 채팅    '8월 스프린트 리뷰' (대화 ${script.length}줄)
-  방을 열면            오른쪽에 '함께하는 일정' — 참여자들의 바쁜 시간이 겹쳐 보인다
-AI 를 돌려 볼 곳:
-  방 안의 '요약'      정한 것 / 아직 못 정한 것 / 다음 행동 이 실제로 갈려 나온다
-  시간표의 빈칸        누르면 그 시각을 제안 → 전원 동의 전까지 일정은 pending 으로 남는다
-  캡처 바             "내일 3시 회의" 처럼 말하면 일정이 서고, 시각이 없으면 되묻는다`);
+심어 둔 것은 '상황' 뿐이다 — 사람, 함께 보는 일정, 각자의 바쁜 시간.
+AI 가 만들어 낼 것(요약·후보 시각·제안)은 하나도 심지 않았다. 그건 자리에서 돌려 봐야 한다.
+
+돌려 볼 곳:
+  방을 열고 대화를 몇 줄 친다 → '요약' 을 누른다
+      무엇이 정해진 것이고 무엇이 남았는지는 그때 모델이 가른다
+  오른쪽 '함께하는 일정' 시간표
+      참여자들의 바쁜 시간이 겹쳐 보인다. 빈칸을 누르면 그 시각을 제안하고,
+      전원이 동의하기 전까지 일정은 pending 으로 남는다
+  캡처 바
+      "내일 3시 회의" → 일정이 선다 / "회의 잡아줘" → 시각을 되묻는다`);
