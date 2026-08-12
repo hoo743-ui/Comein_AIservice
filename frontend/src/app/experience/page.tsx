@@ -131,10 +131,15 @@ export default function Opening() {
       <div className="opn-light" aria-hidden />
       <div className="opn-flash" aria-hidden />
 
-      <button type="button" className="opn-skip" onClick={skip} aria-label="인트로 건너뛰기">
-        건너뛰기
-        <span className="opn-skip-ar" aria-hidden>→</span>
-      </button>
+      {/* 넘길 인트로가 있을 때만 그린다. 카드가 선 뒤에는 이 단추가 할 일이 없다 —
+          skip() 도 그 단계에서는 바로 돌아섰으니, 화면에는 눌러도 아무 일이 없는 단추만 남아 있었다.
+          숨기지 않고 걷어내는 이유: opacity 로만 감추면 눈에는 없는데 Tab 으로는 잡힌다. */}
+      {phase !== "auth" && phase !== "entering" && (
+        <button type="button" className="opn-skip" onClick={skip} aria-label="인트로 건너뛰기">
+          건너뛰기
+          <span className="opn-skip-ar" aria-hidden>→</span>
+        </button>
+      )}
 
       <div className="opn-stage">
         <p className="opn-logo">Comein</p>
@@ -267,8 +272,14 @@ const CSS = `
 .opn-skip:focus-visible { opacity: 1; outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 3px; }
 .opn-skip-ar { font-size: 14px; line-height: 1; color: var(--muted); transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), color 0.25s; }
 .opn-skip:hover .opn-skip-ar { transform: translateX(3px); color: var(--ink); }
-/* 이미 건너뛴 뒤(전환 중)에는 물러난다 — 두 번 눌리지 않게. */
-.opn.phase-entering .opn-skip { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+/* 넘기는 340ms 동안만 흐려진다 — 그 뒤에는 아예 그려지지 않는다(위 JSX 참고).
+   animation: none 이 필요하다: 등장 애니메이션이 both 로 끝값(0.72)을 붙들고 있어서
+   opacity 만 0 으로 적으면 애니메이션이 이긴다. 전환 중에 물러나게 해 둔 예전 규칙도
+   그래서 실제로는 흐려지지 않고 클릭만 막고 있었다.
+   숨기는 데 visibility 는 쓰지 않는다 — 트랜지션이 걸리면 값이 넘어가지 않아
+   눈에는 없는데 Tab 으로는 잡히는 단추가 남는다(실제로 그랬다). 그래서 걷어내는 쪽을 택했다. */
+.opn.skipping .opn-skip {
+  animation: none; opacity: 0; pointer-events: none; transition: opacity 0.34s ease; }
 @media (prefers-reduced-motion: reduce) { .opn-skip { animation: none; opacity: 0.72; } }
 
 .opn-stage { position: relative; z-index: 2; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 64px 24px; gap: 0; transition: opacity 0.9s ease; }
