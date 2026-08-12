@@ -1222,6 +1222,8 @@ export default function Reimagine() {
     const en = lang === "en";
     // 공유 일정이 있는 사람을 하나 골라 둔다 — 5번째 걸음이 가리킬 대상.
     const withShared = contacts.find((c: any) => sharedEventsWith(c.id).length > 0);
+    // 고를 사람이 하나라도 있으면 그 사람으로 보여 준다 — 함께한 일정이 없어도 화면은 같다.
+    const someone = withShared ?? contacts[0];
     return [
       {
         key: "today", target: "today",
@@ -1260,11 +1262,27 @@ export default function Reimagine() {
         before: () => { setView("people"); selectPerson(null); },
       },
       {
+        // 사람을 고른 뒤의 화면 — AI 가 여기서 무엇을 하는지 말해 준다.
+        // 조용히 돕는 것은 좋지만, 조용하기만 하면 있는 줄도 모른다.
+        key: "person", target: someone ? "person" : "people",
+        title: en ? "One person, one screen" : "사람 하나, 한 화면",
+        body: en
+          ? "Pick someone and what you said and what you're doing together sit on one screen. Comein listens quietly: when a time comes up it offers one, and it only writes a summary once you've actually settled — not on every message."
+          : "사람을 고르면 나눈 말과 함께하는 일정이 한 화면에 섭니다. AI 는 뒤에서 조용히 듣다가 시간 이야기가 오가면 후보를 한 줄로 권하고, 정리는 정말로 정해졌을 때만 합니다 — 말이 오갈 때마다 요약하지 않아요.",
+        example: en
+          ? "e.g.  “Friday evening?” → Fri 19:00, both free  [Propose it]"
+          : "예)  \"금요일 저녁 어때?\" → 금 19:00 · 둘 다 비어 있어요  [일정 제안]",
+        before: () => {
+          setView("people");
+          if (someone) { setPersonId(someone.id); setOpenEventId(null); }
+        },
+      },
+      {
         key: "shared", target: withShared ? "sharedevent" : "people",
         title: en ? "Talk inside the event" : "일정 안에서 대화",
         body: en
-          ? "Everyone on an event shares its room. Say a time in there and Comein checks both calendars and suggests one — you decide."
-          : "같은 일정의 사람들이 그 방을 함께 씁니다. 방에서 시각을 말하면 양쪽 달력을 맞춰 보고 시간을 제안해요 — 정하는 건 사람입니다.",
+          ? "Everyone on an event shares its room. Say a time and Comein checks both calendars and suggests one — you decide. Once everyone agrees, it writes down what was settled."
+          : "같은 일정의 사람들이 그 방을 함께 씁니다. 시각을 말하면 양쪽 달력을 맞춰 보고 시간을 제안해요 — 정하는 건 사람입니다. 전원이 동의하면 그때 무엇이 정해졌는지 정리해 둡니다.",
         example: en
           ? "e.g.  “How about 4pm Thursday?” → Thu 16:00, no conflicts for 2"
           : "예)  \"그럼 목요일 4시 어때?\" → 목 16:00 · 2명 모두 충돌 없음",
@@ -3923,7 +3941,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
   })();
 
   return (
-    <aside className="rmg-evpanel rmg-ppanel" role="region" aria-label={person.name}>
+    <aside className="rmg-evpanel rmg-ppanel" data-tour="person" role="region" aria-label={person.name}>
       {/* 돌아갈 길. 방만 덜렁 바뀌면 길을 잃는다.
           좁은 폭에서는 목록이 접혀 있으므로 요약에서도 '사람' 으로 돌아갈 길이 있어야 한다 —
           없으면 사람을 한 번 고른 뒤 목록으로 되돌아갈 방법이 사라진다(막다른 길이었다). */}
