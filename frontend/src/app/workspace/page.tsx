@@ -55,8 +55,11 @@ type PersonTab = "overview" | "chat" | "events";
  *  인디케이터 위치를 px 로 직접 계산하는 이유: transform 값이 var() 안에서만 바뀌면
  *  브라우저가 재계산을 건너뛰어 표식이 이전 칸에 남는다. */
 const NAV_ROW = 40;
+/** 손끝 기준의 한 줄. 40 은 커서에게는 넉넉하지만 손끝(~44)에는 한 뼘 모자란다.
+ *  레일은 이 화면에서 유일한 길이라, 여기서 빗나가면 다른 데로 갈 방법이 없다.
+ *  폭도 함께 자라야 한다 — 높이만 키우면 44×39 짜리 납작한 과녁이 된다(CSS 쪽 §레일 참고). */
+const NAV_ROW_TOUCH = 44;
 const NAV_GAP = 4;
-const NAV_STEP = NAV_ROW + NAV_GAP;
 const pad = (n: number | string) => String(n).padStart(2, "0");
 
 /** 백엔드(`/api/chat`)의 item 하나 → 화면이 쓰는 Parsed.
@@ -1331,12 +1334,17 @@ export default function Reimagine() {
   // 정작 사람 탭에서 필요한 건 목록과 대화가 나눠 쓸 가로 폭이다.
   const showCtxRail = shownView === "today" && panel !== "settings";
 
+  // 레일 한 줄의 높이는 기기가 정한다. 인디케이터의 이동 거리도 여기서만 나온다 —
+  // 두 숫자가 다른 곳에서 각자 만들어지면 표식이 칸과 어긋나 앉는다.
+  const navRow = useCoarsePointer() ? NAV_ROW_TOUCH : NAV_ROW;
+  const navStep = navRow + NAV_GAP;
+
   // 첫 진입 → opening 으로 리디렉트 중엔 빈 배경만 (깜빡임 없이 넘어간다).
   // ★ 이 조기 반환은 반드시 모든 훅 아래에 둔다 — 위에 두면 렌더마다 훅 개수가 달라져
   //   React 가 "Rendered fewer hooks than expected"(#300) 로 화면을 통째로 떨어뜨린다.
   if (toOpening) {
     return (
-      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
+      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${navRow}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
         <style>{CSS}</style>
       </div>
     );
@@ -1348,7 +1356,7 @@ export default function Reimagine() {
   const navIndPos = navActive >= 0 ? navActive : navViewIndex;
 
   return (
-    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""} view-${shownView}`} style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
+    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""} view-${shownView}`} style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${navRow}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
       <style>{CSS}</style>
       {arriving && <div className="rmg-arrive" aria-hidden />}
 
@@ -1383,7 +1391,7 @@ export default function Reimagine() {
               className="rmg-rail-ind"
               aria-hidden
               data-hidden={navActive < 0}
-              style={{ transform: `translateY(${navIndPos * NAV_STEP}px)` }}
+              style={{ transform: `translateY(${navIndPos * navStep}px)` }}
             />
             {NAV.map((n, i) => {
               const on = panel === null && view === n.key;
@@ -4712,7 +4720,8 @@ const CSS = `
   /* 모서리도 토큰으로 — 컴포넌트마다 다른 반경을 쓰지 않는다. */
   --r-sm: 8px; --r: 12px; --r-lg: 16px;
   /* --nav-row / --nav-gap (레일 한 줄의 규격) 은 NAV_ROW·NAV_GAP 에서 주입된다.
-     인디케이터 이동 거리를 같은 숫자에서 파생시키기 위해 출처를 JS 한 곳으로 모았다. */
+     인디케이터 이동 거리를 같은 숫자에서 파생시키기 위해 출처를 JS 한 곳으로 모았다.
+     행 높이는 기기를 탄다(손가락이면 44) — 그래서 이 값만은 CSS 가 아니라 JS 가 정한다. */
   /* 화면 가장자리 여백 — 넓어질수록 함께 자라되 88px 에서 멈춘다. */
   --gutter: clamp(32px, 4vw, 88px);
   /* ── 하나의 작업면(Workspace) ──
@@ -5014,6 +5023,15 @@ html { font-size: 17px; }
 /* nav 항목의 활성 배경/바는 슬라이딩 인디케이터가 대신한다(중복 제거) */
 .rmg-rail-nav .rmg-railbtn.on { background: none; }
 .rmg-rail-nav .rmg-railbtn.on:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+/* 손끝 — 행 높이는 JS 가 44 로 올린다(--nav-row). 폭은 여기서 맞춘다.
+   접힌 레일은 64px 이고 그 안에서 버튼은 64 − 좌우 12 − 헤어라인 1 = 39px 이었다.
+   레일을 넓히지 않고 패딩을 3px 씩 안으로 옮긴다: 패널 12 → 9, 버튼 10 → 13.
+   두 값이 서로를 지우므로 아이콘과 글자는 제자리에 그대로 있고, 닿는 자리만 39 → 45 로 자란다
+   (레일이 펼쳐진 216px 상태에서도 같은 상쇄가 성립한다 — 라벨이 흔들리지 않는다). */
+@media (hover: none) and (pointer: coarse) {
+  .rmg-rail-panel { padding-left: 9px; padding-right: 9px; }
+  .rmg-railbtn, .rmg-rail-mark { padding-left: 13px; padding-right: 13px; }
+}
 /* foot(설정)은 nav 밖이지만 같은 언어를 쓴다 — 설정이 현재 워크스페이스보다 강조되면 안 된다. */
 .rmg-rail-foot .rmg-railbtn.on { background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 5%, transparent); }
 .rmg-rail-foot .rmg-railbtn.on:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
