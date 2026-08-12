@@ -289,6 +289,14 @@ interface WorkspaceState {
    *  못 찾으면 null 을 돌려준다 — 아무 때나 지어내 제안하지 않는다. */
   proposeTime: (eventId: ID, preferred: Date, durationMin?: number, title?: string) => Promise<ScheduleProposal | null>;
   answerProposal: (eventId: ID, proposalId: ID, response: "accepted" | "declined") => Promise<void>;
+  /** 방금 전원 동의로 확정된 일정. 화면이 그 순간을 알아채고 한 번 정리한다.
+   *  proposals[id] 로는 알 수 없다 — 확정되면 그 자리를 곧바로 비우고(아래 answerProposal),
+   *  fetchOpenProposal 도 proposed·pending 만 가져오기 때문에 status 가 confirmed 로
+   *  서 있는 순간이 없다. 그래서 확정됐다 는 사실을 따로 한 번 알린다. */
+  justConfirmed: ID | null;
+  /** 그 신호를 받아 갔다고 알린다(같은 확정으로 두 번 정리하지 않게). */
+  clearJustConfirmed: () => void;
+
   /** 전원 동의였는데 확정 직전 확인에서 막힌 자리. 겹친 사람 수까지만 담는다(§11).
    *  null 이면 그런 일이 없었다는 뜻이다. */
   proposalConflict: { eventId: ID; busy: number } | null;
@@ -574,6 +582,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   // ── 일정 제안 ───────────────────────────────────────
   proposals: {},
   proposalConflict: null,
+  justConfirmed: null,
+  clearJustConfirmed: () => set({ justConfirmed: null }),
 
   idAlias: {},
 
@@ -635,7 +645,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const snap = await fetchSnapshot();
       if (snap) get().hydrateRemote(snap);
       set((st) => ({ proposals: { ...st.proposals, [eventId]: null } }));
-      set({ proposalConflict: null });
+      set({ proposalConflict: null, justConfirmed: eventId });
       return;
     }
     // 전원이 동의했는데도 확정되지 않은 경우 — 그 사이 누가 그 시간에 다른 일정을 잡았다.

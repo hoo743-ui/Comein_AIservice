@@ -795,6 +795,9 @@ export default function Reimagine() {
 
   // ── 대화에서 시간이 정해지는 길 ──
   const proposals = useWorkspace((s) => s.proposals);
+  // 확정되는 그 순간의 신호 — proposals 로는 알 수 없다(스토어 주석 참고).
+  const justConfirmed = useWorkspace((s) => s.justConfirmed);
+  const clearJustConfirmed = useWorkspace((s) => s.clearJustConfirmed);
   const loadProposal = useWorkspace((s) => s.loadProposal);
   // 대화방 옆 하루 — 어느 날을 보고 있는가, 그 날의 '몇 명 가능'.
   const dayAvail = useWorkspace((s) => s.dayAvail);
@@ -925,13 +928,13 @@ export default function Reimagine() {
    *
    *  방을 열어 둔 사람에게서만 돈다: 아무도 안 보는 방을 미리 요약해 둘 이유가 없다(§34). */
   React.useEffect(() => {
-    if (!openEventId) return;
-    const p = proposals[openEventId];
-    if (p?.status !== "confirmed") return;
-    if (summaries[openEventId] || autoSummed[openEventId] || summaryBusy) return;
-    setAutoSummed((m) => ({ ...m, [openEventId]: true }));
-    void summarizeEvent(openEventId);
-  }, [openEventId, proposals, summaries, autoSummed, summaryBusy, summarizeEvent]);
+    if (!justConfirmed) return;
+    const id = justConfirmed;
+    clearJustConfirmed();
+    if (summaries[id] || autoSummed[id]) return;
+    setAutoSummed((m) => ({ ...m, [id]: true }));
+    void summarizeEvent(id);
+  }, [justConfirmed, clearJustConfirmed, summaries, autoSummed, summarizeEvent]);
 
   const openGuideDoor = React.useCallback(() => {
     if (doorOpening) return;
@@ -3342,10 +3345,10 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
         </button>
         {openWho && (
         <>
+        {/* 제목을 다시 달지 않는다 — 바로 위 접힌 줄이 이미 "참여자 · 2명 · 참석 1" 이라고
+            말했다. 펼쳤더니 같은 말이 한 번 더 서 있으면 그만큼 목록이 아래로 밀린다.
+            여기 남을 것은 손잡이 하나뿐이다. */}
         <div className="rmg-drawer-peoplehead">
-          <p className="rmg-eyebrow rmg-drawer-eye">
-            {en ? "Who's here" : "이 자리의 사람들"}
-          </p>
           <button type="button" className="rmg-ppl-act" onClick={() => setAdding((v) => !v)}>
             {adding ? (en ? "Done" : "완료") : (en ? "Add" : "추가")}
           </button>
@@ -6389,7 +6392,7 @@ html { font-size: 17px; }
   transition: transform 220ms cubic-bezier(0.22,1,0.36,1); }
 .rmg-evdisc-ic.on { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .rmg-evdisc, .rmg-evdisc-ic { transition: none; } }
-.rmg-drawer-peoplehead { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); }
+.rmg-drawer-peoplehead { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
 /* 참석 여부 — 색이 아니라 굵기·농도로만 구분한다(§17 강한 accent 금지). */
 .rmg-drawer-prole.accepted { color: var(--muted); }
 .rmg-drawer-prole.declined { color: var(--faint); text-decoration: line-through; }
