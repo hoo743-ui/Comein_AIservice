@@ -4745,7 +4745,7 @@ function HandleRow({ lang, handle, at, onChange }: {
         </p>
       </div>
       {editing ? (
-        <div className="rmg-acct">
+        <div className="rmg-handle">
           <input
             ref={ref}
             className="rmg-set-input rmg-handle-in"
@@ -4761,7 +4761,7 @@ function HandleRow({ lang, handle, at, onChange }: {
           </button>
         </div>
       ) : (
-        <div className="rmg-acct">
+        <div className="rmg-handle">
           <span className="rmg-handle-v">@{handle}</span>
           <button type="button" className="rmg-ppl-act" disabled={locked} onClick={() => setEditing(true)}>
             {en ? "Change" : "바꾸기"}
@@ -4800,12 +4800,6 @@ function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onRe
           {lang === "en" ? "Replay" : "다시 보기"}
         </button>
       </div>
-      {/* 핸들 — 남이 나를 찾는 이름이자 초대코드.
-          가입할 때 이메일 앞부분에서 기계가 뽑아 붙인 것이라(0004), 한 번은
-          자기가 정할 수 있어야 남에게 알려 줄 이름이 된다. 다만 자주 바뀌면
-          초대코드가 아니게 되므로 30일에 한 번이고, 놓아준 이름은 아무도 못 가져간다. */}
-      {handle && <HandleRow lang={lang} handle={handle} at={handleAt} onChange={onHandle} />}
-
       <div className="rmg-set-row">
         <div className="rmg-set-label"><p className="rmg-set-k">{t.setName}</p><p className="rmg-set-d">{t.setNameD}</p></div>
         <input
@@ -4816,6 +4810,13 @@ function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onRe
           aria-label={t.setName}
         />
       </div>
+
+      {/* 핸들 — 남이 나를 찾는 이름이자 초대코드.
+          가입할 때 이메일 앞부분에서 기계가 뽑아 붙인 것이라(0004), 한 번은
+          자기가 정할 수 있어야 남에게 알려 줄 이름이 된다. 다만 자주 바뀌면
+          초대코드가 아니게 되므로 30일에 한 번이고, 놓아준 이름은 아무도 못 가져간다. */}
+      {handle && <HandleRow lang={lang} handle={handle} at={handleAt} onChange={onHandle} />}
+
 
       <div className="rmg-set-row">
         <div className="rmg-set-label"><p className="rmg-set-k">{t.setLang}</p><p className="rmg-set-d">{t.setLangD}</p></div>
@@ -5527,6 +5528,10 @@ html { font-size: 17px; }
 .rmg-acct { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; max-width: 60%; }
 .rmg-acct-mail { width: min(150px, 28vw); padding: 6px 10px; font-size: 0.84rem; }
 .rmg-acct-pw { width: min(120px, 24vw); padding: 6px 10px; font-size: 0.84rem; }
+/* 핸들 줄의 조작부 — 계정 줄(.rmg-acct)을 빌려 쓰면 설정 격자의
+   :has(.rmg-acct) 규칙에 걸려 이 줄만 전체 폭을 혼자 차지한다.
+   나머지 항목과 같은 칸에 서야 한 덩어리로 읽힌다. */
+.rmg-handle { display: flex; align-items: center; flex-wrap: wrap; justify-content: flex-end; gap: 6px; flex-shrink: 0; }
 .rmg-handle-v { font-size: 0.94rem; font-weight: 500; color: var(--ink); }
 .rmg-handle-in { width: min(200px, 40vw); }
 .rmg-acct-off { font-size: 0.76rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); flex-shrink: 0; }
