@@ -1653,7 +1653,10 @@ export default function Reimagine() {
             lang={lang}
             organizing={organizing}
             onSubmit={capture}
-            tuck={shownView === "people" && !!(personId || openEventId)}
+            /* 아래에 이미 제 입력칸을 가진 화면 위에서는 물러난다.
+               새 자리 만들기 폼도 그중 하나다 — 물러나지 않으면 캡처 바가 '만들기' 버튼
+               한복판을 덮어 클릭을 가로챈다(실제로 눌리지 않았다). */
+            tuck={shownView === "people" && !!(personId || openEventId || newRoom)}
           />
         )}
 
