@@ -246,6 +246,17 @@ export async function confirmEvent(eventId: ID): Promise<boolean> {
   } catch (e: any) { console.error("일정 확정 실패:", e?.message); return false; }
 }
 
+/** 이름을 고쳐 단다. 서버는 주최자만 받아 준다(0001 events_update) —
+ *  방 이름은 곧 일정 제목이라, 남의 일정 이름을 바꿀 수 있으면 안 된다. */
+export async function renameEvent(eventId: ID, title: string): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, { method: "PATCH", body: JSON.stringify({ title }) });
+    return true;
+  } catch (e: any) { console.error("일정 이름 변경 실패:", e?.message); return false; }
+}
+
 /** 되돌린다 — 방금 만든 것을 없던 일로. 서버에서도 지운다(화면에서만 지우면 다음에 다시 나타난다). */
 export async function deleteEvent(eventId: ID): Promise<boolean> {
   const uid = await ensureUid();

@@ -23,7 +23,7 @@ import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   answerConnectionRequest, cancelConnectionRequest, dayAvailability, ensureDmRoomRemote,
   fetchConnectionRequests, fetchMyHandle, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
-  confirmEvent, deleteEvent,
+  confirmEvent, deleteEvent, renameEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
   type RequestOutcome,
@@ -258,6 +258,8 @@ interface WorkspaceState {
   confirmSchedule: (id: ID) => void;
   /** 없던 일로 — 일정과 그에 매달린 것(참여자·방·말)까지 함께 걷는다. */
   removeSchedule: (id: ID) => void;
+  /** 이름을 고쳐 단다. 방 이름은 곧 일정 제목이다(서버는 주최자만 받는다). */
+  renameSchedule: (id: ID, title: string) => void;
 
   // Todo
   addTodo: (t: Omit<Todo, "id">) => void;
@@ -491,6 +493,14 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     });
     // 서버의 events 행만 지운다 — 참여자·방·말은 DB 가 on delete cascade 로 따라 지운다.
     if (remoteReady() && !unsynced.has(real)) void deleteEvent(real);
+  },
+
+  renameSchedule: (id, title) => {
+    const real = get().resolveEventId(id) ?? id;
+    const name = title.trim();
+    if (!name) return;
+    set((st) => ({ schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: name } : s)) }));
+    if (remoteReady() && !unsynced.has(real)) void renameEvent(real, name);
   },
 
   addTodo: (t) => set((st) => ({ todos: [{ ...t, id: uid() }, ...st.todos] })),

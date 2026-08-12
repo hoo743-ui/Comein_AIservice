@@ -266,6 +266,7 @@ export default function Reimagine() {
   const addSchedule = useWorkspace((s) => s.addSchedule);
   // AI 가 놓아 둔 제안을 사람이 확정하거나 없던 일로 되돌린다.
   const confirmSchedule = useWorkspace((s) => s.confirmSchedule);
+  const renameSchedule = useWorkspace((s) => s.renameSchedule);
   const removeSchedule = useWorkspace((s) => s.removeSchedule);
   // 공유 일정 — 하나의 일정이 캘린더·24시간 원·사람·대화에서 같은 데이터로 쓰인다.
   const eventParticipants = useWorkspace((s) => s.eventParticipants);
@@ -892,7 +893,7 @@ export default function Reimagine() {
       if (!res.ok) return;
       const data = await res.json();
       const s = (k: string) => (typeof data?.[k] === "string" ? data[k].trim() : "");
-      const sum: ChatSummary = { recap: s("recap"), decided: s("decided"), pending: s("pending"), next: s("next") };
+      const sum: ChatSummary = { recap: s("recap"), decided: s("decided"), pending: s("pending"), next: s("next"), title: s("title") };
       // 네 갈래가 모두 비었으면(옛 서버거나 근거가 없거나) 예전 형태로 물러난다.
       if (!sum.recap && !sum.decided && !sum.pending && !sum.next) {
         const lines: string[] = Array.isArray(data?.lines) ? data.lines.filter((l: unknown) => typeof l === "string" && l.trim()) : [];
@@ -1345,6 +1346,7 @@ export default function Reimagine() {
           proposalBusy={proposalBusy}
           summary={summaries[openEventData.id] ?? null}
           summaryAuto={!!autoSummed[openEventData.id]}
+          onRename={(t) => renameSchedule(openEventData.id, t)}
           summaryBusy={summaryBusy}
           onSummarize={() => void summarizeEvent(openEventData.id)}
           onAnswerProposal={(r) => {
@@ -3123,7 +3125,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   );
 }
 
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, onAnswerProposal, summary, summaryAuto, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -3139,6 +3141,8 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   summary?: ChatSummary | null;
   /** AI 가 스스로 정리했는가(전원 동의로 시간이 확정된 순간). 그러면 펼친 채로 맞이한다. */
   summaryAuto?: boolean;
+  /** 이름을 고쳐 단다 — AI 가 권한 이름을 사람이 받아들였을 때만 불린다. */
+  onRename?: (title: string) => void;
   summaryBusy?: boolean;
   onSummarize?: () => void;
   onClose: () => void;
@@ -3218,6 +3222,17 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   const start = new Date(event.start);
   const end = event.end ? new Date(event.end) : null;
   const me = participants.find((p) => p.userId === ME_ID) ?? null;
+  // 이름 제안 — 한 번 답하면 이 방에서는 다시 묻지 않는다.
+  const [nameDone, setNameDone] = React.useState(false);
+  React.useEffect(() => { setNameDone(false); }, [event.id]);
+  /** 권할 만한 이름인가. 이미 그 이름이거나, 내가 주최자가 아니거나, 답했으면 묻지 않는다. */
+  const suggestedName = React.useMemo(() => {
+    const t = summary?.title?.trim();
+    if (!t || nameDone) return null;
+    if (me?.role !== "owner") return null;              // 서버도 주최자만 받는다
+    if (t === event.title.trim()) return null;
+    return t;
+  }, [summary?.title, nameDone, me?.role, event.title]);
   const accepted = participants.filter((p) => p.status === "accepted").length;
   const categoryName = categoryLabel(classifyEvent(event, mode), mode, en);
 
@@ -3241,6 +3256,34 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           <X className="rmg-notif-ic" />
         </button>
       </div>
+
+      {/* 이름을 권한다 — 조용히 바꾸지 않는다.
+          방을 만드는 순간에는 무슨 얘기를 할지 아직 모른다. 그래서 이름은 대개
+          "금요일 저녁" 같은 시각이거나 참여자 이름이 된다 — 무엇에 대한 자리인지는
+          비어 있다. 이야기가 쌓이고 나면 AI 가 그 자리를 뭐라고 부를지 알게 된다.
+
+          그렇다고 몰래 갈아 끼우지는 않는다. 방 이름은 곧 캘린더의 일정 제목이라,
+          어제 보던 일정이 오늘 다른 이름으로 서 있게 된다. 권하고, 사람이 받는다.
+          서버도 주최자만 받아 준다(0001) — 남의 자리 이름을 바꿀 수는 없다. */}
+      {onRename && suggestedName && (
+        <div className="rmg-rename" role="note">
+          <span className="rmg-rename-t">
+            {en ? "Call this " : "이 자리를 "}
+            <em className="rmg-rename-em">{suggestedName}</em>
+            {en ? "?" : " 라고 부를까요?"}
+          </span>
+          <button
+            type="button"
+            className="rmg-ppl-act primary"
+            onClick={() => { onRename(suggestedName); setNameDone(true); }}
+          >
+            {en ? "Rename" : "그러기"}
+          </button>
+          <button type="button" className="rmg-ppl-act" onClick={() => setNameDone(true)}>
+            {en ? "Keep" : "그대로"}
+          </button>
+        </div>
+      )}
 
       {/* AI 가 시간을 내놓았으면 대화보다 먼저 — 지금 답을 기다리는 건 이것이다. */}
       {proposal && onAnswerProposal && (
@@ -3498,7 +3541,9 @@ function dayDivider(prev: Date | null, cur: Date, lang: Lang): string | null {
 }
 
 /** 대화에서 건져 올린 네 갈래. 근거가 없는 갈래는 서버가 비워 보내고, 화면에도 서지 않는다. */
-type ChatSummary = { recap: string; decided: string; pending: string; next: string };
+type ChatSummary = { recap: string; decided: string; pending: string; next: string;
+  /** AI 가 대화에서 끌어낸 이름. 방을 만들 때는 알 수 없던 것이다. */
+  title?: string };
 
 /** 요약 한 겹 — 카드가 아니라 얇은 구획.
  *
@@ -3778,8 +3823,10 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    const t = title.trim();
-    if (!t || !picked.length || !date || !time) return;
+    // 여기서도 이름은 나중 일이다. 비면 부른 사람들의 이름으로 부른다.
+    const names = picked.map((id) => contacts.find((c) => c.id === id)?.name).filter(Boolean).join(", ");
+    const t = title.trim() || (en ? `With ${names}` : `${names}님과의 자리`);
+    if (!picked.length || !date || !time) return;
     const [y, mo, da] = date.split("-").map(Number);
     const [hh, mi] = time.split(":").map(Number);
     onCreate(picked, t, new Date(y, mo - 1, da, hh, mi, 0, 0));
@@ -3803,7 +3850,7 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
           className="rmg-newev-title"
           value={title}
           onChange={(e) => setTitle(e.target.value)}
-          placeholder={en ? "Name this room" : "채팅방 이름 설정하기"}
+          placeholder={en ? "Name it later — optional" : "이름은 나중에 — 비워 둬도 됩니다"}
           aria-label={en ? "Title" : "제목"}
         />
         <div className="rmg-newev-when">
@@ -3834,7 +3881,7 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
 
         <div className="rmg-newev-acts">
           <button type="button" className="rmg-ppl-act" onClick={onClose}>{en ? "Cancel" : "취소"}</button>
-          <button type="submit" className="rmg-ppl-act primary" disabled={!title.trim() || picked.length === 0}>
+          <button type="submit" className="rmg-ppl-act primary" disabled={picked.length === 0}>
             {en ? "Create" : "만들기"}
           </button>
         </div>
@@ -3897,8 +3944,10 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
 
   const submitNew = (e: React.FormEvent) => {
     e.preventDefault();
-    const title = newTitle.trim();
-    if (!title || !newDate || !newTime) return;
+    // 이름은 비워 둘 수 있다 — 무슨 얘기를 할지 아직 모르는 자리에 이름부터 요구하지 않는다.
+    // 비면 함께하는 사람으로 부르고, 이야기가 쌓이면 AI 가 다시 권한다.
+    const title = newTitle.trim() || (en ? `With ${person.name}` : `${person.name}님과의 자리`);
+    if (!newDate || !newTime) return;
     const [y, mo, da] = newDate.split("-").map(Number);
     const [hh, mi] = newTime.split(":").map(Number);
     setCreating(false);
@@ -4023,7 +4072,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
                 className="rmg-newev-title"
                 value={newTitle}
                 onChange={(e) => setNewTitle(e.target.value)}
-                placeholder={en ? "Name this room" : "채팅방 이름 설정하기"}
+                placeholder={en ? "Name it later — optional" : "이름은 나중에 — 비워 둬도 됩니다"}
                 aria-label={en ? "Title" : "제목"}
               />
               <div className="rmg-newev-when">
@@ -4035,7 +4084,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
               </p>
               <div className="rmg-newev-acts">
                 <button type="button" className="rmg-ppl-act" onClick={() => setCreating(false)}>{en ? "Cancel" : "취소"}</button>
-                <button type="submit" className="rmg-ppl-act primary" disabled={!newTitle.trim()}>{en ? "Create" : "만들기"}</button>
+                <button type="submit" className="rmg-ppl-act primary">{en ? "Create" : "만들기"}</button>
               </div>
             </form>
           )}
@@ -5900,6 +5949,17 @@ html { font-size: 17px; }
   background: color-mix(in srgb, var(--accent) 78%, transparent); }
 /* 읽지 않은 사람의 이름만 한 단계 또렷하게 — 색을 더 쓰지 않고 무게로 말한다. */
 .rmg-ppl-name.unread { font-weight: 600; color: var(--ink); }
+
+/* 이름 제안 — 방 머리 아래 한 줄. 카드가 아니라 권하는 말이다.
+   조용히 바꾸지 않는다: 방 이름은 곧 캘린더의 일정 제목이라, 몰래 갈아 끼우면
+   어제 보던 일정이 오늘 다른 이름으로 서 있게 된다. */
+.rmg-rename { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap;
+  padding: 9px var(--sp-2); border-radius: var(--r);
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-rename-t { flex: 1; min-width: 0; font-size: 0.86rem; font-weight: 300; color: var(--muted); }
+.rmg-rename-em { font-style: normal; font-weight: 500; color: var(--ink); }
+.rmg-rename .rmg-ppl-act { font-size: 0.8rem; padding: 5px 12px; }
 
 /* ── AI 일정 제안 ──
    대화 위에 잠깐 놓이는 한 칸. 카드처럼 띄우지 않고 이 화면의 재질로 눕힌다
