@@ -47,8 +47,6 @@ const DEST: Record<Kind, { view: View; label: string }> = {
 };
 const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", people: "사람" };
 
-/** 고른 사람의 오른쪽 칸이 서는 세 자리 — 요약 · 대화 · 함께하는 일정. */
-type PersonTab = "overview" | "chat" | "events";
 
 /** 레일 한 줄의 규격 — 행 높이와 행 사이 간격. CSS 토큰(--nav-row/--nav-gap)과
  *  활성 인디케이터의 이동 거리가 모두 이 두 숫자에서 나온다(어긋날 수 없게).
@@ -320,7 +318,7 @@ export default function Reimagine() {
   const [chatFocus, setChatFocus] = React.useState(false); // '대화'로 들어왔으면 입력에 바로 커서를 둔다
   // 사람 패널의 세 자리 — 처음 고른 사람은 '요약'으로 맞이한다.
   // 곧바로 대화창을 펴면 이 화면이 메신저가 되고, 그와 나 사이의 일정·메모·자취는 갈 곳을 잃는다.
-  const [personTab, setPersonTab] = React.useState<PersonTab>("overview");
+
   const [peopleQuery, setPeopleQuery] = React.useState("");
   const [newRoom, setNewRoom] = React.useState(false); // 여러 명과 함께할 자리 만들기
   // AI 가 되묻는 한 줄 — 확신이 없으면 멋대로 만들지 않고 물어본다.
@@ -666,7 +664,6 @@ export default function Reimagine() {
   const selectPerson = React.useCallback((id: string | null) => {
     setPersonId(id);
     setOpenEventId(null);
-    setPersonTab("overview");
   }, []);
 
   // 서버와의 연결 — 한 번만 건다(자식에서 또 걸면 Realtime 소켓이 두 개 열린다).
@@ -741,6 +738,33 @@ export default function Reimagine() {
     if (!remote.signedIn) return;
     void loadRequests();
   }, [remote.signedIn, shownView, loadRequests]);
+
+  /** 문이 스스로 한 번 손을 든다 — 처음 온 사람에게만, 한 세션에 한 번만.
+   *
+   *  가이드로 들어가는 문은 오늘 화면 오른쪽에 조용히 서 있고, 처음 온 사람에게는
+   *  6px 짜리 점 하나가 붙을 뿐이었다. 그건 '있다' 는 표시이지 '여기다' 는 안내가 아니다 —
+   *  찾으려는 사람만 찾는다.
+   *
+   *  그렇다고 가이드를 강제로 재생하지는 않는다(들어오자마자 붙잡히는 건 환대가 아니다).
+   *  대신 잠깐 스스로 드러났다가 물러난다: 미리보기가 저절로 펼쳐지고 문이 한 겹 밝아진다.
+   *  보여 주고 비켜서는 것까지가 안내다.
+   *
+   *  한 번 본 사람에게 매번 다시 흔들지 않으려고 세션에 표를 남긴다. 가이드를 아직
+   *  끝내지 않았다면 다음에 들어올 때 다시 한 번 — 잊었을 수도 있으니까. */
+  const [guideHint, setGuideHint] = React.useState(false);
+  React.useEffect(() => {
+    if (!firstVisit || !entered || shownView !== "today" || panel || tourStep !== null) return;
+    let hinted = true;
+    try { hinted = sessionStorage.getItem("comein:guideHint") === "1"; } catch { /* 사생활 모드 */ }
+    if (hinted) return;
+    // 화면이 다 앉은 뒤에 든다 — 등장 애니메이션과 겹치면 그저 소란스럽다.
+    const start = window.setTimeout(() => setGuideHint(true), 1500);
+    const end = window.setTimeout(() => {
+      setGuideHint(false);
+      try { sessionStorage.setItem("comein:guideHint", "1"); } catch {}
+    }, 1500 + 5000);
+    return () => { clearTimeout(start); clearTimeout(end); };
+  }, [firstVisit, entered, shownView, panel, tourStep]);
 
   // 처음 온 사람에게만 문 옆에 작은 표식 하나. 가이드를 강제로 재생하지는 않는다.
   React.useEffect(() => {
@@ -1246,7 +1270,7 @@ export default function Reimagine() {
           : "예)  \"그럼 목요일 4시 어때?\" → 목 16:00 · 2명 모두 충돌 없음",
         before: () => {
           setView("people");
-          if (withShared) { setPersonId(withShared.id); setOpenEventId(null); setPersonTab("events"); }
+          if (withShared) { setPersonId(withShared.id); setOpenEventId(null); }
         },
       },
       {
@@ -1319,7 +1343,7 @@ export default function Reimagine() {
           onRemoveParticipant={(uid) => removeParticipant(openEventData.id, uid)}
           onRespond={(status) => setParticipantStatus(openEventData.id, ME_ID, status)}
           backLabel={shownView === "people" && person ? person.name : undefined}
-          onBack={shownView === "people" && person ? () => { setOpenEventId(null); setPersonTab("events"); } : undefined}
+          onBack={shownView === "people" && person ? () => setOpenEventId(null) : undefined}
           // 여럿이 모인 자리에서만 하루를 세운다 — 혼자인 일정 옆에 남의 가용시간을 그릴 이유가 없다.
           timeline={
             openEventParts.length >= 2 ? (
@@ -1347,11 +1371,11 @@ export default function Reimagine() {
     // 누르면 문이 열리고, 그 뒤 진짜 화면 위에서 한 곳씩 짚어 주는 가이드가 시작된다.
     if (shownView === "today") {
       return (
-        <div className="rmg-doorway-wrap">
+        <div className={`rmg-doorway-wrap ${guideHint ? "hint" : ""}`}>
           <button
             type="button"
             className={`rmg-doorway ${doorOpening ? "opening" : ""}`}
-            onClick={openGuideDoor}
+            onClick={() => { setGuideHint(false); openGuideDoor(); }}
             aria-label={lang === "en" ? "Start the guide" : "사용 가이드 시작"}
           >
             <AiDoor active={doorOpening} className="rmg-doorway-door" />
@@ -1365,7 +1389,7 @@ export default function Reimagine() {
           {/* hover 미리보기 — SaaS 툴팁이 아니라 이 화면과 같은 언어로.
               '가이드 시작 →' 이라 적어 놓고 손이 닿으면 사라지던 것을 고친다:
               카드도 같은 문을 여는 자리다(보일 때만 눌린다). */}
-          <div className="rmg-doorprev" onClick={openGuideDoor} role="presentation">
+          <div className="rmg-doorprev" onClick={() => { setGuideHint(false); openGuideDoor(); }} role="presentation">
             <p className="rmg-doorprev-t">{lang === "en" ? "How Comein works" : "Comein 사용 가이드"}</p>
             <p className="rmg-doorprev-b">
               {lang === "en"
@@ -1386,8 +1410,6 @@ export default function Reimagine() {
         <PersonPanel
           key={person.id}
           person={person}
-          tab={personTab}
-          onTab={setPersonTab}
           messages={personMsgs}
           sharedEvents={personEvents}
           participantsOf={participantsOf}
@@ -2599,11 +2621,16 @@ function DayDial({ spans, day, now, lang, onOpenEvent }: {
             );
           })}
 
-          {/* 지금 — 축 위에 얹힌 짧은 한 줄. 중심에서 뻗는 바늘을 두지 않는다:
-              바늘이 붙는 순간 시계가 되고, 하루의 '지도' 라는 감각이 사라진다.
+          {/* 지금 — 중심에서 테두리까지 한 줄로 잇는다.
+              예전엔 반지름 77~97 구간만 그어 두어, 중심에도 닿지 않고 원에도 닿지 않은
+              토막 하나가 허공에 떠 있었다. 무엇에 매인 표식인지 읽히지 않는다.
+              시계처럼 보이는 것을 피하려던 것이었는데, 끊어 두는 것으로는 피해지지 않고
+              어중간한 획만 남았다. 대신 농도로 푼다: 안쪽은 거의 보이지 않고 바깥 끝만
+              또렷하다 — 눈은 '지금이 원의 어디인가' 에 머물고, 중심은 그저 이어져 있을 뿐이다.
               좌표가 아니라 회전으로 두어, 갱신될 때 그 사이를 CSS 가 메운다. */}
           {isToday && (
             <g className="rmg-dial-hand" style={{ transform: `rotate(${nowDeg}deg)`, transformOrigin: `${C}px ${C}px` }}>
+              <line x1={C} y1={C} x2={C} y2={C - (R_EVENT - EV_W)} className="rmg-dial-now-in" />
               <line x1={C} y1={C - (R_EVENT - EV_W)} x2={C} y2={C - (R_RING + 5)} className="rmg-dial-now" />
             </g>
           )}
@@ -3804,10 +3831,8 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
  *  무엇이 있는지(대화·일정·메모·자취)를 아주 가벼운 글줄로만 보여 준다. 카드로 만들지 않는다.
  *  거기서 대화로 들어가면 그때 이 칸이 대화 화면이 된다. 메신저가 먼저 오지 않는다 —
  *  Comein 에서 대화는 목적이 아니라 일정·메모로 이어지는 통로다. */
-function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion }: {
+function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion }: {
   person: Contact;
-  tab: PersonTab;
-  onTab: (t: PersonTab) => void;
   messages: ChatMessage[];
   sharedEvents: Schedule[];
   participantsOf: (id: string) => EventParticipant[];
@@ -3830,6 +3855,8 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 
   // 새 자리 만들기 — 기본값은 '내일 이 시간쯤'. 빈 칸부터 채우게 하지 않는다.
   const [creating, setCreating] = React.useState(false);
+  // 칩 줄은 셋까지만 — 더 있으면 눌러서 편다. 목록이 대화를 밀어내지 않게.
+  const [showAllEvents, setShowAllEvents] = React.useState(false);
   const [newTitle, setNewTitle] = React.useState("");
   const [newDate, setNewDate] = React.useState("");
   const [newTime, setNewTime] = React.useState("");
@@ -3863,7 +3890,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 
   // 더보기 — 늘 펼쳐 두지 않는다. 이 사람에게 할 수 있는 일은 둘뿐이라 메뉴도 두 줄이다.
   const [menu, setMenu] = React.useState(false);
-  React.useEffect(() => { setMenu(false); }, [tab]);
+  React.useEffect(() => { setMenu(false); }, [person.id]);
   // 바깥을 누르면 닫힌다. 보이지 않는 면(scrim)을 깔아 두지 않는다 —
   // 이 칸은 이제 자기 폭을 기준으로 접히는 컨테이너라, 그 안의 fixed 면은
   // 화면 전체가 아니라 이 칸까지만 덮는다(왼쪽 목록을 눌러도 메뉴가 안 닫혔다).
@@ -3876,7 +3903,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 
   // 대화가 무엇을 하려는지는 엔진이 읽고, 그 결과를 워크스페이스가 서버에 앉힌 뒤
   // 여기로 내려보낸다. 이 컴포넌트는 그리기만 한다 — 파싱도 API 호출도 하지 않는다(§39).
-  const suggestion = tab === "chat" ? outcome?.suggestion ?? null : null;
+  const suggestion = outcome?.suggestion ?? null;
   /** 이 대화에 정리할 것이 있는가. 없으면 null 이고, 없는 편이 흔하다(§20). */
   const outcomeSummary = React.useMemo(
     () => (outcome ? summarize({ memory: outcome.memory, participants: [myName, person.name], now: new Date(), en }) : null),
@@ -3896,19 +3923,13 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
   })();
 
   return (
-    <aside className="rmg-evpanel rmg-ppanel" data-tab={tab} role="region" aria-label={person.name}>
+    <aside className="rmg-evpanel rmg-ppanel" role="region" aria-label={person.name}>
       {/* 돌아갈 길. 방만 덜렁 바뀌면 길을 잃는다.
           좁은 폭에서는 목록이 접혀 있으므로 요약에서도 '사람' 으로 돌아갈 길이 있어야 한다 —
           없으면 사람을 한 번 고른 뒤 목록으로 되돌아갈 방법이 사라진다(막다른 길이었다). */}
-      {tab !== "overview" ? (
-        <button type="button" className="rmg-evback" onClick={() => onTab("overview")}>
-          ‹ {en ? "Overview" : "요약"}
-        </button>
-      ) : (
-        <button type="button" className="rmg-evback rmg-backlist" onClick={onClose}>
-          ‹ {en ? "People" : "사람"}
-        </button>
-      )}
+      <button type="button" className="rmg-evback rmg-backlist" onClick={onClose}>
+        ‹ {en ? "People" : "사람"}
+      </button>
 
       {/* 머리 — 얼굴 · 이름 · 핸들, 그리고 아주 작은 더보기.
           닫기 버튼은 두지 않는다: 목록에서 그 사람을 한 번 더 누르면 닫힌다. */}
@@ -3931,7 +3952,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
           </button>
           {menu && (
             <div className="rmg-phead-menu" role="menu" onClick={(e) => e.stopPropagation()}>
-              <button type="button" role="menuitem" onClick={() => { setMenu(false); onTab("events"); setCreating(true); }}>
+              <button type="button" role="menuitem" onClick={() => { setMenu(false); setCreating(true); }}>
                 {en ? "New event together" : "함께 일정 만들기"}
               </button>
               <button type="button" role="menuitem" onClick={() => { setMenu(false); onClose(); }}>
@@ -3943,85 +3964,92 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
       </div>
       <div className="rmg-phair" aria-hidden />
 
-      {tab === "overview" ? (
-        // 요약 — 카드가 아니라 글줄이다. 없는 것은 한 줄로만 말하고 넘어간다.
-        <div className="rmg-pov">
-          {/* 결과 정리 — 대화를 줄여 쓴 글이 아니라 '무슨 결론이 났는가' 다(§17).
-              정리할 것이 없으면 이 자리는 아예 없다. 잡담에 요약을 붙이지 않는다(§20). */}
-          {outcomeSummary && (
-            <section className="rmg-sum" aria-label={en ? "Outcome" : "대화 정리"}>
-              <p className="rmg-sum-h">{outcomeSummary.headline}</p>
-              {outcomeSummary.lines.map((l) => (
-                <p key={l} className="rmg-sum-l">{l}</p>
-              ))}
-              {outcomeSummary.actionable && outcomeSummary.start && (
-                <button
-                  type="button"
-                  className="rmg-pov-cta rmg-sum-cta"
-                  onClick={() => onCreateEvent(en ? "New event" : "새 일정", new Date(outcomeSummary.start!))}
-                >
-                  {en ? "Add to calendar" : "캘린더에 추가"}
-                </button>
-              )}
-            </section>
-          )}
-
-          <section className="rmg-pov-sec">
-            <p className="rmg-pov-k">{en ? "Conversation" : "대화"}</p>
-            {last ? (
-              <button type="button" className="rmg-pov-line" onClick={() => onTab("chat")}>
-                <span className="rmg-pov-v">
-                  {last.senderId === ME_ID ? (en ? "You: " : "나: ") : ""}{last.content}
-                </span>
-                <span className="rmg-pov-at">{chatStamp(new Date(last.createdAt), en)}</span>
+      {/* 함께하는 일정 — 갈래를 만들지 않고 대화 위에 한 줄로 눕힌다.
+          예전엔 요약·대화·일정·메모·최근활동 다섯 자리가 탭 뒤에 흩어져 있었는데,
+          그중 메모는 늘 "없습니다"(기능이 없다) 였고 최근활동은 위 두 줄을 다시 쓴 것이었다.
+          남는 건 대화와 일정 둘뿐이라, 둘을 한 화면에 세우면 탭이 필요 없어진다. */}
+      {(sharedEvents.length > 0 || creating) && (
+        <div className="rmg-pwith">
+          <p className="rmg-pwith-k">{en ? "Together" : "함께하는 일정"}</p>
+          <div className="rmg-pwith-row">
+            {(showAllEvents ? sharedEvents : sharedEvents.slice(0, 3)).map((s2: Schedule) => (
+              <button
+                key={s2.id}
+                type="button"
+                className="rmg-pwith-chip"
+                data-tour="sharedevent"
+                onClick={() => onOpenEvent(s2.id)}
+                title={`${fmtDate(new Date(s2.start))} · ${fmtTime(new Date(s2.start))}`}
+              >
+                <span className="rmg-pwith-t">{s2.title}</span>
+                <span className="rmg-pwith-at">{fmtTime(new Date(s2.start))}</span>
               </button>
-            ) : (
-              <p className="rmg-pov-none">{en ? "No conversation yet." : "아직 대화가 없습니다."}</p>
+            ))}
+            {!showAllEvents && sharedEvents.length > 3 && (
+              <button type="button" className="rmg-pwith-more" onClick={() => setShowAllEvents(true)}>
+                {en ? `+${sharedEvents.length - 3}` : `외 ${sharedEvents.length - 3}`}
+              </button>
             )}
-          </section>
-
-          <section className="rmg-pov-sec">
-            <p className="rmg-pov-k">{en ? "Events" : "일정"}</p>
-            {sharedEvents.length === 0 ? (
-              <p className="rmg-pov-none">{en ? "No upcoming events." : "예정된 일정이 없습니다."}</p>
-            ) : (
-              <>
-                <ul className="rmg-pov-list">
-                  {sharedEvents.slice(0, 3).map((s) => (
-                    <li key={s.id}>
-                      <button type="button" className="rmg-pov-line" data-tour="sharedevent" onClick={() => onOpenEvent(s.id)}>
-                        <span className="rmg-pov-v">{s.title}</span>
-                        <span className="rmg-pov-at">{fmtDate(new Date(s.start))} · {fmtTime(new Date(s.start))}</span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-                {sharedEvents.length > 3 && (
-                  <button type="button" className="rmg-pov-more" onClick={() => onTab("events")}>
-                    {en ? `All ${sharedEvents.length}` : `전부 보기 ${sharedEvents.length}`}
-                  </button>
-                )}
-              </>
+            {!creating && (
+              <button type="button" className="rmg-pwith-new" onClick={() => setCreating(true)}>
+                {en ? "+ New" : "+ 만들기"}
+              </button>
             )}
-          </section>
+          </div>
 
-          <section className="rmg-pov-sec">
-            <p className="rmg-pov-k">{en ? "Notes" : "메모"}</p>
-            {/* 사람에 매인 메모는 아직 없다 — 자리만 잡아 둔다. 없는 것을 있는 척 그리지 않는다. */}
-            <p className="rmg-pov-none">{en ? "No notes about this person." : "이 사람과 관련된 메모가 없습니다."}</p>
-          </section>
-
-          <section className="rmg-pov-sec">
-            <p className="rmg-pov-k">{en ? "Recent" : "최근 활동"}</p>
-            {recent ? <p className="rmg-pov-quiet">{recent}</p> : <p className="rmg-pov-none">{en ? "Nothing recent." : "최근 활동이 없습니다."}</p>}
-          </section>
-
-          {/* 절제된 한 줄 — 버튼처럼 기다리는 얼굴을 하지 않는다. */}
-          <button type="button" className="rmg-pov-cta" onClick={() => onTab("chat")}>
-            {last ? (en ? "Open conversation" : "대화 열기") : (en ? "Start a conversation" : "대화 시작하기")}
-          </button>
+          {/* 새 자리 — 칩 줄 바로 아래에서 열린다. 다른 화면으로 옮겨 가지 않는다. */}
+          {creating && (
+            <form className="rmg-newev" onSubmit={submitNew}>
+              <input
+                ref={newTitleRef}
+                className="rmg-newev-title"
+                value={newTitle}
+                onChange={(e) => setNewTitle(e.target.value)}
+                placeholder={en ? "Name this room" : "채팅방 이름 설정하기"}
+                aria-label={en ? "Title" : "제목"}
+              />
+              <div className="rmg-newev-when">
+                <input type="date" className="rmg-newev-in" value={newDate} onChange={(e) => setNewDate(e.target.value)} aria-label={en ? "Date" : "날짜"} />
+                <input type="time" className="rmg-newev-in" value={newTime} onChange={(e) => setNewTime(e.target.value)} aria-label={en ? "Time" : "시각"} />
+              </div>
+              <p className="rmg-newev-who">
+                {en ? `With ${person.name}` : `${person.name}님과 함께 · 참여자는 만든 뒤에 더 부를 수 있어요`}
+              </p>
+              <div className="rmg-newev-acts">
+                <button type="button" className="rmg-ppl-act" onClick={() => setCreating(false)}>{en ? "Cancel" : "취소"}</button>
+                <button type="submit" className="rmg-ppl-act primary" disabled={!newTitle.trim()}>{en ? "Create" : "만들기"}</button>
+              </div>
+            </form>
+          )}
         </div>
-      ) : tab === "chat" ? (
+      )}
+
+      {/* 아직 함께한 자리가 없을 때 — 빈 목록을 그리는 대신 한 줄로 권한다. */}
+      {sharedEvents.length === 0 && !creating && (
+        <button type="button" className="rmg-pwith-empty" onClick={() => setCreating(true)}>
+          + {en ? `New event with ${person.name}` : `${person.name}님과 함께할 자리 만들기`}
+        </button>
+      )}
+
+      {/* 결론이 났으면 그것만 한 겹 — 조율 중이거나 잡담이면 아무것도 서지 않는다. */}
+      {outcomeSummary && (
+        <section className="rmg-sum" aria-label={en ? "Outcome" : "대화 정리"}>
+          <p className="rmg-sum-h">{outcomeSummary.headline}</p>
+          {outcomeSummary.lines.map((l) => (
+            <p key={l} className="rmg-sum-l">{l}</p>
+          ))}
+          {outcomeSummary.actionable && outcomeSummary.start && (
+            <button
+              type="button"
+              className="rmg-pov-cta rmg-sum-cta"
+              onClick={() => onCreateEvent(en ? "New event" : "새 일정", new Date(outcomeSummary.start!))}
+            >
+              {en ? "Add to calendar" : "캘린더에 추가"}
+            </button>
+          )}
+        </section>
+      )}
+
         <div className="rmg-drawer-chat rmg-drawer-chat-solo">
           <ChatThread
             messages={messages}
@@ -4069,55 +4097,6 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
             }
           />
         </div>
-      ) : (
-        <div className="rmg-pev">
-          {sharedEvents.length === 0 ? (
-            <p className="rmg-pev-none">{en ? "No events together yet." : "함께하는 일정이 아직 없어요."}</p>
-          ) : (
-            <ul className="rmg-pev-list">
-              {sharedEvents.map((s) => (
-                <li key={s.id}>
-                  {/* 일정을 고르면 그 일정의 방으로 들어간다 — 여기서 '대화' 라는 말을 또 쓰지 않는다. */}
-                  <button type="button" className="rmg-pev-row" data-tour="sharedevent" onClick={() => onOpenEvent(s.id)}>
-                    <span className="rmg-pev-title">{s.title}</span>
-                    <span className="rmg-pev-when">{fmtDate(new Date(s.start))} · {fmtTime(new Date(s.start))}</span>
-                    <span className="rmg-pev-n">{participantsOf(s.id).length}{en ? "" : "명"}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
-
-          {/* 함께할 자리를 새로 만든다 — 자리가 생기면 그 자리의 대화도 함께 생긴다. */}
-          {creating ? (
-            <form className="rmg-newev" onSubmit={submitNew}>
-              <input
-                ref={newTitleRef}
-                className="rmg-newev-title"
-                value={newTitle}
-                onChange={(e) => setNewTitle(e.target.value)}
-                placeholder={en ? "Name this room" : "채팅방 이름 설정하기"}
-                aria-label={en ? "Title" : "제목"}
-              />
-              <div className="rmg-newev-when">
-                <input type="date" className="rmg-newev-in" value={newDate} onChange={(e) => setNewDate(e.target.value)} aria-label={en ? "Date" : "날짜"} />
-                <input type="time" className="rmg-newev-in" value={newTime} onChange={(e) => setNewTime(e.target.value)} aria-label={en ? "Time" : "시각"} />
-              </div>
-              <p className="rmg-newev-who">
-                {en ? `With ${person.name}` : `${person.name}님과 함께 · 참여자는 만든 뒤에 더 부를 수 있어요`}
-              </p>
-              <div className="rmg-newev-acts">
-                <button type="button" className="rmg-ppl-act" onClick={() => setCreating(false)}>{en ? "Cancel" : "취소"}</button>
-                <button type="submit" className="rmg-ppl-act primary" disabled={!newTitle.trim()}>{en ? "Create" : "만들기"}</button>
-              </div>
-            </form>
-          ) : (
-            <button type="button" className="rmg-newev-open" onClick={() => setCreating(true)}>
-              + {en ? "New event with " + person.name : `${person.name}님과 만들기`}
-            </button>
-          )}
-        </div>
-      )}
     </aside>
   );
 }
@@ -5052,6 +5031,25 @@ html { font-size: 17px; }
   .rmg-doorway, .rmg-doorway-hint, .rmg-doorprev { transition: none; }
 }
 
+/* 처음 온 사람에게 한 번 — 문이 스스로 손을 든다.
+   hover 로 드러나는 것들을 그대로 쓴다: 다른 모양을 새로 만들면 안내와 실제가 달라진다.
+   그래서 여기서 배운 자리가 곧 다음에 손이 갈 자리다. */
+.rmg-doorway-wrap.hint .rmg-doorprev { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
+.rmg-doorway-wrap.hint .rmg-doorway-hint { opacity: 1; transform: none; }
+.rmg-doorway-wrap.hint .rmg-doorway-door { opacity: 0.88; }
+/* 표식은 한 번씩 번져 나간다 — 세 번이면 눈에 들어오고, 그 뒤로는 조용해진다. */
+.rmg-doorway-wrap.hint .rmg-doorway-new::after {
+  content: ""; position: absolute; inset: -4px; border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent);
+  animation: rmg-hint-ping 1.6s cubic-bezier(0.22,1,0.36,1) 3; }
+@keyframes rmg-hint-ping {
+  0%   { transform: scale(0.6); opacity: 0.9; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rmg-doorway-wrap.hint .rmg-doorway-new::after { animation: none; }
+}
+
 /* ── 사용 가이드 투어 ──
    화면을 덮는 모달이 아니다. 지금 설명하는 것만 남기고 나머지를 아주 옅게 눌러 둔다. */
 .rmg-tour { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
@@ -5103,7 +5101,6 @@ html { font-size: 17px; }
 @keyframes rmg-guide-in { from { opacity: 0; transform: translateX(10px); } to { opacity: 1; transform: none; } }
 
 /* 안내 — 목록이 아니라 짧은 글. */
-
 
 .rmg.rail-open .rmg-rail-mark .aidoor-svg { filter: drop-shadow(0 0 7px var(--glow)); }
 .rmg-rail-door { width: 19px; height: 24px; flex: 0 0 19px; }
@@ -5568,7 +5565,6 @@ html { font-size: 17px; }
 
 /* facet 리스트 + 컨텍스트 AI */
 
-
 /* 공통 · AI 귀속 태그 */
 
 /* Calendar 뷰 · 월(月) → 일(日) */
@@ -5682,6 +5678,9 @@ html { font-size: 17px; }
    읽는 눈은 바깥 끝(지금 시각)에 남는다. */
 /* 지금 — 축을 가로지르는 아주 얇은 한 줄. 굵어지면 그것만 보인다. */
 .rmg-dial-now { stroke: color-mix(in srgb, var(--ink) 48%, transparent); stroke-width: 1; stroke-linecap: round; }
+/* 중심으로 이어지는 안쪽 — 있는지 없는지 모를 만큼만. 이어져 있다는 사실만 남기고,
+   읽는 눈은 바깥 끝(지금 시각)에 머문다. 진해지면 그 순간 시계 바늘이 된다. */
+.rmg-dial-now-in { stroke: color-mix(in srgb, var(--ink) 12%, transparent); stroke-width: 1; }
 /* 30초마다 갱신돼도 툭 옮겨지지 않게 — 그 사이를 회전으로 메운다. */
 .rmg-dial-hand { transition: transform 900ms cubic-bezier(0.22, 1, 0.36, 1); }
 @media (prefers-reduced-motion: reduce) {
@@ -5955,8 +5954,6 @@ html { font-size: 17px; }
    그 틀이 요약에도 걸리면 네 줄짜리 글이 갑갑한 상자 안에서 스크롤된다
    (짧은 화면에서 187px 안에 갇혀 있었다. 아래는 텅 비어 있는데도).
    요약은 그냥 흐르게 두고, 넘치면 화면이 스크롤하면 된다. */
-.rmg-ppanel[data-tab="overview"] { position: static; max-height: none; }
-.rmg-ppanel[data-tab="overview"] .rmg-pov { overflow: visible; }
 /* 목록으로 돌아가는 길은 목록이 접혔을 때만 필요하다 — 넓은 화면에서는 왼쪽에 그대로 있다. */
 .rmg-backlist { display: none; }
 @media (max-width: 880px) { .rmg-backlist { display: inline-flex; } }
@@ -5992,22 +5989,7 @@ html { font-size: 17px; }
 .rmg-phair { height: 1px; background: var(--hair); margin: var(--sp-1) 0 var(--sp-2); }
 
 /* 요약 — 네 갈래를 글줄로만. 없는 것은 흐린 한 줄로 말하고 지나간다. */
-.rmg-pov { display: flex; flex-direction: column; gap: var(--sp-3); min-height: 0; overflow-y: auto; }
-.rmg-pov-sec { display: flex; flex-direction: column; gap: 5px; }
-.rmg-pov-k { margin: 0; font-size: 0.72rem; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); }
-.rmg-pov-none { margin: 0; font-size: 0.88rem; font-weight: 300; color: color-mix(in srgb, var(--faint) 88%, var(--muted)); }
-.rmg-pov-quiet { margin: 0; font-size: 0.88rem; font-weight: 300; color: var(--muted); }
-.rmg-pov-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
-.rmg-pov-line { display: flex; align-items: baseline; gap: var(--sp-2); width: 100%; min-width: 0;
-  padding: 5px 8px; margin: 0 -8px; border: 0; background: none; font: inherit; text-align: left;
-  border-radius: var(--r-sm); cursor: pointer; transition: background 170ms ease-out; }
-.rmg-pov-line:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.rmg-pov-v { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-  font-size: 0.92rem; font-weight: 300; color: var(--ink); }
-.rmg-pov-at { flex-shrink: 0; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
-.rmg-pov-more { align-self: flex-start; margin-top: 2px; padding: 2px 0; border: 0; background: none; font: inherit;
-  font-size: 0.78rem; color: var(--faint); cursor: pointer; transition: color 160ms ease-out; }
-.rmg-pov-more:hover { color: var(--ink); }
+
 /* 유일한 CTA — 작고 조용하게. 면을 채우지 않고 선 하나로만 선다. */
 .rmg-pov-cta { align-self: flex-start; margin-top: var(--sp-1); padding: 7px 16px; border: 1px solid var(--hair);
   border-radius: 999px; background: none; font: inherit; font-size: 0.84rem; color: var(--muted); cursor: pointer;
@@ -6033,19 +6015,35 @@ html { font-size: 17px; }
 /* 머리 아래 선은 rmg-phair 하나뿐이다 — 대화 칸이 제 선을 또 그으면 두 줄이 겹친다. */
 .rmg-ppanel .rmg-drawer-chat { border-top: 0; padding-top: 0; }
 
+/* 함께하는 일정 — 대화 위에 눕는 한 줄. 목록이 아니라 칩이다:
+   목록으로 세우면 그것만으로 화면 절반을 먹고, 그러면 다시 탭이 필요해진다. */
+.rmg-pwith { display: flex; flex-direction: column; gap: 6px; }
+.rmg-pwith-k { margin: 0; font-size: 0.7rem; font-weight: 500; letter-spacing: 0.07em; text-transform: uppercase; color: var(--faint); }
+.rmg-pwith-row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.rmg-pwith-chip { display: inline-flex; align-items: baseline; gap: var(--sp-1); max-width: 100%;
+  border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 60%, transparent);
+  font: inherit; font-size: 0.82rem; color: var(--ink); padding: 5px 11px; border-radius: 999px; cursor: pointer;
+  transition: border-color 170ms ease-out, background 170ms ease-out; }
+.rmg-pwith-chip:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); background: color-mix(in srgb, var(--surface) 95%, transparent); }
+.rmg-pwith-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rmg-pwith-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmg-pwith-at { flex-shrink: 0; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rmg-pwith-more, .rmg-pwith-new { border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint);
+  padding: 5px 6px; border-radius: 8px; cursor: pointer; flex-shrink: 0; transition: color 170ms ease-out, background 170ms ease-out; }
+.rmg-pwith-more:hover, .rmg-pwith-new:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+/* 아직 아무 자리도 없을 때 — 빈 목록 대신 권하는 한 줄. */
+.rmg-pwith-empty { align-self: flex-start; border: 1px dashed var(--hair); background: none; font: inherit;
+  font-size: 0.82rem; color: var(--muted); padding: 6px 12px; border-radius: 999px; cursor: pointer;
+  transition: color 170ms ease-out, border-color 170ms ease-out; }
+.rmg-pwith-empty:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 25%, var(--hair)); }
+@media (prefers-reduced-motion: reduce) { .rmg-pwith-chip, .rmg-pwith-more, .rmg-pwith-new, .rmg-pwith-empty { transition: none; } }
+
+/* 사람 패널 — 대화가 남는 자리를 다 갖는다(위의 칩 줄과 정리 한 겹을 뺀 나머지). */
+.rmg-ppanel .rmg-drawer-chat-solo { flex: 1; min-height: 0; }
 /* 사람 패널 — 둘만의 대화 / 함께하는 일정 */
 
-.rmg-pev { flex: 1; min-height: 0; overflow-y: auto; }
-.rmg-pev-list { list-style: none; margin: 0; padding: 0; }
-.rmg-pev-row { display: flex; align-items: baseline; gap: var(--sp-1); width: 100%; padding: var(--sp-1) 8px; margin: 0 -8px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: var(--r-sm); transition: background 170ms ease-out; }
-.rmg-pev-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
-.rmg-pev-title { font-size: 0.94rem; color: var(--ink); }
-.rmg-pev-when { font-size: 0.78rem; color: var(--muted); font-variant-numeric: tabular-nums; }
-.rmg-pev-n { margin-left: auto; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
-.rmg-pev-none { margin: 0 0 var(--sp-2); font-size: 0.86rem; font-weight: 300; color: var(--faint); }
 /* 새 자리 만들기 — 목록 끝에 놓인 조용한 한 줄. 버튼처럼 튀지 않는다. */
-.rmg-newev-open { display: block; width: 100%; margin-top: var(--sp-2); padding: var(--sp-1) 8px; border: 1px dashed var(--hair); border-radius: var(--r-sm); background: none; font: inherit; font-size: 0.84rem; color: var(--muted); text-align: left; cursor: pointer; transition: color 170ms ease-out, border-color 170ms ease-out; }
-.rmg-newev-open:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 25%, var(--hair)); }
+
 .rmg-newev { display: flex; flex-direction: column; gap: var(--sp-1); margin-top: var(--sp-2); padding: var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r); background: color-mix(in srgb, var(--surface) 55%, transparent); }
 .rmg-newev-title { border: 0; border-bottom: 1px solid var(--hair); background: none; outline: none; font: inherit; font-size: 0.98rem; color: var(--ink); caret-color: var(--accent); padding: 4px 0 8px; }
 .rmg-newev-title::placeholder { color: var(--faint); font-weight: 300; }
@@ -6198,7 +6196,6 @@ html { font-size: 17px; }
 
 @media (max-width: 1239px) { .rmg-evpanel{ padding-left: 0; border-left: 0; } }
 
-
 .rmg-drawer-head { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-2); }
 .rmg-drawer-title { margin: 0; font-size: 1.24rem; font-weight: 400; letter-spacing: -0.02em; color: var(--ink); }
 .rmg-drawer-time { margin: 6px 0 0; font-size: 0.82rem; color: var(--muted); font-variant-numeric: tabular-nums; }
@@ -6303,7 +6300,6 @@ html { font-size: 17px; }
 /* 날짜가 바뀌는 자리 — 선을 긋지 않고 글자 하나로만 */
 .rmg-msg-day { margin: var(--sp-3) 0 var(--sp-1); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.06em;
   text-transform: uppercase; color: var(--faint); text-align: center; }
-
 
 /* 컴포저 — 큰 둥근 상자가 아니라 얇은 선 하나. 쓰기 시작하면 그때만 아주 미세하게 떠오른다. */
 .rmg-drawer-compose { display: flex; align-items: center; gap: var(--sp-1); padding: 9px var(--sp-1) 9px var(--sp-2);
