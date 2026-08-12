@@ -22,7 +22,7 @@ import { ME_ID } from "@/lib/types";
 import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   answerConnectionRequest, cancelConnectionRequest, dayAvailability, ensureDmRoomRemote,
-  fetchConnectionRequests, fetchOpenProposal, fetchPeople, fetchSnapshot,
+  fetchConnectionRequests, fetchMyHandle, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
   confirmEvent, deleteEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
@@ -228,6 +228,10 @@ interface WorkspaceState {
   cancelRequest: (peerId: ID) => Promise<void>;
   /** 나에게 온, 아직 답하지 않은 요청들. */
   connectionRequests: ConnectionRequest[];
+  /** 내가 보내 두고 아직 답을 못 받은 상대들 — 줄이 '요청' 을 다시 내밀지 않게. */
+  outgoingRequests: ID[];
+  /** 내 핸들 — 남에게 알려 줄 이름. 로그인 전에는 null. */
+  myHandle: string | null;
   /** 받은 요청을 다시 읽어 온다. */
   loadRequests: () => Promise<void>;
   /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다. */
@@ -351,10 +355,15 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   connectionRequests: [],
+  outgoingRequests: [],
+  myHandle: null,
 
   loadRequests: async () => {
     if (!remoteReady()) return;
-    set({ connectionRequests: await fetchConnectionRequests() });
+    const [incoming, outgoing, handle] = await Promise.all([
+      fetchConnectionRequests(), fetchOutgoingRequests(), fetchMyHandle(),
+    ]);
+    set({ connectionRequests: incoming, outgoingRequests: outgoing, myHandle: handle });
   },
 
   answerRequest: async (id, accept) => {

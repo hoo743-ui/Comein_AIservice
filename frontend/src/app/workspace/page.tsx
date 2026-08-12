@@ -285,6 +285,8 @@ export default function Reimagine() {
   const requestPerson = useWorkspace((s) => s.requestPerson);
   const cancelRequest = useWorkspace((s) => s.cancelRequest);
   const connectionRequests = useWorkspace((s) => s.connectionRequests);
+  const outgoingRequests = useWorkspace((s) => s.outgoingRequests);
+  const myHandle = useWorkspace((s) => s.myHandle);
   const loadRequests = useWorkspace((s) => s.loadRequests);
   const answerRequest = useWorkspace((s) => s.answerRequest);
   const sendEventMessage = useWorkspace((s) => s.sendEventMessage);
@@ -727,7 +729,10 @@ export default function Reimagine() {
     setExiting(true);
     // 문턱 연출은 들어올 때의 것이다 — 나갈 때 남겨 두면 다음에 들어올 때 재생되지 않는다.
     try { sessionStorage.removeItem("comein:reimagine"); } catch { /* 사생활 모드 */ }
-    void signOutRemote().finally(() => router.replace("/"));
+    // 나가면 곧바로 다시 들어올 수 있는 자리에 선다 — 랜딩으로 보내면 철학을 한 번 더 읽고
+    // '들어가기'를 눌러 8초짜리 인트로를 다시 봐야 로그인 칸에 닿는다. 나가는 사람은
+    // 대개 계정을 바꾸거나 다시 들어오려는 것이다. ?auth=1 은 그 인트로를 건너뛴다.
+    void signOutRemote().finally(() => router.replace("/experience?auth=1"));
   }, [exiting, router]);
 
   // 받은 요청 — 들어올 때 한 번, 그리고 사람 화면으로 옮길 때마다.
@@ -1178,8 +1183,12 @@ export default function Reimagine() {
       {
         key: "calendar", target: "calendar",
         title: en ? "Calendar" : "캘린더",
-        body: en ? "Pick a day to see its 24 hours and everything in it." : "날짜를 선택하면 그날의 24시간 흐름과 일정을 확인할 수 있어요.",
-        example: en ? "Press a day once to look in, twice for its timetable." : "날짜를 한 번 누르면 들여다보고, 한 번 더 누르면 시간표로 들어갑니다.",
+        body: en
+          ? "Pick a day to see its 24 hours. Don't remember the date? Press Find and say it in words."
+          : "날짜를 고르면 그날의 24시간이 열립니다. 날짜가 기억나지 않으면 '찾기'를 눌러 말로 옮겨 가세요.",
+        example: en
+          ? "e.g.  Find → “next semester”, “week 2 of August”"
+          : "예)  찾기 → \"다음 학기\", \"8월 둘째 주\", \"회의 있는 날\"",
         before: () => setView("calendar"),
       },
       {
@@ -1192,15 +1201,23 @@ export default function Reimagine() {
       {
         key: "people", target: "people",
         title: en ? "People" : "사람",
-        body: en ? "Share events with the people they belong to, and keep them in sync." : "연결된 사람들과 일정을 공유하고 함께 관리할 수 있어요.",
-        example: en ? "Pick someone to see what you're doing together." : "사람을 고르면 그와 함께하는 일정이 오른쪽에 열립니다.",
+        body: en
+          ? "Your handle is your invite code. Tell someone yours, search theirs, and ask to connect — they accept, and you're linked."
+          : "@핸들이 곧 초대코드입니다. 내 핸들을 알려 주고 상대 핸들로 찾아 청하면, 상대가 받았을 때 이어집니다.",
+        example: en
+          ? "e.g.  You are @hoo743 · search @fapp1004 → Request"
+          : "예)  내 핸들 @hoo743 · 검색창에 @fapp1004 → 요청",
         before: () => { setView("people"); selectPerson(null); },
       },
       {
         key: "shared", target: withShared ? "sharedevent" : "people",
         title: en ? "Talk inside the event" : "일정 안에서 대화",
-        body: en ? "Everyone on an event shares its room — the conversation stays with the plan." : "같은 일정에 참여한 사람들과 그 일정 안에서 바로 대화할 수 있어요.",
-        example: en ? "e.g.  Capstone review · 14:00 · 3 people → open the room" : "예)  캡스톤 중간발표 · 14:00 · 3명 → 그 일정의 대화방",
+        body: en
+          ? "Everyone on an event shares its room. Say a time in there and Comein checks both calendars and suggests one — you decide."
+          : "같은 일정의 사람들이 그 방을 함께 씁니다. 방에서 시각을 말하면 양쪽 달력을 맞춰 보고 시간을 제안해요 — 정하는 건 사람입니다.",
+        example: en
+          ? "e.g.  “How about 4pm Thursday?” → Thu 16:00, no conflicts for 2"
+          : "예)  \"그럼 목요일 4시 어때?\" → 목 16:00 · 2명 모두 충돌 없음",
         before: () => {
           setView("people");
           if (withShared) { setPersonId(withShared.id); setOpenEventId(null); setPersonTab("events"); }
@@ -1209,10 +1226,12 @@ export default function Reimagine() {
       {
         key: "capture", target: "capture",
         title: en ? "Just say it" : "말하면 됩니다",
-        body: en ? "Type a line and Comein files it where it belongs." : "원하는 것을 그냥 한 줄로 적으면 Comein이 알아서 제자리에 놓습니다.",
+        body: en
+          ? "Type a line and Comein files it where it belongs — as a proposal, not a decision. Confirm it or undo it right there."
+          : "한 줄로 적으면 제자리에 놓입니다. 다만 확정하진 않아요 — 그 자리에서 확정하거나 없던 일로 되돌리면 됩니다.",
         example: en
-          ? "e.g.  \"Meet Prof. Kim at 3pm tomorrow\" → event + room"
-          : "예)  \"내일 3시에 교수님 미팅 잡아줘\" → 일정 + 대화방까지 한 번에",
+          ? "e.g.  \"Meet Prof. Kim at 3pm tomorrow\" → Filed · Confirm / Undo"
+          : "예)  \"내일 3시 교수님 미팅 잡아줘\" → 정리했어요 · 확정 / 되돌리기",
       },
     ];
   }, [lang, contacts, sharedEventsWith, selectPerson]);
@@ -1645,6 +1664,8 @@ export default function Reimagine() {
                   onRequest={requestPerson}
                   onCancelRequest={cancelRequest}
                   requests={connectionRequests}
+                  outgoing={outgoingRequests}
+                  myHandle={myHandle}
                   onAnswerRequest={answerRequest}
                   unreadOf={unreadOf}
                   convo={convo}
@@ -2198,6 +2219,10 @@ function Feature(props: {
   onCancelRequest: (peerId: string) => Promise<void>;
   /** 나에게 온, 아직 답하지 않은 요청 — 연락처 갈래 맨 위에 얹힌다. */
   requests: ConnectionRequest[];
+  /** 내가 보내 두고 답을 못 받은 상대들 — 줄이 '요청' 을 다시 내밀지 않게. */
+  outgoing: string[];
+  /** 내 핸들 — 남이 나를 찾을 때 쓰는 이름. */
+  myHandle: string | null;
   onAnswerRequest: (id: string, accept: boolean) => Promise<void>;
   unreadOf: (personId: string) => number;
   /** 세 갈래가 읽는 것 — 사람별 마지막 말·안 읽은 수, 그리고 함께하는 자리들. */
@@ -4067,10 +4092,12 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
+function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
-  const q = (query as string).trim().toLowerCase();
+  // 앞의 @ 는 이름의 일부가 아니라 '핸들을 부르는 방식' 이다. 여기서 벗겨야
+  // 내 목록 거르기("@fapp" 로도 fapp1004 가 걸린다)와 '두 글자' 셈이 함께 맞는다.
+  const q = (query as string).trim().replace(/^@+/, "").toLowerCase();
 
   // ── 세 갈래 ──
   // 연락처는 '누구와 이어져 있는가', 대화는 '무슨 말이 오갔는가' 다. 서로 다른 질문이라 목록도 나눈다.
@@ -4099,6 +4126,7 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
   const [joining, setJoining] = React.useState<string | null>(null);
   // 방금 청한 사람과, 서버가 돌려준 말 한 줄(거절 뒤 다시 보낸 경우 등).
   const [asked, setAsked] = React.useState<Record<string, string>>({});
+  const [copied, setCopied] = React.useState(false);
   const [askErr, setAskErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
@@ -4158,6 +4186,29 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
           {en ? "New group" : "새 그룹"}
         </button>
       </div>
+
+      {/* 내 핸들 — 사람을 더하는 화면에서, 나를 더하게 하려면 내 이름을 알려 줄 수 있어야 한다.
+          남의 핸들은 검색·프로필에 다 보이는데 내 것만 어디에도 없었다: 청할 수는 있어도
+          청해 달라고 할 수는 없는 상태였다. 크게 세우지 않는다 — 필요할 때 눈에 들어올 만큼만. */}
+      {myHandle && (
+        <p className="rmg-mine">
+          <span className="rmg-mine-k">{en ? "You are" : "내 핸들"}</span>
+          <span className="rmg-mine-v">@{myHandle}</span>
+          <button
+            type="button"
+            className="rmg-mine-copy"
+            onClick={() => {
+              void navigator.clipboard?.writeText("@" + myHandle).then(
+                () => setCopied(true),
+                () => setCopied(false),   // 클립보드가 막힌 자리도 있다 — 그때는 조용히 둔다
+              );
+              window.setTimeout(() => setCopied(false), 1600);
+            }}
+          >
+            {copied ? (en ? "Copied" : "복사됨") : (en ? "Copy" : "복사")}
+          </button>
+        </p>
+      )}
 
       {/* 받은 요청 — 탭을 새로 만들지 않는다. 대부분 비어 있는 탭이 하나 늘면
           그만큼 화면이 무거워질 뿐이다. 온 것이 있을 때만 연락처 위에 얹히고,
@@ -4297,7 +4348,7 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                     그 사람에게는 영영 요청을 보낼 수 없다. 줄 자체가 버튼이라 안에 또 버튼을
                     넣을 수 없어(중첩 금지), 형제로 두고 오른쪽 끝에 세운다. */}
                 {lane === "contacts" && !c.connected && (
-                  asked[c.id] ? (
+                  (asked[c.id] || (outgoing ?? []).includes(c.id)) ? (
                     <button type="button" className="rmg-ppl-act rmg-ppl-rowact" onClick={() => void unask(c.id)}>
                       {en ? "Requested · Undo" : "요청함 · 취소"}
                     </button>
@@ -5717,6 +5768,17 @@ html { font-size: 17px; }
 .rmg-ppl-act { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font: inherit; font-size: 0.76rem; font-weight: 500; padding: 4px 11px; border-radius: 999px; cursor: pointer; flex-shrink: 0; transition: color 170ms ease-out, border-color 170ms ease-out; }
 .rmg-ppl-act:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
 .rmg-ppl-act.primary { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 18%, var(--hair)); }
+
+/* 내 핸들 — 한 줄. 라벨·값·복사가 한 덩어리로 붙는다. 검색창 위에 놓여
+   '여기는 사람을 주고받는 자리' 라는 것을 조용히 말한다. */
+.rmg-mine { display: flex; align-items: baseline; gap: var(--sp-1); margin: 0 0 var(--sp-1); padding: 0 8px; }
+.rmg-mine-k { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.rmg-mine-v { font-size: 0.9rem; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
+.rmg-mine-copy { border: 0; background: none; font: inherit; font-size: 0.76rem; color: var(--faint);
+  cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: color 160ms ease-out, background 160ms ease-out; }
+.rmg-mine-copy:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-mine-copy:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .rmg-mine-copy { transition: none; } }
 
 /* ── 받은 연결 요청 ──
    탭이 아니다. 온 것이 있을 때만 연락처 위에 얹혔다가, 답하면 사라진다.

@@ -331,7 +331,11 @@ export async function pushMessage(roomId: ID, content: string): Promise<string |
 export async function searchPeople(q: string): Promise<Contact[]> {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return [];
-  const { data, error } = await sb.rpc("search_people", { q, limit_n: 8 });
+  // 화면은 "@핸들로 찾기" 라고 권하는데 서버는 handle 을 '@' 없이 들고 있다.
+  // 그대로 넘기면 "@fapp1004" 가 'handle like @fapp1004%' 가 되어 한 건도 안 나온다 —
+  // 시킨 대로 쳤는데 아무도 없다고 답하는 셈이었다. 앞의 @ 는 여기서 벗긴다.
+  const needle = q.replace(/^@+/, "");
+  const { data, error } = await sb.rpc("search_people", { q: needle, limit_n: 8 });
   if (error) { console.error("사람 검색 실패:", error.message); return []; }
   return (data ?? []).map((r: any): Contact => ({
     id: r.id,
@@ -423,6 +427,34 @@ export async function cancelConnectionRequest(peerId: ID): Promise<boolean> {
   const { error } = await sb.rpc("cancel_connection_request", { peer: peerId });
   if (error) { console.error("요청 취소 실패:", error.message); return false; }
   return true;
+}
+
+/** 내 핸들 — 남에게 알려 줄 이름.
+ *  핸들이 곧 친구코드인데 정작 자기 것을 볼 자리가 없었다. 남의 핸들은 검색·프로필에서
+ *  보이는데 내 것만 어디에도 없으니, 이어 달라고 청할 수는 있어도 청해 달라고 할 수는 없었다.
+ *  profiles 의 RLS 는 id = auth.uid() 를 이미 열어 준다 — 함수를 새로 세우지 않는다. */
+export async function fetchMyHandle(): Promise<string | null> {
+  const sb = getSupabase();
+  const me = myUidOf();
+  if (!sb || !me) return null;
+  try {
+    const rows = await rest(`profiles?select=handle&id=eq.${me}`);
+    return rows?.[0]?.handle ?? null;
+  } catch (e: any) { console.error("내 핸들 조회 실패:", e?.message); return null; }
+}
+
+/** 내가 보내 두고 아직 답을 못 받은 요청의 상대들.
+ *  my_people() 은 이것을 모르므로, 연락처 줄은 새로고침하면 '요청' 을 다시 내밀었다 —
+ *  이미 보냈는데 안 눌린 줄 알고 또 누르게 된다. RLS 가 from_user = 나 인 줄을 이미
+ *  열어 주므로 함수를 새로 세우지 않고 그대로 읽는다. */
+export async function fetchOutgoingRequests(): Promise<ID[]> {
+  const sb = getSupabase();
+  const me = myUidOf();
+  if (!sb || !me) return [];
+  try {
+    const rows = await rest(`connection_requests?select=to_user&status=eq.pending&from_user=eq.${me}`);
+    return (rows ?? []).map((r: any) => r.to_user as ID);
+  } catch (e: any) { console.error("보낸 요청 조회 실패:", e?.message); return []; }
 }
 
 /** 나에게 온, 아직 답하지 않은 요청들. */
