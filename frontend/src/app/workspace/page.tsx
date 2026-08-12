@@ -4292,6 +4292,21 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                     </span>
                   </span>
                 </button>
+                {/* 같은 일정에서 만나기만 한 사람 — 목록에는 있지만 아직 이어지지 않았다.
+                    검색은 '이미 내 목록에 있는 사람'을 걸러 내므로, 여기서 청할 길이 없으면
+                    그 사람에게는 영영 요청을 보낼 수 없다. 줄 자체가 버튼이라 안에 또 버튼을
+                    넣을 수 없어(중첩 금지), 형제로 두고 오른쪽 끝에 세운다. */}
+                {lane === "contacts" && !c.connected && (
+                  asked[c.id] ? (
+                    <button type="button" className="rmg-ppl-act rmg-ppl-rowact" onClick={() => void unask(c.id)}>
+                      {en ? "Requested · Undo" : "요청함 · 취소"}
+                    </button>
+                  ) : (
+                    <button type="button" className="rmg-ppl-act rmg-ppl-rowact" disabled={joining === c.id} onClick={() => void ask(c.id)}>
+                      {joining === c.id ? "…" : (en ? "Request" : "요청")}
+                    </button>
+                  )
+                )}
               </li>
             );
           })}
@@ -5686,7 +5701,7 @@ html { font-size: 17px; }
 /* People · 연락처 — 목록은 읽는 폭에서 멈춘다. 오른쪽에 남는 자리는 낭비가 아니라
    앞으로 사람의 맥락(공유 일정 등)이 들어올 숨 쉬는 공간이다. */
 .rmg-ppl-list { list-style: none; margin: 0; padding: 0; max-width: var(--reading); }
-.rmg-ppl { border-bottom: 1px solid var(--hair); }
+.rmg-ppl { position: relative; border-bottom: 1px solid var(--hair); }
 .rmg-ppl:last-child { border-bottom: 0; }
 /* 사람 행 자체가 버튼 — 누르면 그 사람과 함께 있는 일정이 아래로 펼쳐진다. */
 .rmg-ppl-head { display: flex; align-items: center; gap: 14px; width: 100%; padding: 12px 8px; margin: 0 -8px; border: 0; background: none; font: inherit; text-align: left; cursor: pointer; border-radius: var(--r); transition: background 170ms ease-out; }
@@ -5715,6 +5730,14 @@ html { font-size: 17px; }
 .rmg-req-name { font-size: 0.94rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rmg-req-handle { font-size: 0.76rem; font-weight: 300; color: var(--faint); }
 .rmg-req-err { color: color-mix(in srgb, var(--ink) 62%, transparent); margin-bottom: var(--sp-1); }
+/* 연락처 줄 오른쪽 끝의 '요청' — 줄 위에 겹쳐 서되 줄을 누르는 것을 방해하지 않는다.
+   평소엔 물러나 있다가 그 줄에 손이 닿으면 또렷해진다(늘 떠 있으면 목록이 버튼밭이 된다). */
+.rmg-ppl-rowact { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1;
+  opacity: 0; transition: opacity 160ms ease-out, color 170ms ease-out, border-color 170ms ease-out; }
+.rmg-ppl:hover .rmg-ppl-rowact, .rmg-ppl-rowact:focus-visible { opacity: 1; }
+@media (hover: none) { .rmg-ppl-rowact { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .rmg-ppl-rowact { transition: none; } }
+
 /* 검색 한 줄이 '그쪽이 먼저 보냈다' 를 말할 때 — 상태와 손잡이가 한 덩어리로 붙는다. */
 .rmg-ppl-req { display: inline-flex; align-items: center; gap: var(--sp-1); flex-shrink: 0; }
 .rmg-ppl-reqt { font-size: 0.74rem; color: var(--faint); white-space: nowrap; }
