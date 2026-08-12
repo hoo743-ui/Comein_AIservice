@@ -7,6 +7,8 @@
 프론트/호출자가 확인 후 별도로 /api/items에 넘기는 흐름을 전제로 한다
 (docs/24_AI_PIPELINE_STATUS.md 참고).
 """
+from typing import Any
+
 from fastapi import APIRouter
 from pydantic import BaseModel, ValidationError
 import sys
@@ -40,6 +42,12 @@ _CATEGORY_LABELS = {
 class ChatRequest(BaseModel):
     message: str
     conversation_id: str | None = None
+    # 화면이 아는 것을 함께 보낸다 — 서버가 알 수 없는 것들이다.
+    #   now/tz     : 사용자가 실제로 서 있는 시각과 시간대(서버 시계는 UTC 로 돈다)
+    #   pending    : 직전에 우리가 되물은 질문과 그때의 원래 말 → 이번 메시지는 그 답
+    # 스키마를 좁게 고정하지 않는다: 여기서 늘리는 값은 프롬프트가 읽는 것이지
+    # 저장되는 것이 아니라, 화면과 AI 가 먼저 맞춰 보고 굳는 편이 낫다.
+    context: dict[str, Any] | None = None
 
 
 def _default_reply(items: list[ParsedItem]) -> str:
@@ -50,20 +58,41 @@ def _default_reply(items: list[ParsedItem]) -> str:
     return f"{len(items)}건을 정리했어요."
 
 
+def _ask_of(raw: object) -> str | None:
+    """AI 가 되물은 한 줄. 없거나 빈 문자열이면 없는 것으로 본다."""
+    if not isinstance(raw, dict):
+        return None
+    ask = raw.get("ask")
+    return ask.strip() if isinstance(ask, str) and ask.strip() else None
+
+
 @router.post("", response_model=AiResult)
 async def chat(req: ChatRequest) -> AiResult:
     raw = None
     try:
-        raw = await ai_route(message=req.message, user_id=req.conversation_id or "default")
+        raw = await ai_route(
+            message=req.message,
+            user_id=req.conversation_id or "default",
+            context=req.context,
+        )
         raw_items = raw.get("items", []) if isinstance(raw, dict) else []
         items = [ParsedItem.model_validate(item) for item in raw_items]
     except ValidationError:
+        # 항목 하나가 규격을 못 지켰다. 그래도 AI 가 '무엇이 비었는지' 알고 물어봤다면
+        # 그 질문을 그대로 전한다 — "정확히 파악하지 못했어요" 는 사용자가 무엇을
+        # 고쳐 말해야 하는지 알려 주지 않아서, 같은 말을 다시 하게 만든다.
+        ask = _ask_of(raw)
         logger.warning("AI 파싱 결과가 ParsedItem 검증을 통과하지 못했습니다: %s", raw)
-        return AiResult(intent="chat", reply=_FALLBACK_PARSE_FAILED, items=[])
+        return AiResult(intent="chat", reply=ask or _FALLBACK_PARSE_FAILED, items=[], ask=ask)
     except Exception:
         logger.exception("AI processing error")
         return AiResult(intent="chat", reply=_FALLBACK_ERROR, items=[])
 
+    # 뽑았으면 묻지 않는다. 둘 다 오면 뽑은 쪽을 믿는다 —
+    # 이미 정리된 것을 두고 다시 물으면, 사용자는 정리가 안 된 줄 안다.
+    ask = None if items else _ask_of(raw)
+
     intent = items[0].category if items else "chat"
-    reply = raw.get("reply") if isinstance(raw, dict) and raw.get("reply") else _default_reply(items)
-    return AiResult(intent=intent, reply=reply, items=items)
+    said = raw.get("reply") if isinstance(raw, dict) and raw.get("reply") else None
+    reply = said or ask or _default_reply(items)
+    return AiResult(intent=intent, reply=reply, items=items, ask=ask)
