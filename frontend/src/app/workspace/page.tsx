@@ -843,6 +843,8 @@ export default function Reimagine() {
   // 근거가 없는 갈래는 서버가 빈 채로 보낸다. 빈 갈래는 화면에도 서지 않는다.
   const [summaries, setSummaries] = React.useState<Record<string, ChatSummary>>({});
   const [summaryBusy, setSummaryBusy] = React.useState(false);
+  // AI 가 스스로 정리한 방 — 그 방에서는 요약을 펼친 채로 맞이한다.
+  const [autoSummed, setAutoSummed] = React.useState<Record<string, boolean>>({});
 
   const summarizeEvent = React.useCallback(async (eventId: string) => {
     const st = useWorkspace.getState();
@@ -880,6 +882,30 @@ export default function Reimagine() {
 
   /** 문을 연다 — 문짝이 열리는 동안 기다렸다가 가이드를 시작한다.
    *  문과 미리보기 카드가 같은 자리를 여는 것이므로 손잡이도 하나만 둔다. */
+  /** 협의가 끝난 순간 — 그때 한 번만 정리한다.
+   *
+   *  말이 오갈 때마다 요약하면 요약이 대화를 따라다니며 계속 고쳐 쓴다. 그건 정리가
+   *  아니라 중계다. 정리는 '무슨 결론이 났는가' 를 남기는 일이므로, 결론이 나야 할 일이 있다.
+   *
+   *  둘만의 대화는 이미 그렇게 돼 있다(lib/conversation/summary.ts — confirmed·cancelled
+   *  일 때만 무언가를 돌려주고, 조율 중이면 null 이다). 일정 방만 그 기준이 없어서
+   *  메시지 4개면 요약 버튼이 서고 누르면 근거 없이도 요약을 만들었다.
+   *
+   *  이 방에는 더 단단한 신호가 있다. schedule_proposals.status 는 서버가
+   *  **전원이 동의했을 때만** confirmed 로 올린다(0003 — 아무나 직접 적을 수 없게 잠가 뒀다).
+   *  그 전환을 요약의 기준으로 삼는다. 사람이 부르는 길(요약 보기)은 그대로 둔다 —
+   *  기준을 뒀다고 해서 사람에게서 손잡이를 빼앗지는 않는다.
+   *
+   *  방을 열어 둔 사람에게서만 돈다: 아무도 안 보는 방을 미리 요약해 둘 이유가 없다(§34). */
+  React.useEffect(() => {
+    if (!openEventId) return;
+    const p = proposals[openEventId];
+    if (p?.status !== "confirmed") return;
+    if (summaries[openEventId] || autoSummed[openEventId] || summaryBusy) return;
+    setAutoSummed((m) => ({ ...m, [openEventId]: true }));
+    void summarizeEvent(openEventId);
+  }, [openEventId, proposals, summaries, autoSummed, summaryBusy, summarizeEvent]);
+
   const openGuideDoor = React.useCallback(() => {
     if (doorOpening) return;
     setDoorOpening(true);
@@ -1276,6 +1302,7 @@ export default function Reimagine() {
           proposal={proposals[openEventData.id] ?? null}
           proposalBusy={proposalBusy}
           summary={summaries[openEventData.id] ?? null}
+          summaryAuto={!!autoSummed[openEventData.id]}
           summaryBusy={summaryBusy}
           onSummarize={() => void summarizeEvent(openEventData.id)}
           onAnswerProposal={(r) => {
@@ -3051,7 +3078,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   );
 }
 
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, onAnswerProposal, summary, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, onAnswerProposal, summary, summaryAuto, summaryBusy, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -3065,6 +3092,8 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   onAnswerProposal?: (r: "accepted" | "declined") => void;
   /** 대화 요약 — 스스로 갱신하지 않는다. 사람이 부를 때만 다시 읽는다. */
   summary?: ChatSummary | null;
+  /** AI 가 스스로 정리했는가(전원 동의로 시간이 확정된 순간). 그러면 펼친 채로 맞이한다. */
+  summaryAuto?: boolean;
   summaryBusy?: boolean;
   onSummarize?: () => void;
   onClose: () => void;
@@ -3089,6 +3118,8 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   const mode = useCurrentMode();
   // 요약은 기본으로 닫혀 있다 — 필요할 때만 펼친다(§9).
   const [sumOpen, setSumOpen] = React.useState(false);
+  // 스스로 정리한 것은 펼쳐 둔다 — 결론이 났다는 사실을 굳이 한 번 더 눌러 확인하게 하지 않는다.
+  React.useEffect(() => { if (summaryAuto && summary) setSumOpen(true); }, [summaryAuto, summary]);
 
   // 오른쪽 '함께 보는 일정' 칸의 폭. 사용자가 정하고, 브라우저가 기억한다.
   const [tlW, setTlW] = React.useState(TL_DEFAULT);
@@ -3295,7 +3326,9 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다. */}
           {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다.
               'AI' 라고 크게 말하지 않는다. 정리된 것이 조용히 나타날 뿐이다(§12·§17). */}
-          {onSummarize && messages.length >= 4 && (
+          {/* 말이 몇 마디뿐이면 요약할 것이 없다 — 다만 이미 정리된 것이 있으면
+              (전원이 동의해 AI 가 스스로 남긴 경우) 개수와 무관하게 접었다 펼 수 있어야 한다. */}
+          {onSummarize && (messages.length >= 4 || !!summary) && (
             <button
               type="button"
               className="rmg-ppl-make"
