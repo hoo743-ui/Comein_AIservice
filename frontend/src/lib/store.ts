@@ -21,6 +21,7 @@ import { ME_ID } from "@/lib/types";
 import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   connectWith, dayAvailability, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot,
+  confirmEvent, deleteEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
 } from "@/lib/remote";
@@ -237,6 +238,10 @@ interface WorkspaceState {
 
   // Schedule
   addSchedule: (s: Omit<Schedule, "id">) => ID;
+  /** AI 가 놓아 둔 제안(pending)을 사람이 확정한다. 이미 확정된 것은 아무 일도 일어나지 않는다. */
+  confirmSchedule: (id: ID) => void;
+  /** 없던 일로 — 일정과 그에 매달린 것(참여자·방·말)까지 함께 걷는다. */
+  removeSchedule: (id: ID) => void;
 
   // Todo
   addTodo: (t: Omit<Todo, "id">) => void;
@@ -420,6 +425,31 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     }
     return id;
   },
+  confirmSchedule: (id) => {
+    const real = get().resolveEventId(id) ?? id;
+    set((st) => ({
+      schedules: st.schedules.map((s) => (s.id === real ? { ...s, status: "confirmed" } : s)),
+    }));
+    if (remoteReady() && !unsynced.has(real)) void confirmEvent(real);
+  },
+
+  removeSchedule: (id) => {
+    const real = get().resolveEventId(id) ?? id;
+    // 일정이 사라지면 그 자리에 매달려 있던 것들도 함께 사라진다 —
+    // 남겨 두면 주인 없는 방과 참여자가 목록에 유령으로 선다.
+    set((st) => {
+      const roomIds = st.chatRooms.filter((r) => r.eventId === real).map((r) => r.id);
+      return {
+        schedules: st.schedules.filter((s) => s.id !== real),
+        eventParticipants: st.eventParticipants.filter((p) => p.eventId !== real),
+        chatRooms: st.chatRooms.filter((r) => r.eventId !== real),
+        chatMessages: st.chatMessages.filter((m) => !roomIds.includes(m.roomId)),
+      };
+    });
+    // 서버의 events 행만 지운다 — 참여자·방·말은 DB 가 on delete cascade 로 따라 지운다.
+    if (remoteReady() && !unsynced.has(real)) void deleteEvent(real);
+  },
+
   addTodo: (t) => set((st) => ({ todos: [{ ...t, id: uid() }, ...st.todos] })),
   updateTodo: (id, patch) =>
     set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),

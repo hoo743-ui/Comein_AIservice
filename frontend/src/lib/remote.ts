@@ -233,6 +233,29 @@ export async function pushEvent(s: Schedule): Promise<string | null> {
   } catch (e: any) { console.error("일정 저장 실패:", e?.message); return null; }
 }
 
+/** AI 가 놓아 둔 제안(pending)을 사람이 확정한다. 확정은 언제나 사람의 손에서 일어난다. */
+export async function confirmEvent(eventId: ID): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, {
+      method: "PATCH",
+      body: JSON.stringify({ status: "confirmed" }),
+    });
+    return true;
+  } catch (e: any) { console.error("일정 확정 실패:", e?.message); return false; }
+}
+
+/** 되돌린다 — 방금 만든 것을 없던 일로. 서버에서도 지운다(화면에서만 지우면 다음에 다시 나타난다). */
+export async function deleteEvent(eventId: ID): Promise<boolean> {
+  const uid = await ensureUid();
+  if (!uid) return false;
+  try {
+    await rest(`events?id=eq.${eventId}`, { method: "DELETE" });
+    return true;
+  } catch (e: any) { console.error("일정 삭제 실패:", e?.message); return false; }
+}
+
 export async function pushParticipant(eventId: ID, userId: ID) {
   const sb = getSupabase();
   const me = await ensureUid();
