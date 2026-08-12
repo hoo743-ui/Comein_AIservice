@@ -187,7 +187,9 @@ const CSS = `
   background: var(--paper); color: var(--ink);
   font-family: var(--font-sans), "Pretendard Variable", -apple-system, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
-  overflow: hidden;
+  /* 세로를 막지 않는다 — 낮은 화면에서 '약관' 줄과 아래쪽 버튼이 잘려 나갔다.
+     배경 오브는 .ent-bg 가 스스로 가둔다(min-height 라 내용만큼 자란다). */
+  overflow-x: hidden;
 }
 .dark .ent {
   --paper: hsl(224 30% 6%);

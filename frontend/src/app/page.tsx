@@ -128,7 +128,10 @@ const CSS = `
   font-family: var(--font-sans), "Pretendard Variable", -apple-system, system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
-  overflow: hidden;
+  /* 세로는 막지 않는다 — overflow:hidden 이면 낮은 화면(가로로 눕힌 폰 등)에서
+     문구와 '들어가기' 버튼이 통째로 잘려 나가고 스크롤로 꺼낼 수도 없었다.
+     흩어진 점이 좌우로 삐져나가는 것만 막으면 된다. */
+  overflow-x: hidden;
 }
 .dark .lnd {
   --paper: hsl(224 30% 6%);
@@ -142,6 +145,7 @@ const CSS = `
 /* 배경 아트워크 — 초저대비, 텍스트와 경쟁하지 않음. 중앙으로 갈수록 옅어지는 마스크로 헤드라인 보호 */
 .lnd-field {
   position: absolute; inset: 0; z-index: 0; pointer-events: none;
+  overflow: hidden;
   opacity: 0.5;
   -webkit-mask: radial-gradient(58% 46% at 50% 46%, transparent 0%, transparent 34%, #000 82%);
   mask: radial-gradient(58% 46% at 50% 46%, transparent 0%, transparent 34%, #000 82%);
