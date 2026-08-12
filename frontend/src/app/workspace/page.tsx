@@ -16,7 +16,7 @@ import { fmtTime, fmtDate } from "@/lib/format";
 import { API_BASE } from "@/lib/api";
 import { useRemoteSync, type RemoteState } from "@/lib/useRemoteSync";
 import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signInWithEmail, signInWithPassword, signInWithProvider, signOutRemote, signUpWithPassword } from "@/lib/remote";
-import type { ChatMessage, Contact, EventParticipant, Schedule, ScheduleProposal, TodoPriority } from "@/lib/types";
+import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Schedule, ScheduleProposal, TodoPriority } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 
 /**
@@ -280,8 +280,13 @@ export default function Reimagine() {
   const sharedEventsWith = useWorkspace((s) => s.sharedEventsWith);
   const participantsOf = useWorkspace((s) => s.participantsOf);
   // 사람 찾기·잇기 — 지어낸 이름이 아니라 실재하는 Comein 계정을 고른다.
+  // 그리고 즉시 잇지 않는다: 청하고, 상대가 받아야 이어진다.
   const findPeople = useWorkspace((s) => s.findPeople);
-  const connectPerson = useWorkspace((s) => s.connectPerson);
+  const requestPerson = useWorkspace((s) => s.requestPerson);
+  const cancelRequest = useWorkspace((s) => s.cancelRequest);
+  const connectionRequests = useWorkspace((s) => s.connectionRequests);
+  const loadRequests = useWorkspace((s) => s.loadRequests);
+  const answerRequest = useWorkspace((s) => s.answerRequest);
   const sendEventMessage = useWorkspace((s) => s.sendEventMessage);
   const sendDirectMessage = useWorkspace((s) => s.sendDirectMessage);
   // 내가 쓴 말 고치기·지우기 — 서버도 같은 규칙을 다시 확인한다(0008 RLS).
@@ -724,6 +729,13 @@ export default function Reimagine() {
     try { sessionStorage.removeItem("comein:reimagine"); } catch { /* 사생활 모드 */ }
     void signOutRemote().finally(() => router.replace("/"));
   }, [exiting, router]);
+
+  // 받은 요청 — 들어올 때 한 번, 그리고 사람 화면으로 옮길 때마다.
+  // Realtime 으로 밀어 주는 길도 있지만(0013), 여기서는 화면이 필요할 때 읽는 것으로 족하다.
+  React.useEffect(() => {
+    if (!remote.signedIn) return;
+    void loadRequests();
+  }, [remote.signedIn, shownView, loadRequests]);
 
   // 처음 온 사람에게만 문 옆에 작은 표식 하나. 가이드를 강제로 재생하지는 않는다.
   React.useEffect(() => {
@@ -1445,7 +1457,7 @@ export default function Reimagine() {
                   {/* 다른 화면에 있을 때만 — 사람 탭을 보고 있으면 목록이 이미 말해 준다.
                       숫자를 달지 않는다. 몇 개인지는 들어가서 알면 되고,
                       여기서 필요한 건 '무언가 와 있다' 하나뿐이다. */}
-                  {n.key === "people" && unreadTotal > 0 && shownView !== "people" && (
+                  {n.key === "people" && (unreadTotal > 0 || connectionRequests.length > 0) && shownView !== "people" && (
                     <span className="rmg-raildot" aria-label={lang === "en" ? "New messages" : "새 메시지"} />
                   )}
                 </button>
@@ -1630,7 +1642,10 @@ export default function Reimagine() {
                   onQuery={setPeopleQuery}
                   onNewRoom={() => { selectPerson(null); setNewRoom(true); }}
                   onFind={findPeople}
-                  onConnect={connectPerson}
+                  onRequest={requestPerson}
+                  onCancelRequest={cancelRequest}
+                  requests={connectionRequests}
+                  onAnswerRequest={answerRequest}
                   unreadOf={unreadOf}
                   convo={convo}
                   openEventId={openEventId}
@@ -2179,7 +2194,11 @@ function Feature(props: {
   onNewRoom: () => void;
   /** 사람 찾기·잇기 · 읽지 않은 말 — People 로 그대로 흘려보낸다. */
   onFind: (q: string) => Promise<Contact[]>;
-  onConnect: (peerId: string) => Promise<boolean>;
+  onRequest: (peerId: string) => Promise<{ outcome: string; message?: string }>;
+  onCancelRequest: (peerId: string) => Promise<void>;
+  /** 나에게 온, 아직 답하지 않은 요청 — 연락처 갈래 맨 위에 얹힌다. */
+  requests: ConnectionRequest[];
+  onAnswerRequest: (id: string, accept: boolean) => Promise<void>;
   unreadOf: (personId: string) => number;
   /** 세 갈래가 읽는 것 — 사람별 마지막 말·안 읽은 수, 그리고 함께하는 자리들. */
   convo: {
@@ -4048,7 +4067,7 @@ function PersonPanel({ person, tab, onTab, messages, sharedEvents, participantsO
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onConnect, unreadOf, convo, openEventId, onOpenEvent }: any) {
+function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   const q = (query as string).trim().toLowerCase();
@@ -4078,6 +4097,9 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
   const [found, setFound] = React.useState<any[]>([]);
   const [finding, setFinding] = React.useState(false);
   const [joining, setJoining] = React.useState<string | null>(null);
+  // 방금 청한 사람과, 서버가 돌려준 말 한 줄(거절 뒤 다시 보낸 경우 등).
+  const [asked, setAsked] = React.useState<Record<string, string>>({});
+  const [askErr, setAskErr] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!onFind || q.length < 2) { setFound([]); setFinding(false); return; }
@@ -4097,12 +4119,22 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
   const mine = new Set(contacts.map((c: any) => c.id));
   const newcomers = found.filter((p) => !mine.has(p.id));
 
-  const connect = async (id: string) => {
+  /** 청한다. 이어지는 경우(상대도 보내 뒀을 때)에만 검색을 걷는다 —
+   *  보내기만 한 경우에는 그 줄이 '보냄' 으로 바뀐 것을 봐야 두 번 누르지 않는다. */
+  const ask = async (id: string) => {
     if (joining) return;
-    setJoining(id);
-    await onConnect?.(id);
+    setJoining(id); setAskErr(null);
+    const r = await onRequest?.(id);
     setJoining(null);
-    onQuery("");
+    if (!r) return;
+    if (r.outcome === "error") { setAskErr(r.message ?? (en ? "Couldn't send." : "보내지 못했어요.")); return; }
+    setAsked((m) => ({ ...m, [id]: r.outcome }));
+    if (r.outcome === "accepted" || r.outcome === "connected") onQuery("");
+  };
+
+  const unask = async (id: string) => {
+    await onCancelRequest?.(id);
+    setAsked((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 
   return (
@@ -4126,6 +4158,34 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
           {en ? "New group" : "새 그룹"}
         </button>
       </div>
+
+      {/* 받은 요청 — 탭을 새로 만들지 않는다. 대부분 비어 있는 탭이 하나 늘면
+          그만큼 화면이 무거워질 뿐이다. 온 것이 있을 때만 연락처 위에 얹히고,
+          답하면 사라진다. 무엇을 청했는지가 아니라 '누가' 가 먼저 읽혀야 한다. */}
+      {lane === "contacts" && (requests?.length ?? 0) > 0 && (
+        <section className="rmg-req" aria-label={en ? "Connection requests" : "받은 요청"}>
+          <p className="rmg-eyebrow rmg-req-eye">
+            {en ? `${requests.length} want${requests.length > 1 ? "" : "s"} to connect` : `연결 요청 ${requests.length}`}
+          </p>
+          <ul className="rmg-req-list">
+            {(requests as ConnectionRequest[]).map((r) => (
+              <li key={r.id} className="rmg-req-row">
+                <span className="rmg-ppl-av">{r.name?.slice(0, 1) ?? "·"}</span>
+                <span className="rmg-req-who">
+                  <span className="rmg-req-name">{r.name}</span>
+                  <span className="rmg-req-handle">@{r.handle}</span>
+                </span>
+                <button type="button" className="rmg-ppl-act primary" onClick={() => void onAnswerRequest?.(r.id, true)}>
+                  {en ? "Accept" : "수락"}
+                </button>
+                <button type="button" className="rmg-ppl-act" onClick={() => void onAnswerRequest?.(r.id, false)}>
+                  {en ? "Decline" : "거절"}
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       {/* 세 갈래 — 밑줄 하나로만 지금 어디를 보는지 말한다(§4). */}
       <nav className="rmg-lane" role="tablist" aria-label={en ? "People views" : "사람 보기"}>
@@ -4245,6 +4305,8 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
           <p className="rmg-eyebrow rmg-ppl-findeye">
             {finding ? (en ? "Looking…" : "찾는 중…") : (en ? "On Comein" : "Comein에서")}
           </p>
+          {/* 서버가 거절한 이유는 그대로 옮긴다 — 아무 일도 일어나지 않은 것처럼 두지 않는다. */}
+          {askErr && <p className="rmg-ppl-none rmg-req-err">{askErr}</p>}
           <ul className="rmg-ppl-list">
             {newcomers.map((p: any) => (
               <li key={p.id} className="rmg-ppl">
@@ -4254,11 +4316,24 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                     <span className="rmg-ppl-name">{p.name}</span>
                     <span className="rmg-ppl-org">@{p.handle}</span>
                   </span>
+                  {/* 한 줄이 자기가 어디까지 왔는지 안다 —
+                      이어짐 · 그쪽이 먼저 보냄(여기서 바로 받는다) · 내가 보내 둠 · 아직 아무것도. */}
                   {p.connected ? (
                     <span className="rmg-ppl-n">{en ? "Connected" : "연결됨"}</span>
+                  ) : p.incomingRequestId ? (
+                    <span className="rmg-ppl-req">
+                      <span className="rmg-ppl-reqt">{en ? "Wants to connect" : "요청이 와 있어요"}</span>
+                      <button type="button" className="rmg-ppl-act primary" onClick={() => { void onAnswerRequest?.(p.incomingRequestId, true); onQuery(""); }}>
+                        {en ? "Accept" : "수락"}
+                      </button>
+                    </span>
+                  ) : asked[p.id] || p.requested ? (
+                    <button type="button" className="rmg-ppl-act" onClick={() => void unask(p.id)}>
+                      {en ? "Requested · Undo" : "요청함 · 취소"}
+                    </button>
                   ) : (
-                    <button type="button" className="rmg-ppl-act" disabled={joining === p.id} onClick={() => connect(p.id)}>
-                      {joining === p.id ? (en ? "…" : "…") : (en ? "Connect" : "연결")}
+                    <button type="button" className="rmg-ppl-act" disabled={joining === p.id} onClick={() => void ask(p.id)}>
+                      {joining === p.id ? "…" : (en ? "Request" : "요청")}
                     </button>
                   )}
                 </div>
@@ -5627,6 +5702,22 @@ html { font-size: 17px; }
 .rmg-ppl-act { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font: inherit; font-size: 0.76rem; font-weight: 500; padding: 4px 11px; border-radius: 999px; cursor: pointer; flex-shrink: 0; transition: color 170ms ease-out, border-color 170ms ease-out; }
 .rmg-ppl-act:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
 .rmg-ppl-act.primary { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 18%, var(--hair)); }
+
+/* ── 받은 연결 요청 ──
+   탭이 아니다. 온 것이 있을 때만 연락처 위에 얹혔다가, 답하면 사라진다.
+   카드로 띄우지 않고 왼쪽 선 하나로만 '여기부터는 아직 내 사람이 아니다' 를 말한다. */
+.rmg-req { display: flex; flex-direction: column; gap: 4px; padding: var(--sp-1) 0 var(--sp-2) 10px;
+  border-left: 2px solid color-mix(in srgb, var(--accent) 45%, var(--hair)); }
+.rmg-req-eye { margin: 0 0 4px; }
+.rmg-req-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 2px; }
+.rmg-req-row { display: flex; align-items: center; gap: var(--sp-1); padding: 5px 0; }
+.rmg-req-who { display: flex; flex-direction: column; flex: 1; min-width: 0; }
+.rmg-req-name { font-size: 0.94rem; color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rmg-req-handle { font-size: 0.76rem; font-weight: 300; color: var(--faint); }
+.rmg-req-err { color: color-mix(in srgb, var(--ink) 62%, transparent); margin-bottom: var(--sp-1); }
+/* 검색 한 줄이 '그쪽이 먼저 보냈다' 를 말할 때 — 상태와 손잡이가 한 덩어리로 붙는다. */
+.rmg-ppl-req { display: inline-flex; align-items: center; gap: var(--sp-1); flex-shrink: 0; }
+.rmg-ppl-reqt { font-size: 0.74rem; color: var(--faint); white-space: nowrap; }
 
 /* 사람 찾기 — 검색창처럼 보이는 상자가 아니라 목록 위에 놓인 한 줄. */
 .rmg-ppl-wrap { display: flex; flex-direction: column; gap: var(--sp-2); }

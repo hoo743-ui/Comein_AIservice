@@ -7,6 +7,7 @@ import type {
   ChatMessage,
   ChatRoom,
   ClassEntry,
+  ConnectionRequest,
   Contact,
   EventParticipant,
   Place,
@@ -20,10 +21,12 @@ import type {
 import { ME_ID } from "@/lib/types";
 import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
-  connectWith, dayAvailability, ensureDmRoomRemote, fetchOpenProposal, fetchPeople, fetchSnapshot,
+  answerConnectionRequest, cancelConnectionRequest, dayAvailability, ensureDmRoomRemote,
+  fetchConnectionRequests, fetchOpenProposal, fetchPeople, fetchSnapshot,
   confirmEvent, deleteEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
-  remoteReady, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
+  remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
+  type RequestOutcome,
 } from "@/lib/remote";
 
 /** 하루를 가리키는 키 — 시간대 문제를 피해 로컬 연·월·일로 만든다. */
@@ -218,8 +221,17 @@ interface WorkspaceState {
   refreshPeople: () => Promise<void>;
   /** Comein 계정 검색 — 지역 상태를 건드리지 않고 결과만 돌려준다. */
   findPeople: (q: string) => Promise<Contact[]>;
-  /** 잇는다. 이어지면 사람 목록에 들어온다(멱등). */
-  connectPerson: (peerId: ID) => Promise<boolean>;
+  /** 잇자고 청한다 — 즉시 잇지 않는다. 상대가 받아야 이어진다.
+   *  상대도 나에게 보내 두었다면 그 자리에서 이어진다("accepted"). */
+  requestPerson: (peerId: ID) => Promise<{ outcome: RequestOutcome; message?: string }>;
+  /** 보낸 요청을 무른다. */
+  cancelRequest: (peerId: ID) => Promise<void>;
+  /** 나에게 온, 아직 답하지 않은 요청들. */
+  connectionRequests: ConnectionRequest[];
+  /** 받은 요청을 다시 읽어 온다. */
+  loadRequests: () => Promise<void>;
+  /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다. */
+  answerRequest: (id: ID, accept: boolean) => Promise<void>;
   /** 내가 쓴 말을 고친다. 화면에 먼저 반영하고 서버가 뒤따른다(실패하면 되돌린다). */
   editMessage: (id: ID, content: string) => Promise<void>;
   /** 내가 쓴 말을 지운다(soft delete — 서버에는 행이 남고 내용은 비워진다). */
@@ -325,11 +337,33 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   findPeople: async (q) => (remoteReady() ? searchPeople(q) : []),
 
-  connectPerson: async (peerId) => {
-    if (!remoteReady()) return false;
-    const ok = await connectWith(peerId);
-    if (ok) await get().refreshPeople();
-    return ok;
+  requestPerson: async (peerId) => {
+    if (!remoteReady()) return { outcome: "error" as const };
+    const r = await requestConnection(peerId);
+    // 그 자리에서 이어졌을 때만 목록이 달라진다 — 보내기만 한 경우는 아직 남의 차례다.
+    if (r.outcome === "accepted" || r.outcome === "connected") await get().refreshPeople();
+    return r;
+  },
+
+  cancelRequest: async (peerId) => {
+    if (!remoteReady()) return;
+    await cancelConnectionRequest(peerId);
+  },
+
+  connectionRequests: [],
+
+  loadRequests: async () => {
+    if (!remoteReady()) return;
+    set({ connectionRequests: await fetchConnectionRequests() });
+  },
+
+  answerRequest: async (id, accept) => {
+    // 답한 줄은 화면에서 곧바로 걷는다 — 서버를 기다리는 동안 남아 있으면
+    // 두 번 누르게 되고, 두 번째 호출은 'gone' 으로 조용히 흘러간다.
+    set((st) => ({ connectionRequests: st.connectionRequests.filter((r) => r.id !== id) }));
+    if (!remoteReady()) return;
+    const ok = await answerConnectionRequest(id, accept);
+    if (ok && accept) await get().refreshPeople();
   },
 
   applyRemoteMessage: (m) =>

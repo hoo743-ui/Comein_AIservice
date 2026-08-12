@@ -19,9 +19,9 @@ import type { RealtimeChannel } from "@supabase/supabase-js";
 import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   ME_ID,
-  type Availability, type ChatMessage, type ChatRoom, type Contact, type EventParticipant,
-  type ID, type ProposalResponse, type ProposalStatus, type Schedule, type ScheduleProposal,
-  type SlotSuggestion,
+  type Availability, type ChatMessage, type ChatRoom, type ConnectionRequest, type Contact,
+  type EventParticipant, type ID, type ProposalResponse, type ProposalStatus, type Schedule,
+  type ScheduleProposal, type SlotSuggestion,
 } from "@/lib/types";
 
 export type RemoteSnapshot = {
@@ -339,6 +339,8 @@ export async function searchPeople(q: string): Promise<Contact[]> {
     handle: r.handle,
     source: "comein",
     connected: !!r.connected,
+    requested: !!r.requested,
+    incomingRequestId: r.incoming ?? undefined,
   }));
 }
 
@@ -388,12 +390,54 @@ export async function dayAvailability(
   }));
 }
 
-export async function connectWith(peerId: ID): Promise<boolean> {
+/** 요청이 어떻게 끝났는가. 화면이 "보냈어요" 와 "이어졌어요" 를 다르게 말해야 한다. */
+export type RequestOutcome = "sent" | "accepted" | "pending" | "connected" | "error";
+
+/** 잇자고 청한다 — 즉시 잇지 않는다. 상대가 받아야 이어진다.
+ *  상대도 나에게 보내 두었다면 그 자리에서 이어진다("accepted"). */
+export async function requestConnection(peerId: ID): Promise<{ outcome: RequestOutcome; message?: string }> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return { outcome: "error" };
+  const { data, error } = await sb.rpc("request_connection", { peer: peerId });
+  if (error) {
+    // 거절 뒤 곧바로 다시 보낸 경우처럼, 서버가 이유를 말해 주면 그대로 옮긴다.
+    console.error("연결 요청 실패:", error.message);
+    return { outcome: "error", message: error.message };
+  }
+  return { outcome: (data as RequestOutcome) ?? "sent" };
+}
+
+/** 받은 요청에 답한다 — 받은 사람만 부를 수 있다(서버가 다시 확인한다). */
+export async function answerConnectionRequest(id: ID, accept: boolean): Promise<boolean> {
   const sb = getSupabase();
   if (!sb || !(await ensureUid())) return false;
-  const { error } = await sb.rpc("connect_with", { peer: peerId });
-  if (error) { console.error("연결 실패:", error.message); return false; }
+  const { data, error } = await sb.rpc("answer_connection_request", { req: id, accept });
+  if (error) { console.error("요청 응답 실패:", error.message); return false; }
+  return data === "accepted" || data === "declined";
+}
+
+/** 보낸 요청을 무른다. */
+export async function cancelConnectionRequest(peerId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("cancel_connection_request", { peer: peerId });
+  if (error) { console.error("요청 취소 실패:", error.message); return false; }
   return true;
+}
+
+/** 나에게 온, 아직 답하지 않은 요청들. */
+export async function fetchConnectionRequests(): Promise<ConnectionRequest[]> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return [];
+  const { data, error } = await sb.rpc("my_connection_requests");
+  if (error) { console.error("받은 요청 조회 실패:", error.message); return []; }
+  return (data ?? []).map((r: any): ConnectionRequest => ({
+    id: r.id,
+    fromId: r.from_id,
+    name: r.display_name,
+    handle: r.handle,
+    createdAt: r.created_at,
+  }));
 }
 
 // 연결 해제(disconnect_from)와 확정 후 개인 일정 충돌(my_conflicts_with)은

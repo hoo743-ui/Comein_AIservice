@@ -140,6 +140,15 @@ export interface Place {
 // 나머지는 밖에서 가져온 이름표일 뿐이라, 일정에 부르거나 말을 걸 수는 없다.
 export type ContactSource = "comein" | "google" | "outlook" | "manual";
 
+/** 아직 답하지 않은, 나에게 온 연결 요청 한 건. */
+export interface ConnectionRequest {
+  id: ID;
+  fromId: ID;
+  name: string;
+  handle: string;
+  createdAt: string; // ISO
+}
+
 export interface Contact {
   id: ID;
   name: string;
@@ -152,6 +161,11 @@ export interface Contact {
   lastMet?: string; // ISO
   /** 서로 잇겠다고 한 사이인가. 같은 일정에서 만나기만 한 사람은 false 다. */
   connected?: boolean;
+  /** 내가 보내 둔 요청이 아직 답을 기다리는가 — 검색 결과가 자기 상태를 알아야
+   *  '연결' 버튼을 다시 내밀지 않는다(안 눌린 줄 알고 또 누르게 된다). */
+  requested?: boolean;
+  /** 그 사람이 나에게 보낸 요청의 id. 있으면 검색 자리에서 바로 받을 수 있다. */
+  incomingRequestId?: ID;
   /** 함께 있는 일정 수 */
   sharedEvents?: number;
   /** 나와 이 사람의 관계(교수·동료·가족…). 유형마다 다른 이름으로 불리지만 사람은 하나다 —
