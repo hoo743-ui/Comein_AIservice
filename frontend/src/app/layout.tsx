@@ -1,18 +1,15 @@
 import type { Metadata } from "next";
-import { Fraunces, Inter } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 
 import { ThemeProvider } from "@/components/theme-provider";
 
-// 본문(라틴) — Inter, 한글은 Pretendard(아래 CDN)로 우선 적용
+// 본문(라틴) — Inter, 한글은 Pretendard(아래 CDN)로 우선 적용.
+//
+// 세리프(Fraunces)를 --font-display 로 함께 싣던 때가 있었다. normal·italic 두 벌을
+// 받아 놓고 정작 그 변수를 읽는 곳이 한 군데도 없었다 — 화면에 한 글자도 그리지 않는
+// 폰트를 매번 내려받고 있었던 셈이다. 디자인 언어도 세리프를 쓰지 않는다(CLAUDE.md §6).
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans", display: "swap" });
-// 디스플레이(헤드라인) — 우아한 세리프 Fraunces
-const fraunces = Fraunces({
-  subsets: ["latin"],
-  variable: "--font-display",
-  display: "swap",
-  style: ["normal", "italic"],
-});
 
 export const metadata: Metadata = {
   title: "Comein — AI Workspace",
@@ -24,7 +21,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="ko" suppressHydrationWarning className={`${inter.variable} ${fraunces.variable}`}>
+    <html lang="ko" suppressHydrationWarning className={inter.variable}>
       <body className="font-sans">
         {/* 한글 프리미엄 폰트 Pretendard (동적 서브셋) — React가 head로 hoist */}
         <link

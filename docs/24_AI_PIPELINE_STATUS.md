@@ -831,3 +831,67 @@ GET  /health        Render 헬스체크
   이번에 함께 손대지 않았다. 확인하고 지우면 빌드가 더 가벼워진다.
 - **`JWT_SECRET` 등 인증 설정** — 아직 아무도 읽지 않는다. 인증은 Supabase Auth 가
   프론트에서 맡고 있다. 백엔드 인증을 언젠가 붙일 것인지 정하면 함께 정리된다.
+
+---
+
+## 17. 방향이 바뀐 자리에 남은 것들 (2026-08-13)
+
+`§16` 이 죽은 **경로**를 걷었다면, 여기는 죽은 **잔재**다. 전체 디렉터리를 기계적으로
+훑어 "정의는 있는데 아무도 읽지 않는 것" 만 골라냈다.
+
+### 17.1 화면에 한 글자도 그리지 않던 폰트
+
+`layout.tsx` 가 세리프 **Fraunces** 를 `--font-display` 로 싣고 있었다. `style: ["normal",
+"italic"]` 이라 두 벌이다. 그런데 그 변수를 읽는 곳이 **한 군데도 없다.** 화면에 한 글자도
+그리지 않는 폰트를 매번 내려받고 있었다. 디자인 언어도 세리프를 쓰지 않는다(CLAUDE.md §6).
+
+### 17.2 shadcn 시절의 설정과 글래스 시절의 유틸리티
+
+`tailwind.config.ts` 에는 radix accordion 키프레임(**radix 는 설치조차 되어 있지 않다**),
+`card`·`popover`·`sidebar` 색, `shadow-soft`/`glow`, `kenburns`/`sheen` 애니메이션이 남아
+있었다. `globals.css` 에는 `.glass` · `.glass-panel` · `.elevated` · `.orb-3d` · `.bg-app` ·
+`.grain-overlay` · `.brand-gradient` 가 있었다.
+
+**전부 사용처 0이다.** 코드에서 실제로 쓰는 Tailwind 유틸리티는 `font-sans` 하나와
+`globals.css` 의 `@apply` 세 줄뿐이다 — 화면의 시각 언어는 각 페이지가 컴포넌트 로컬
+`<style>` 과 자체 토큰(`--paper`·`--ink`·`--hair`)으로 갖기 때문이다(§6).
+
+쓰이지 않는 것보다 나쁜 건, 그것이 **다음에 여는 사람에게 거짓을 말한다**는 점이다.
+이 설정 파일은 "이 프로젝트는 shadcn 을 쓴다" 고 말하고 있었다. §6 은 정반대를 말한다.
+
+### 17.3 그 밖에
+
+- `mode.ts` 의 `isUserMode` · `useModeConfig` · `availableModes` — 정의만 있고 호출 0.
+- `mode.ts` 의 `classifyPerson` · `relationLabel` — 사람 분류 규칙. 만들어 두고 화면에
+  붙인 적이 없다. `Contact.relation` 도 읽는 곳이 없다.
+  → **`MODE_CONFIG.peopleCategories` 데이터와 `PersonRelation` 타입은 남겼다.**
+  타입은 `Contact` 가 여전히 쓰고, 분류표는 코드가 아니라 **제품 설계**라서 —
+  지우면 나중에 사람 화면을 붙일 때 이름 체계를 다시 정해야 한다.
+- `availability.ts` 의 `describeConflicts` — `export *` 로 재수출만 되고 호출 0.
+- `backend/requirements.txt` 의 `google-genai` — `ai/llm/gemini.py` 는 SDK 없이 `httpx` 로
+  REST 를 직접 부른다. 한 번도 import 되지 않은 채 빌드를 무겁게 하고 있었다.
+
+### 17.4 실제로 줄어든 것
+
+빌드 산출물을 정리 전/후로 각각 클린 빌드해 쟀다(추정이 아니라 실측).
+
+| | 전 | 후 | |
+|---|---|---|---|
+| CSS | 13,798 B | 10,017 B | **−27%** |
+| 폰트 파일 | 13개 · 399,764 B | 7개 · 218,888 B | **−45%** |
+| 백엔드 패키지 | 27개 | 27개 | (§16 의 58→38 에 이어 38→27) |
+
+첫 방문자가 받는 것이 **약 185KB** 줄었다. JS 번들은 그대로다 — 죽은 export 는 이미
+트리셰이킹으로 빠지고 있었기 때문이다. 실제로 실리던 것은 **CSS 와 폰트**였다.
+
+### 17.5 확인
+
+프론트 tsc 통과 · 29 passed · 프로덕션 빌드 통과.
+백엔드는 빈 venv 에 새 `requirements.txt` 만 설치해 **Gemini 실호출까지** 확인했다 —
+SDK 없이 REST 로 도는 것이 맞았다(`/api/chat` participants·KST 정상, `/api/summary` 정상).
+
+### 17.6 남긴 것
+
+- **`ai/` 의 빈 자리표** — `ai/memory/README.md` · `ai/prompts/README.md` 는 아직 코드가
+  없는 디렉터리다. 죽은 코드가 아니라 **아직 안 쓴 코드**라 그대로 둔다.
+- **`JWT_SECRET` 등 인증 설정** — §16.5 와 같다. 인증은 Supabase Auth 가 프론트에서 맡는다.

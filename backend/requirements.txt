@@ -5,8 +5,9 @@ pydantic-settings>=2.5.0
 httpx>=0.27.0
 python-dotenv>=1.0.0
 
-# LLM Providers (ai/llm/gemini.py, ai/llm/groq.py)
-google-genai>=2.15.0
+# LLM Provider — Groq 만 SDK 를 쓴다.
+# Gemini 는 SDK 없이 httpx 로 REST 를 직접 부르므로(ai/llm/gemini.py) google-genai 가 필요 없다.
+# 설치만 되고 한 번도 import 되지 않은 채 빌드를 무겁게 하고 있었다.
 groq>=1.6.0
 
 # 여기에 DB 드라이버(sqlalchemy·asyncpg·alembic)와 redis 가 있었다.

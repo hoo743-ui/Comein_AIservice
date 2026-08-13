@@ -106,14 +106,3 @@ export function withinConstraints(at: Date, constraints: TemporalConstraint[]): 
 
 /** 모두 되는 자리만. 하나도 없으면 빈 배열이고, 그때는 제안하지 않는 것이 맞다. */
 export const freeForAll = (slots: SlotCandidate[]) => slots.filter((s) => s.conflicts === 0);
-
-/**
- * 사람에게 건넬 말 — 남의 일정 내용을 절대 옮기지 않는다(§11).
- * "김OO님은 병원" 이 아니라 "한 분의 일정과 겹칩니다".
- */
-export function describeConflicts(slot: SlotCandidate, en = false): string {
-  if (slot.conflicts === 0) return en ? "Everyone is free." : "모두 가능한 시간이에요.";
-  return en
-    ? `Overlaps with ${slot.conflicts} ${slot.conflicts === 1 ? "person's" : "people's"} calendar.`
-    : `${slot.conflicts}명의 일정과 겹쳐요.`;
-}

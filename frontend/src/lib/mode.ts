@@ -10,7 +10,7 @@
 // 새 Context 를 하나 더 여는 일은 이 파일에 항목 하나를 더하는 일이 된다.
 
 import { useWorkspace } from "./store";
-import type { Contact, Schedule } from "./types";
+import type { Schedule } from "./types";
 
 // ── Context ────────────────────────────────────────────
 
@@ -28,9 +28,6 @@ export function normalizeMode(v: unknown): UserMode {
   if (v === "general") return "personal";      // 이전 이름
   return DEFAULT_MODE;
 }
-
-export const isUserMode = (v: unknown): v is UserMode =>
-  typeof v === "string" && (USER_MODES as readonly string[]).includes(v);
 
 // ── 분류 체계 ──────────────────────────────────────────
 // 일정과 사람은 Context 마다 다른 이름으로 불리지만, 저장되는 실체는 하나다.
@@ -154,22 +151,9 @@ export function classifyEvent(event: Pick<Schedule, "title" | "category">, mode:
   return cfg.eventCategories.find((c) => matches(text, c.hints))?.key ?? "other";
 }
 
-/** 사람 → 이 Context 에서의 관계. 소속(org)과 태그에서만 읽는다. */
-export function classifyPerson(person: Pick<Contact, "org" | "relation" | "tags">, mode: UserMode): PersonRelation {
-  const cfg = MODE_CONFIG[mode];
-  if (person.relation && cfg.peopleCategories.some((c) => c.key === person.relation)) return person.relation;
-  const text = [person.org, ...(person.tags ?? [])].filter(Boolean).join(" ").toLowerCase();
-  return cfg.peopleCategories.find((c) => matches(text, c.hints))?.key ?? "other";
-}
-
 /** 갈래 → 화면에 적을 이름. 못 찾으면 아무 말도 하지 않는다(null). */
 export function categoryLabel(key: EventCategory, mode: UserMode, en: boolean): string | null {
   const def = MODE_CONFIG[mode].eventCategories.find((c) => c.key === key);
-  return def ? (en ? def.label.en : def.label.ko) : null;
-}
-
-export function relationLabel(key: PersonRelation, mode: UserMode, en: boolean): string | null {
-  const def = MODE_CONFIG[mode].peopleCategories.find((c) => c.key === key);
   return def ? (en ? def.label.en : def.label.ko) : null;
 }
 
@@ -182,9 +166,3 @@ export function relationLabel(key: PersonRelation, mode: UserMode, en: boolean):
 export const useCurrentMode = (): UserMode =>
   useWorkspace((s) => normalizeMode(s.settings.mode));
 
-/** 지금 Context 의 설정 전부. */
-export const useModeConfig = (): ModeConfig => MODE_CONFIG[useCurrentMode()];
-
-/** 쓸 수 있는 Context 들 — 지금은 셋 다 열려 있고, 고르는 곳은 설정 화면 하나뿐이다.
- *  (§7 계정 하나가 여러 Context 를 갖는 날을 위해 자리만 열어 둔다. UI 는 아직 만들지 않는다.) */
-export const availableModes = (): readonly UserMode[] => USER_MODES;

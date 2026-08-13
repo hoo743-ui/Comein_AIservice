@@ -1,108 +1,31 @@
 import type { Config } from "tailwindcss";
 
 /**
- * Comein 디자인 시스템 — 연보라·화이트 미니멀 (브랜드 포스터 기준)
- * 모든 색은 globals.css 의 HSL CSS 변수(:root / .dark)를 참조한다.
- * 따라서 토큰을 바꾸면 라이트/다크가 동시에 반영된다.
+ * Tailwind 는 여기서 **리셋과 기본값**까지만 맡는다.
+ *
+ * 화면의 시각 언어는 각 페이지가 컴포넌트 로컬 <style> 과 자체 토큰으로 갖는다
+ * (CLAUDE.md §6 — 무거운 UI 프레임워크를 두지 않는다). 실제로 코드에서 쓰는
+ * 유틸리티는 `font-sans` 하나와 globals.css 의 `@apply` 세 줄이 전부다.
+ *
+ * 예전에는 shadcn/ui 시절의 설정이 통째로 남아 있었다 — radix accordion 키프레임
+ * (radix 는 설치조차 되어 있지 않다) · card/popover/sidebar 색 · shadow-soft/glow ·
+ * kenburns/sheen 애니메이션 · 세리프 display 폰트. **하나도 쓰이지 않으면서**
+ * 다음에 여는 사람에게 "이 프로젝트는 shadcn 을 쓴다" 고 말하고 있었다. 걷어냈다.
  */
 const config: Config = {
   darkMode: ["class"],
   content: ["./src/**/*.{ts,tsx}"],
   theme: {
-    container: {
-      center: true,
-      padding: "2rem",
-      screens: { "2xl": "1400px" },
-    },
     extend: {
+      // globals.css 의 `@apply border-border` · `@apply bg-background text-foreground` 가 읽는다.
       colors: {
         border: "hsl(var(--border))",
-        input: "hsl(var(--input))",
-        ring: "hsl(var(--ring))",
         background: "hsl(var(--background))",
         foreground: "hsl(var(--foreground))",
-        primary: {
-          DEFAULT: "hsl(var(--primary))",
-          foreground: "hsl(var(--primary-foreground))",
-        },
-        secondary: {
-          DEFAULT: "hsl(var(--secondary))",
-          foreground: "hsl(var(--secondary-foreground))",
-        },
-        destructive: {
-          DEFAULT: "hsl(var(--destructive))",
-          foreground: "hsl(var(--destructive-foreground))",
-        },
-        muted: {
-          DEFAULT: "hsl(var(--muted))",
-          foreground: "hsl(var(--muted-foreground))",
-        },
-        accent: {
-          DEFAULT: "hsl(var(--accent))",
-          foreground: "hsl(var(--accent-foreground))",
-        },
-        popover: {
-          DEFAULT: "hsl(var(--popover))",
-          foreground: "hsl(var(--popover-foreground))",
-        },
-        card: {
-          DEFAULT: "hsl(var(--card))",
-          foreground: "hsl(var(--card-foreground))",
-        },
-        sidebar: {
-          DEFAULT: "hsl(var(--sidebar))",
-          foreground: "hsl(var(--sidebar-foreground))",
-          accent: "hsl(var(--sidebar-accent))",
-          "accent-foreground": "hsl(var(--sidebar-accent-foreground))",
-          border: "hsl(var(--sidebar-border))",
-        },
       },
-      borderRadius: {
-        lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
-      },
+      // layout.tsx 의 <body className="font-sans">. 한글은 Pretendard(CDN)가 먼저 잡는다.
       fontFamily: {
         sans: ['"Pretendard Variable"', "var(--font-sans)", "system-ui", "sans-serif"],
-        display: ["var(--font-display)", "ui-serif", "Georgia", "serif"],
-      },
-      boxShadow: {
-        // 레이어드 소프트 섀도우 — 뉴트럴 잉크(비-보라)로 정제
-        soft: "0 1px 2px hsl(234 24% 16% / 0.05), 0 6px 20px -10px hsl(234 24% 16% / 0.12), 0 20px 44px -24px hsl(234 24% 16% / 0.16)",
-        glow: "0 0 40px -10px hsl(var(--primary) / 0.4)",
-      },
-      keyframes: {
-        "accordion-down": {
-          from: { height: "0" },
-          to: { height: "var(--radix-accordion-content-height)" },
-        },
-        "accordion-up": {
-          from: { height: "var(--radix-accordion-content-height)" },
-          to: { height: "0" },
-        },
-        "fade-up": {
-          from: { opacity: "0", transform: "translateY(8px)" },
-          to: { opacity: "1", transform: "translateY(0)" },
-        },
-        // 바람/공기 느낌 — 켄번즈 드리프트
-        kenburns: {
-          "0%, 100%": { transform: "scale(1.06) translate3d(0, 0, 0)" },
-          "50%": { transform: "scale(1.18) translate3d(-2.5%, -1.8%, 0)" },
-        },
-        // 빛이 스쳐 지나가는 스윕
-        sheen: {
-          "0%": { transform: "translateX(-65%)", opacity: "0" },
-          "40%": { opacity: "0.55" },
-          "60%": { opacity: "0.55" },
-          "100%": { transform: "translateX(65%)", opacity: "0" },
-        },
-      },
-      animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        "fade-up": "fade-up 0.4s ease-out both",
-        kenburns: "kenburns 18s ease-in-out infinite",
-        sheen: "sheen 7s ease-in-out infinite",
       },
     },
   },
