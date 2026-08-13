@@ -3309,7 +3309,8 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   }, [tlW]);
   const [draft, setDraft] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const endRef = React.useRef<HTMLDivElement>(null);
+  // 대화는 맨 아래에 붙어 있는다 — 위를 읽는 동안에는 '최근으로' 한 점만 남는다.
+  const { listRef, endRef, atBottom, toBottom } = useStickToBottom(messages, event.id);
 
   const nameOf = React.useCallback(
     (userId: string) => (userId === ME_ID ? myName : contacts.find((c) => c.id === userId)?.name ?? (en ? "Unknown" : "알 수 없음")),
@@ -3317,8 +3318,6 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   );
 
   React.useEffect(() => { if (focusChat) inputRef.current?.focus(); }, [focusChat]);
-  // 새 메시지가 오면 맨 아래로 — 대화를 열었을 때 마지막 말이 보여야 한다.
-  React.useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     const text = draft.trim();
@@ -3573,13 +3572,16 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
         {/* 요약 — 대화를 밀어내지 않게 위에 한 겹만. 스스로 갱신하지 않는다. */}
         {sumOpen && summary && <SummaryBlock summary={summary} lang={lang} busy={!!summaryBusy} onRefresh={onSummarize} />}
 
-        <div className="rmg-drawer-msgs">
-          {messages.length === 0 ? (
-            <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
-          ) : (
-            <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
-          )}
-          <div ref={endRef} />
+        <div className="rmg-msgwrap">
+          <div className="rmg-drawer-msgs" ref={listRef}>
+            {messages.length === 0 ? (
+              <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
+            ) : (
+              <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
+            )}
+            <div ref={endRef} />
+          </div>
+          <JumpToLatest show={!atBottom} lang={lang} onClick={() => toBottom()} />
         </div>
         <form className="rmg-drawer-compose" onSubmit={submit}>
           <input
@@ -3871,6 +3873,80 @@ function MessageGroups({ messages, nameOf, myName, lang, onEdit, onDelete }: {
   );
 }
 
+/** '맨 아래'로 쳐 주는 여유 — 한 줄 남짓. 1px 떨어졌다고 손잡이를 세우지 않는다. */
+const NEAR_BOTTOM = 48;
+
+/** 맨 아래에 붙어 있기 — 그리고 떨어졌을 때 돌아갈 길 하나.
+ *
+ *  대화는 마지막 말이 보여야 한다. 그래서 새 말이 오면 따라 내려간다 — 다만
+ *  사람이 위를 읽고 있을 때는 그러지 않는다. 읽던 자리를 낚아채는 것만큼
+ *  대화를 끊는 일이 없다. 대신 '최근으로' 한 점을 띄우고, 누를 때까지 기다린다.
+ *  내가 방금 한 말은 예외다 — 보내 놓고 보이지 않으면 보낸 것 같지 않다.
+ *
+ *  방을 옮기면 흐르지 않고 곧장 맨 아래에 선다 — 열자마자 미끄러지는 화면은 산만하다. */
+function useStickToBottom(messages: ChatMessage[], roomKey?: string) {
+  const listRef = React.useRef<HTMLDivElement>(null);
+  const endRef = React.useRef<HTMLDivElement>(null);
+  const [atBottom, setAtBottom] = React.useState(true);
+
+  const toBottom = React.useCallback((smooth = true) => {
+    const el = listRef.current;
+    if (!el) return;
+    // 모션을 줄여 달라고 한 사람에게는 미끄러뜨리지 않는다.
+    const calm = typeof window !== "undefined" && !!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ top: el.scrollHeight, behavior: smooth && !calm ? "smooth" : "auto" });
+    setAtBottom(true);
+  }, []);
+
+  // 붙어 있는가 — 스크롤마다 상태를 건드리지 않고 한 프레임에 한 번만 읽는다.
+  React.useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    let raf = 0;
+    const read = () => { raf = 0; setAtBottom(el.scrollHeight - el.scrollTop - el.clientHeight <= NEAR_BOTTOM); };
+    const onScroll = () => { if (!raf) raf = requestAnimationFrame(read); };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    read();
+    return () => { el.removeEventListener("scroll", onScroll); if (raf) cancelAnimationFrame(raf); };
+  }, []);
+
+  // 방이 바뀌면(그리고 처음 열릴 때) 마지막 말 앞에 세운다.
+  React.useEffect(() => { toBottom(false); }, [roomKey, toBottom]);
+
+  // 새 말 — 붙어 있었거나, 내가 한 말이면 따라 내려간다.
+  const count = messages.length;
+  const lastMine = messages[count - 1]?.senderId === ME_ID;
+  const stuck = React.useRef(true);
+  stuck.current = atBottom;   // 아래 효과가 '붙었는지' 때문에 다시 돌지 않도록, 값은 이 길로만 흐른다
+  React.useEffect(() => {
+    if (!stuck.current && !lastMine) return;
+    endRef.current?.scrollIntoView({ block: "end" });
+    setAtBottom(true);
+  }, [count, lastMine]);
+
+  return { listRef, endRef, atBottom, toBottom };
+}
+
+/** 최근으로 — 위를 읽는 동안에만 대화 위에 낮게 떠 있는 한 점.
+ *  없앴다 다시 만들지 않고 자리에 둔 채 사라지게 한다 — 나타남과 사라짐이 같아야 조용하다. */
+function JumpToLatest({ show, lang, onClick }: { show: boolean; lang: Lang; onClick: () => void }) {
+  const label = lang === "en" ? "Jump to latest" : "최근 대화로";
+  return (
+    <button
+      type="button"
+      className="rmg-tolast"
+      data-show={show}
+      aria-hidden={!show}
+      tabIndex={show ? 0 : -1}
+      onClick={onClick}
+      aria-label={label}
+      title={label}
+    >
+      <ChevronDown className="rmg-tolast-ic" aria-hidden />
+    </button>
+  );
+}
+
 /** 대화 한 타래 — 1:1 방과 일정 방이 똑같은 모양을 쓴다.
  *  방이 달라도 '말이 쌓이는 방식'까지 달라지면 두 개의 다른 앱처럼 보인다. */
 function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend, onEditMessage, onDeleteMessage, context }: {
@@ -3890,10 +3966,10 @@ function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend
   const en = lang === "en";
   const [draft, setDraft] = React.useState("");
   const inputRef = React.useRef<HTMLInputElement>(null);
-  const endRef = React.useRef<HTMLDivElement>(null);
+  // 이 타래가 어느 방인지는 말이 알고 있다 — 방이 바뀌면 스크롤도 새로 시작한다.
+  const { listRef, endRef, atBottom, toBottom } = useStickToBottom(messages, messages[0]?.roomId);
 
   React.useEffect(() => { if (focus) inputRef.current?.focus(); }, [focus]);
-  React.useEffect(() => { endRef.current?.scrollIntoView({ block: "end" }); }, [messages.length]);
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -3905,13 +3981,16 @@ function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend
 
   return (
     <>
-      <div className="rmg-drawer-msgs">
-        {messages.length === 0 ? (
-          <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
-        ) : (
-          <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
-        )}
-        <div ref={endRef} />
+      <div className="rmg-msgwrap">
+        <div className="rmg-drawer-msgs" ref={listRef}>
+          {messages.length === 0 ? (
+            <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
+          ) : (
+            <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
+          )}
+          <div ref={endRef} />
+        </div>
+        <JumpToLatest show={!atBottom} lang={lang} onClick={() => toBottom()} />
       </div>
       {context}
       <form className="rmg-drawer-compose" onSubmit={submit}>
@@ -6459,7 +6538,8 @@ html { font-size: 17px; }
   .rmg-evgrip { display: none; }
   .rmg-evtl { padding-left: 0; border-top: 1px solid var(--hair); padding-top: var(--sp-2); margin-top: var(--sp-2); }
   .rmg-evsplit[data-split="true"] .rmg-drawer-chat { padding-right: 0; min-height: 220px; }
-  .rmg-evsplit[data-split="true"] .rmg-drawer-msgs { max-height: 44vh; }
+  .rmg-evsplit[data-split="true"] .rmg-drawer-msgs,
+  .rmg-evsplit[data-split="true"] .rmg-msgwrap { max-height: 44vh; }
 }
 /* 위아래로 쌓인 뒤에는 높이의 틀도 풀어야 한다.
    이 칸은 화면 높이에 묶여 있다(대화 옆에 하루를 세워 두고 각자 자기 안에서만 스크롤하게 하려고).
@@ -6619,6 +6699,20 @@ html { font-size: 17px; }
 .rmg-drawer-chat { flex: 1; min-height: 0; display: flex; flex-direction: column; padding-top: var(--sp-2); border-top: 1px solid var(--hair); }
 .rmg-drawer-msgs { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: var(--sp-2); padding: var(--sp-1) 0 var(--sp-2); }
 .rmg-drawer-empty { margin: auto 0; font-size: 0.86rem; font-weight: 300; color: var(--faint); text-align: center; }
+/* 말 칸과 그 위에 뜨는 한 점 — 점이 말을 따라 스크롤되면 안 되므로 한 겹 감싼다. */
+.rmg-msgwrap { position: relative; flex: 1; min-height: 0; display: flex; flex-direction: column; }
+/* 최근으로 — 위를 읽는 동안에만. 대화 한가운데 아래, 마지막 줄을 살짝 덮는 높이에. */
+.rmg-tolast { position: absolute; left: 50%; bottom: 6px; z-index: 3;
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%;
+  border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 94%, transparent);
+  color: var(--muted); cursor: pointer; box-shadow: 0 6px 16px -12px rgba(0,0,0,0.5);
+  transform: translateX(-50%); opacity: 1;
+  transition: opacity 180ms ease-out, transform 180ms cubic-bezier(0.22,1,0.36,1), color 170ms ease-out, border-color 170ms ease-out; }
+.rmg-tolast[data-show="false"] { opacity: 0; pointer-events: none; transform: translateX(-50%) translateY(5px); }
+.rmg-tolast:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); transform: translateX(-50%) translateY(-1px); }
+.rmg-tolast:active { transform: translateX(-50%) scale(0.97); }
+.rmg-tolast-ic { width: 15px; height: 15px; stroke-width: 1.6; }
+@media (prefers-reduced-motion: reduce) { .rmg-tolast { transition: opacity 180ms ease-out; } }
 /* 말풍선을 쓰지 않는다 — 이름 · 말 · 시각 세 줄이 조용히 쌓인다. */
 /* ── 말 한 뭉치 ──
    말풍선을 만들지 않는다. 종이 위에 적힌 대화처럼, 이름 한 줄 뒤에 그 사람의 말이 이어진다.
