@@ -691,3 +691,73 @@ Dashboard → Logs → Auth
 2. 되물음은 **캡처 바에만** 붙었다. 일정 방의 대화(`sendEventMessageAndMaybePropose`)는 여전히
    시각이 없으면 조용히 아무 일도 하지 않는다 — 거기서도 물어야 하는지는 아직 판단하지 않았다.
 3. `ask` 는 저장되지 않는다. 새로고침하면 기다리던 질문이 사라진다(그때는 원래 말을 다시 해야 한다).
+
+---
+
+## 15. 제출 전 전수 점검 — 그리고 급한 줄 알았던 것 (2026-08-13)
+
+### 15.1 배포는 손댈 것이 없었다
+
+`docs/16_TASK.md` 에 "Render/Vercel 의 `DATABASE_URL` 을 갈아끼워야 한다" 고 적혀 있었다.
+그것부터 하려다 확인해 보니 **할 일이 없었다.**
+
+| | 확인한 것 |
+|---|---|
+| Vercel | 배포된 번들을 뜯어 보니 이미 새 Supabase 가 구워져 있었다 — URL 과 anon key 의 `ref` 둘 다 `mbamzjivpdzjnvzcbamp` |
+| Render | `DATABASE_URL` 은 옛 서울 DB 를 본다. `/health/db` 가 `{"status":"ok","db":"down"}` 이다 |
+
+**그런데도 앱은 멀쩡하다.** 그 이유가 이 절의 핵심이다.
+
+프론트가 백엔드에 부르는 것은 `/api/chat` 과 `/api/summary` 둘뿐이고(`frontend/src/lib/api.ts`),
+이 둘은 DB 를 건드리지 않는 순수 파싱이다. DB 를 쓰는 `items`·`users`·`schedules`·`todos`·
+`memos`·`meetings` 는 저장이 Supabase 직행으로 옮겨간 뒤(§8.4·§10.4) **아무도 부르지 않는다.**
+
+그래서 `db: down` 은 고장이 아니라 **죽은 경로의 표시등**이다. `§12` 의 남은 일 1번
+("`backend/.env` 의 `DATABASE_URL` 이 플레이스홀더라 `/health/db` 가 실패한다")도 이제 낡았다 —
+로컬 `.env` 는 새 Supabase 세션 풀러로 맞춰져 있고, 붙는 것을 직접 확인했다.
+
+**남은 것은 값 교체가 아니라 갈림길이다:** 그 라우터 6개와 alembic 5테이블을 걷어낼 것인가,
+새 DB 로 살릴 것인가. 살린다면 새 Supabase 에는 `alembic_version` 조차 없으므로
+(public 에는 프론트 스키마 14개 테이블뿐) `alembic upgrade head` 를 한 번 돌려야 한다.
+
+> **낡은 문서는 없는 일을 만든다.** 오늘 반나절이 그렇게 쓰였다. 저장 경로가 바뀔 때
+> 그 사실이 §8.4 에는 적혔지만 `16_TASK.md` 의 배포 항목까지는 따라가지 못했다.
+
+### 15.2 일정 방의 참여자 — 접힌 줄을 걷었다
+
+참여자가 접힌 한 줄 뒤에 있어서, 누가 왔는지 보려면 한 번 더 눌러야 했고 누르면 목록이
+대화를 밀어냈다. 이니셜을 늘 보이게 눕히고, 초대·제외는 눌렀을 때만 연다.
+
+- **겹치지 않는다.** 얼굴 더미(face pile)처럼 원을 겹쳐 봤더니 뭉개진 얼룩이었다. 겹친 원을
+  갈라 주는 건 1px 테두리뿐인데 이 팔레트는 `--hair` 가 `--surface` 와 거의 같다
+  (다크 `#262019`:`#1B1813`). 대비로 구획하는 관용구라 이 언어(§6 여백으로 구획)와 어긋난다.
+- **초대도 주최자만.** `0001` 의 `participants_insert` 가 `is_event_owner(event_id) or
+  user_id = auth.uid()` 다. 예전엔 `추가` 를 모두에게 보여 눌러도 조용히 거절당했다.
+
+### 15.3 셋업 — clone 만으로는 뜨지 않는다
+
+다른 PC 에서 받았을 때 안 되는 것이 있었다. 빠뜨린 커밋은 없었다(추적 149개 전부 커밋됨).
+없는 것은 일부러 뺀 것들인데, **그 사실이 어디에도 적혀 있지 않았다.**
+
+가장 위험한 자리는 README 의 `copy .env.example .env.local` 한 줄이었다 — Supabase 두 줄
+얘기가 없다. 그게 비면 앱은 **에러 없이** 저장도 로그인도 없는 로컬 전용으로 돈다.
+화면이 멀쩡해 보여서 원인을 찾기 가장 어려운 실패다.
+
+`.gitignore` 는 꼬리가 깨져 있었다 — UTF-8 파일에 UTF-16 바이트가 덧붙어(`* \0 . \0 d \0 b \0`)
+`*.db` 규칙이 실제로는 작동하지 않았다. PowerShell 의 `>>`·`Out-File` 흔적이다.
+
+### 15.4 제출 전 전수 확인
+
+| | 결과 |
+|---|---|
+| `next build` (프로덕션) | ✅ 린트·타입 검증 포함 통과, 5개 라우트 전부 정적 |
+| 프론트 테스트 | ✅ 29 passed |
+| 백엔드 테스트 | ✅ 27 passed |
+| 배포 프론트 `/` · `/workspace` | ✅ 200 |
+| 배포 백엔드 `/health` | ✅ `{"status":"ok","env":"production"}` |
+| 배포본에 이번 변경 반영 | ✅ 번들에서 `rmg-evwho` 확인 |
+| 배포 `/api/chat` | ✅ "meeting with the professor tomorrow 3pm" → meeting `2026-08-14T15:00:00+09:00`, participants `["professor"]` |
+| 배포 `/api/chat` 되묻기(§14) | ✅ "lets meet sometime" → items 0, `ask` "When would you like to meet?" |
+| 배포 `/api/summary` | ✅ `decided` / `next` 로 갈라 돌아옴 |
+
+`/health/db` 만 `down` 이고, 그 이유는 15.1 에 적었다 — 지금 앱이 쓰는 경로가 아니다.
