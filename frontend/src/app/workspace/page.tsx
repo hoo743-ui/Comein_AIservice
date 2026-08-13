@@ -1998,7 +1998,18 @@ function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
       onSubmit={submit}
       className={`rmg-ask ${focused ? "focus" : ""} ${tucked ? "tuck" : ""}`}
       data-tour="capture"
-      onClick={() => { if (tucked) inputRef.current?.focus(); }}
+      /* 알약 어디를 눌러도 입력이 열린다.
+         바는 62px 인데 안쪽 input 은 32px 이라, 위아래 14px 씩은 눌러도 아무 일도
+         일어나지 않았다 — 커서로는 가운데를 정확히 겨누지만 손끝에는 그 띠가 넓다.
+         예전에는 접힌 알약일 때만 열어 줬다. 펼쳐져 있을 때가 오히려 더 자주 눌린다.
+         padding 을 input 으로 옮기는 방법도 있지만, 그러면 접힌 알약의 높이가
+         남은 자식에 끌려 함께 무너진다. 여기서는 손이 닿은 곳만 옮겨 준다. */
+      onPointerDown={(e) => {
+        // 보내기 버튼과 입력 자신은 제 일을 하게 둔다.
+        if ((e.target as HTMLElement).closest("button, input, textarea")) return;
+        e.preventDefault();   // 기본 동작이 포커스를 도로 가져가지 않게
+        inputRef.current?.focus();
+      }}
     >
       {/* 접혀 있어도 문은 남긴다 — ⌘K 만 떠 있으면 그 알약이 무엇인지 알 길이 없다.
           문은 이 화면 어디서나 'AI 에게 말하는 자리'를 뜻하므로, 접힌 상태의 이름표가 된다. */}
@@ -5872,7 +5883,11 @@ html { font-size: 17px; }
   .rmg-ask-kbd { display: none; }
   .rmg-ask-tap { display: inline; }
 }
-.rmg-ask-send { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; background: var(--accent); color: #141210; cursor: pointer; flex-shrink: 0; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1); }
+/* 보내는 손잡이. 32px 는 커서에게는 넉넉하지만 손끝(~44)에는 모자란다.
+   그렇다고 알약 안에서 이것만 키우면 균형이 깨진다 — 보이는 크기는 그대로 두고
+   닿는 과녁만 넓힌다(32 + 6*2 = 44). 눈에는 안 보이고 손에만 있다. */
+.rmg-ask-send { position: relative; display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; background: var(--accent); color: #141210; cursor: pointer; flex-shrink: 0; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1); }
+.rmg-ask-send::after { content: ""; position: absolute; inset: -6px; border-radius: 14px; }
 .rmg-ask-send:hover { transform: translateY(-1px); }
 .rmg-ask-send:active { transform: scale(0.95); }
 .rmg-ask-send:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 3px; }
