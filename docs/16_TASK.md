@@ -64,10 +64,27 @@
 
 ## 배포 쪽 (코드 밖)
 
-- **Render / Vercel 환경변수의 `DATABASE_URL`** — Supabase 프로젝트를 새로 판 뒤
-  로컬 `backend/.env` 는 맞췄지만(.env 는 git 에 없다) 배포 쪽은 그대로다.
-  ref `mbamzjivpdzjnvzcbamp` · 리전 `ap-northeast-1`(도쿄) · 풀러 접두사 `aws-0`.
-  예전 값은 서울(`aws-1-ap-northeast-2`) 이었으므로 리전까지 바뀐 점에 주의.
+- **Vercel — 할 것 없음 (2026-08-13 확인).** 배포된 번들을 뜯어 보니 이미 새 값이
+  구워져 있다: `NEXT_PUBLIC_SUPABASE_URL` = `mbamzjivpdzjnvzcbamp.supabase.co`,
+  anon key 의 `ref` 도 같은 프로젝트, `NEXT_PUBLIC_API_BASE` 는 Render 주소 그대로.
+
+- **Render 의 `DATABASE_URL` 은 급하지 않다 (2026-08-13 확인).** 옛 서울 DB 를 보고
+  있어 `/health/db` 가 `{"status":"ok","db":"down"}` 이지만 **앱은 멀쩡히 돈다.**
+
+  프론트가 백엔드에 부르는 것은 `/api/chat` 과 `/api/summary` 둘뿐이고
+  (`frontend/src/lib/api.ts`), 이 둘은 DB 를 건드리지 않는 순수 AI 파싱이다.
+  배포본에 직접 쏴서 확인했다 — 날짜·KST·참여자 추출까지 정상.
+
+  DB 를 쓰는 `items`·`users`·`schedules`·`todos`·`memos`·`meetings` 는 저장이
+  Supabase 직행으로 옮겨간 뒤 **아무도 부르지 않는 옛 경로**다. 이 문서의 예전
+  항목은 저장이 아직 `/api/items` 를 지나던 시절에 쓰인 것이라 낡았다.
+
+  **정할 것:** 그 라우터들을 걷어낼 것인가, 아니면 새 DB 로 살려 둘 것인가.
+  살린다면 Render 에 새 값을 넣고(ref `mbamzjivpdzjnvzcbamp` · 도쿄 ·
+  풀러 `aws-0-ap-northeast-1` — 예전 서울 `aws-1-ap-northeast-2` 에서 리전까지
+  바뀌었다), **새 Supabase 에는 alembic 스키마가 없으므로**(`alembic_version`
+  테이블 자체가 없고 public 에는 프론트 쪽 14개 테이블뿐) `alembic upgrade head`
+  를 한 번 돌려야 한다. 걷어낸다면 `/health/db` 도 함께 정리한다.
 
 - **옛 시험 데이터** — `claudetest`, `claudetest2` 계정과 `실시간 확인 92902`,
   `저장확인 60704`, `수정테스트 0538` 같은 메시지가 남아 있다. 지울지 정하면 된다.
