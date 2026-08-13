@@ -10,7 +10,7 @@ import {
 
 import { useWorkspace, dayKeyOf, TEXT_SCALE_MAX, TEXT_SCALE_MIN, type Settings } from "@/lib/store";
 import { MODE_CONFIG, USER_MODES, categoryLabel, classifyEvent, normalizeMode, useCurrentMode, type EventCategory } from "@/lib/mode";
-import { analyzeConversation, analyzeMessage, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
+import { analyzeConversation, analyzeMessage, localIsoNow, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
 import { fmtTime, fmtDate } from "@/lib/format";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
@@ -53,8 +53,11 @@ const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더
  *  인디케이터 위치를 px 로 직접 계산하는 이유: transform 값이 var() 안에서만 바뀌면
  *  브라우저가 재계산을 건너뛰어 표식이 이전 칸에 남는다. */
 const NAV_ROW = 40;
+/** 손끝 기준의 한 줄. 40 은 커서에게는 넉넉하지만 손끝(~44)에는 한 뼘 모자란다.
+ *  레일은 이 화면에서 유일한 길이라, 여기서 빗나가면 다른 데로 갈 방법이 없다.
+ *  폭도 함께 자라야 한다 — 높이만 키우면 44×39 짜리 납작한 과녁이 된다(CSS 쪽 §레일 참고). */
+const NAV_ROW_TOUCH = 44;
 const NAV_GAP = 4;
-const NAV_STEP = NAV_ROW + NAV_GAP;
 const pad = (n: number | string) => String(n).padStart(2, "0");
 
 /** 백엔드(`/api/chat`)의 item 하나 → 화면이 쓰는 Parsed.
@@ -228,7 +231,9 @@ function L(lang: Lang) {
       }
       return fmtDate(d);
     },
-    dayNoEvent: en ? "Nothing today — add one with ⌘K." : "오늘은 비어 있습니다 — ⌘K로 추가해보세요.",
+    // 빈 날에 건네는 말은 기기를 가리지 않아야 한다 — 누를 키가 없는 손에게 키를 안내하지 않는다.
+    // 캡처 바는 펼쳐졌든 접혔든 늘 아래에 있으므로, 자리로 가리키는 편이 언제나 맞다.
+    dayNoEvent: en ? "Nothing today — add one below." : "오늘은 비어 있습니다 — 아래에서 하나 더해보세요.",
     asLineNext: en ? "One moment to prepare today." : "오늘 준비해 둘 순간이 하나 있어요.",
     asLineQuiet: (w: number) => (en ? `Someone's been quiet for ${w} week${w > 1 ? "s" : ""}.` : `${w}주째 조용한 분이 있어요.`),
     asLineLight: en ? "Today feels lighter than yesterday." : "오늘은 어제보다 가벼워요.",
@@ -327,7 +332,13 @@ export default function Reimagine() {
   // AI 가 되묻는 한 줄 — 확신이 없으면 멋대로 만들지 않고 물어본다.
   // text = 알아챈 사실 · q = 권하는 한 마디 · cta = 그 한 번의 행동 · seed = 그 행동이 들고 갈 것.
   // 문구를 '경고'가 아니라 '이해했다는 말'로 세운다 — 오류가 난 것이 아니라 AI 가 읽은 것이다.
-  const [ask, setAsk] = React.useState<{ text: string; q?: string; cta: string; dest?: View; seed?: string } | null>(null);
+  // cta 가 없는 되물음도 있다: AI 가 시각을 물어 온 경우엔 누를 것이 아니라 답할 것이라,
+  // 버튼 없이 한 줄만 서고 사용자는 캡처 바에 그대로 답한다.
+  const [ask, setAsk] = React.useState<{ text: string; q?: string; cta?: string; dest?: View; seed?: string } | null>(null);
+  // 되물은 질문과 그때의 원래 말. 다음 한 줄과 함께 서버로 돌아가 답으로 이어진다 —
+  // 이게 없으면 사용자가 "3시" 라고만 답했을 때 그 한 마디는 아무것도 아니게 된다.
+  // ref 인 이유: 답을 보내는 시점에만 읽고, 이 값 때문에 화면이 다시 그려질 이유는 없다.
+  const pendingAsk = React.useRef<{ message: string; ask: string } | null>(null);
   const [receipts, setReceipts] = React.useState<Receipt[]>([]);
   // 방금 정리한 한 건 — 목록으로 쌓지 않고 잠깐 스쳤다 사라진다(자취는 목적지 뷰에 남는다).
   // events: 이 한 줄이 실제로 세운 일정들. pending: 아직 사람의 확정을 기다리는가.
@@ -553,16 +564,42 @@ export default function Reimagine() {
     setFlash(null);
     setAiOffline(false); // 이번 한 줄은 아직 실패하지 않았다 — 지난 실패 표시를 걷는다
 
+    // 답을 기다리던 질문이 있었다면 이번 한 줄이 그 답이다 — 물어본 쪽이 함께 가야 말이 된다.
+    const pending = pendingAsk.current;
+    pendingAsk.current = null;
+
     try {
       const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: t }),
+        body: JSON.stringify({
+          message: t,
+          // 화면만 아는 것들. 서버 시계는 UTC 로 돌고 사용자는 제 시간대로 말한다.
+          // 지금은 벽시계 + 오프셋으로 적는다(toISOString 이 아니다 — localIsoNow 의 주석 참고).
+          context: {
+            now: localIsoNow(),
+            tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            ...(pending ? { pending } : {}),
+          },
+        }),
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
 
       const data = await res.json();
       const items: unknown[] = Array.isArray(data.items) ? data.items : [];
+      const asked = typeof data.ask === "string" ? data.ask.trim() : "";
+
+      // 되물었다 — 시각 없이 일정을 지어내지 않았다는 뜻이다.
+      // 여기서 지역 규칙으로라도 정리해 버리면(아래 폴백처럼) 방금 묻지 않기로 한 것을
+      // 그 자리에서 지어내는 셈이 된다. 아무것도 세우지 않고, 답을 기다린다.
+      if (asked && !items.length) {
+        // 누를 것이 아니라 답할 것이라 cta 를 달지 않는다 — 사용자는 캡처 바에 그대로 답한다.
+        setAsk({ text: asked });
+        pendingAsk.current = { message: t, ask: asked };
+        return;
+      }
+      // 여기까지 왔으면 되물음이 아니다 — 기다리던 질문이 있었다면 답이 된 것이므로 내린다.
+      setAsk(null);
 
       // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
       // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
@@ -1483,12 +1520,17 @@ export default function Reimagine() {
   // 정작 사람 탭에서 필요한 건 목록과 대화가 나눠 쓸 가로 폭이다.
   const showCtxRail = shownView === "today" && panel !== "settings";
 
+  // 레일 한 줄의 높이는 기기가 정한다. 인디케이터의 이동 거리도 여기서만 나온다 —
+  // 두 숫자가 다른 곳에서 각자 만들어지면 표식이 칸과 어긋나 앉는다.
+  const navRow = useCoarsePointer() ? NAV_ROW_TOUCH : NAV_ROW;
+  const navStep = navRow + NAV_GAP;
+
   // 첫 진입 → opening 으로 리디렉트 중엔 빈 배경만 (깜빡임 없이 넘어간다).
   // ★ 이 조기 반환은 반드시 모든 훅 아래에 둔다 — 위에 두면 렌더마다 훅 개수가 달라져
   //   React 가 "Rendered fewer hooks than expected"(#300) 로 화면을 통째로 떨어뜨린다.
   if (toOpening) {
     return (
-      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
+      <div className="rmg" style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${navRow}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
         <style>{CSS}</style>
       </div>
     );
@@ -1500,7 +1542,7 @@ export default function Reimagine() {
   const navIndPos = navActive >= 0 ? navActive : navViewIndex;
 
   return (
-    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""} view-${shownView}`} style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${NAV_ROW}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
+    <div className={`rmg ${railOpen || panel ? "rail-open" : ""} ${railIntro ? "rail-intro" : ""} ${panel ? "panel-open" : ""} view-${shownView}`} style={{ ["--rmg-fs" as string]: String(textScale), ["--nav-row" as string]: `${navRow}px`, ["--nav-gap" as string]: `${NAV_GAP}px` } as React.CSSProperties}>
       <style>{CSS}</style>
       {arriving && <div className="rmg-arrive" aria-hidden />}
 
@@ -1535,7 +1577,7 @@ export default function Reimagine() {
               className="rmg-rail-ind"
               aria-hidden
               data-hidden={navActive < 0}
-              style={{ transform: `translateY(${navIndPos * NAV_STEP}px)` }}
+              style={{ transform: `translateY(${navIndPos * navStep}px)` }}
             />
             {NAV.map((n, i) => {
               const on = panel === null && view === n.key;
@@ -1769,7 +1811,9 @@ export default function Reimagine() {
               <span className="rmg-note-t">{ask.text}</span>
               {ask.q && <span className="rmg-note-q">{ask.q}</span>}
             </span>
-            {ask.dest && (
+            {/* 갈 곳과 부를 말이 둘 다 있을 때만 버튼이 선다 — AI 가 시각을 물어 온 되물음에는
+                누를 것이 없다(답은 캡처 바에 적는다). 빈 버튼이 서 있으면 그게 더 큰 질문이 된다. */}
+            {ask.dest && ask.cta && (
               <button
                 type="button"
                 className="rmg-note-act"
@@ -1779,12 +1823,14 @@ export default function Reimagine() {
                   if (ask.seed) setPeopleQuery(ask.seed);
                   setView(ask.dest!);
                   setAsk(null);
+                  pendingAsk.current = null;
                 }}
               >
                 {ask.cta}
               </button>
             )}
-            <button type="button" className="rmg-note-x" onClick={() => setAsk(null)} aria-label={lang === "en" ? "Dismiss" : "닫기"}>
+            {/* 닫으면 질문도 잊는다 — 남겨 두면 한참 뒤의 엉뚱한 한 줄이 이 질문의 답으로 붙는다. */}
+            <button type="button" className="rmg-note-x" onClick={() => { setAsk(null); pendingAsk.current = null; }} aria-label={lang === "en" ? "Dismiss" : "닫기"}>
               <X className="rmg-note-xic" />
             </button>
           </div>
@@ -1849,7 +1895,10 @@ export default function Reimagine() {
             lang={lang}
             organizing={organizing}
             onSubmit={capture}
-            tuck={shownView === "people" && !!(personId || openEventId)}
+            /* 아래에 이미 제 입력칸을 가진 화면 위에서는 물러난다.
+               새 자리 만들기 폼도 그중 하나다 — 물러나지 않으면 캡처 바가 '만들기' 버튼
+               한복판을 덮어 클릭을 가로챈다(실제로 눌리지 않았다). */
+            tuck={shownView === "people" && !!(personId || openEventId || newRoom)}
           />
         )}
 
@@ -1889,6 +1938,20 @@ const HINTS = [
 ];
 
 /** Ask Comein — 항상 보이는 주 입력. 문(브랜드) + 명확한 필드 + 회전 예시. 1초 안에 '여기서 시작'임을 안다. */
+/** 키캡은 기기마다 다른 말이다 — 맥은 ⌘, 그 밖은 Ctrl. 우리 손잡이는 처음부터 둘 다 받는데
+    (metaKey || ctrlKey) 그림에는 ⌘ 만 그려 두고 있었다. 서버는 어느 기기인지 모르므로
+    첫 그림은 ⌘ 로 두고 붙은 뒤에 고친다(그래야 hydration 이 어긋나지 않는다).
+    물리 키보드가 아예 없는 기기는 글자를 바꿀 일이 아니라 감출 일이라 CSS 가 맡는다. */
+function useKeyHint() {
+  const [hint, setHint] = React.useState("⌘K");
+  React.useEffect(() => {
+    const ua = navigator.userAgent || "";
+    const plat = (navigator as Navigator & { userAgentData?: { platform?: string } }).userAgentData?.platform || navigator.platform || "";
+    if (!/Mac|iPhone|iPad|iPod/.test(plat + ua)) setHint("Ctrl K");
+  }, []);
+  return hint;
+}
+
 function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
   view: View; lang: Lang; organizing: boolean; onSubmit: (v: string) => void;
   /** 접힌 채로 물러나 있을 상황인가(대화가 열려 있어 입력칸이 겹칠 때 등). */
@@ -1899,6 +1962,7 @@ function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
   const [draft, setDraft] = React.useState("");
   const [focused, setFocused] = React.useState(false);
   const [hi, setHi] = React.useState(0);
+  const kbd = useKeyHint();
   const inputRef = React.useRef<HTMLInputElement>(null);
 
   React.useEffect(() => {
@@ -1952,7 +2016,12 @@ function DoorInvoke({ view, lang, organizing, onSubmit, tuck }: {
       {draft.trim() ? (
         <button type="submit" className="rmg-ask-send" aria-label={lang === "en" ? "Send" : "보내기"}><ArrowUp className="rmg-railicon" /></button>
       ) : (
-        <span className="rmg-ask-kbd">⌘K</span>
+        <>
+          <span className="rmg-ask-kbd">{kbd}</span>
+          {/* 손가락만 있는 기기에서는 키캡이 감춰진다. 접힌 알약은 그러면 빈 채로 떠 있게 되므로
+              — 접혔을 때만 — 무엇을 여는지 낱말로 남긴다(문 표식은 접히면 걸지 않는다, 위 참고). */}
+          {tucked && <span className="rmg-ask-tap">{lang === "en" ? "Ask" : "입력"}</span>}
+        </>
       )}
     </form>
   );
@@ -2128,7 +2197,8 @@ function MonthCalendar({ base, events, selected, onSelect, big = false, lang = "
           <button type="button" className="rmg-mc-arrow" onClick={() => shift(-1)} aria-label={en ? "Previous month" : "이전 달"}>‹</button>
           <button type="button" className="rmg-mc-arrow" onClick={() => shift(1)} aria-label={en ? "Next month" : "다음 달"}>›</button>
           {/* ⌘K 라고 적어 두지 않는다 — 그 단축키는 캡처바의 것이고, 여기서 누르면
-              두 곳이 함께 반응한다. 이 자리는 눌러서 여는 문 하나로 충분하다. */}
+              두 곳이 함께 반응한다. 이 자리는 눌러서 여는 문 하나로 충분하다.
+              덤으로, 낱말은 키보드가 없는 기기에서도 그대로 읽힌다(키캡은 그렇지 않아 감춘다). */}
           {onSearch && (
             <button type="button" className="rmg-mc-search" onClick={onSearch} aria-label={en ? "Find a date" : "날짜 찾기"}>
               <Search className="rmg-mc-search-ic" />
@@ -2978,9 +3048,25 @@ const TL_KEY = "comein:tlWidth", TL_OPEN_KEY = "comein:tlOpen";
 const clampTl = (w: number) => Math.max(TL_MIN, Math.min(TL_MAX, Math.round(w)));
 
 const SLOT_MIN = 30;          // 한 칸 = 30분
-const SLOT_H = 15;            // 한 칸의 높이(px)
+const SLOT_H = 15;            // 한 칸의 높이(px) — 마우스 기준
+// 손가락 기준의 한 칸. 15px 은 커서 끝으로는 정확하지만 손끝(~40px)으로는 옆 칸이 눌린다.
+// 30분을 고르려다 30분 뒤가 잡히면, 그건 못 고르는 것과 같다. 하루가 길어져도 이 칸은 스크롤한다.
+const SLOT_H_TOUCH = 28;
 const DAY_FROM = 7;           // 07:00 부터
 const DAY_TO = 23;            // 23:00 까지
+
+/** 손가락으로 쓰는 기기인가. 서버는 모르므로 붙은 뒤에 답한다(첫 그림은 마우스 기준). */
+function useCoarsePointer() {
+  const [coarse, setCoarse] = React.useState(false);
+  React.useEffect(() => {
+    const mq = window.matchMedia("(hover: none) and (pointer: coarse)");
+    const sync = () => setCoarse(mq.matches);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, []);
+  return coarse;
+}
 
 function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, participants, lang, onPropose, proposing }: {
   event: Schedule;
@@ -2998,8 +3084,11 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   const [picked, setPicked] = React.useState<Date | null>(null);
   React.useEffect(() => { setPicked(null); }, [day]);
 
+  // 칸 높이는 기기가 정한다 — 아래 좌표 계산은 전부 이 하나를 따른다.
+  const slotH = useCoarsePointer() ? SLOT_H_TOUCH : SLOT_H;
+
   const slots = ((DAY_TO - DAY_FROM) * 60) / SLOT_MIN;
-  const top = (d: Date) => ((d.getHours() * 60 + d.getMinutes() - DAY_FROM * 60) / SLOT_MIN) * SLOT_H;
+  const top = (d: Date) => ((d.getHours() * 60 + d.getMinutes() - DAY_FROM * 60) / SLOT_MIN) * slotH;
 
   // 이 날에 걸치는 내 일정만 — 하루 밖은 잘라 그린다(없는 길이를 그리지 않는다).
   const dayStart = new Date(day); dayStart.setHours(DAY_FROM, 0, 0, 0);
@@ -3051,10 +3140,10 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
       </p>
 
       <div className="rmg-tl-scroll">
-      <div className="rmg-tl-grid" style={{ height: slots * SLOT_H }}>
+      <div className="rmg-tl-grid" style={{ height: slots * slotH }}>
         {/* 시간 눈금 */}
         {Array.from({ length: DAY_TO - DAY_FROM + 1 }, (_, i) => (
-          <div key={i} className="rmg-tl-hour" style={{ top: (i * 60 / SLOT_MIN) * SLOT_H }}>
+          <div key={i} className="rmg-tl-hour" style={{ top: (i * 60 / SLOT_MIN) * slotH }}>
             <span className="rmg-tl-hourl">{String(DAY_FROM + i).padStart(2, "0")}</span>
           </div>
         ))}
@@ -3071,7 +3160,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
                 key={i}
                 type="button"
                 className={`rmg-tl-slot ${on ? "on" : ""}`}
-                style={{ top: i * SLOT_H, height: SLOT_H, ["--fill" as string]: ratio == null ? "0" : String(ratio) }}
+                style={{ top: i * slotH, height: slotH, ["--fill" as string]: ratio == null ? "0" : String(ratio) }}
                 onClick={() => setPicked(on ? null : at)}
                 title={
                   a
@@ -3089,7 +3178,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
           <div
             key={b.id}
             className={`rmg-tl-ev ${b.self ? "self" : ""}`}
-            style={{ top: top(b.from), height: Math.max(SLOT_H - 2, top(b.to) - top(b.from) - 2) }}
+            style={{ top: top(b.from), height: Math.max(slotH - 2, top(b.to) - top(b.from) - 2) }}
             title={`${b.title} · ${fmtTime(b.from)}`}
           >
             <span className="rmg-tl-evt">{b.title}</span>
@@ -3100,7 +3189,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
         {propStart && propEnd && propStart < dayEnd && propEnd > dayStart && (
           <div
             className="rmg-tl-prop"
-            style={{ top: top(propStart < dayStart ? dayStart : propStart), height: Math.max(SLOT_H, top(propEnd > dayEnd ? dayEnd : propEnd) - top(propStart < dayStart ? dayStart : propStart)) }}
+            style={{ top: top(propStart < dayStart ? dayStart : propStart), height: Math.max(slotH, top(propEnd > dayEnd ? dayEnd : propEnd) - top(propStart < dayStart ? dayStart : propStart)) }}
           >
             <span className="rmg-tl-propl">{en ? "Proposed" : "제안"} {fmtTime(propStart)}</span>
           </div>
@@ -4949,7 +5038,8 @@ const CSS = `
   /* 모서리도 토큰으로 — 컴포넌트마다 다른 반경을 쓰지 않는다. */
   --r-sm: 8px; --r: 12px; --r-lg: 16px;
   /* --nav-row / --nav-gap (레일 한 줄의 규격) 은 NAV_ROW·NAV_GAP 에서 주입된다.
-     인디케이터 이동 거리를 같은 숫자에서 파생시키기 위해 출처를 JS 한 곳으로 모았다. */
+     인디케이터 이동 거리를 같은 숫자에서 파생시키기 위해 출처를 JS 한 곳으로 모았다.
+     행 높이는 기기를 탄다(손가락이면 44) — 그래서 이 값만은 CSS 가 아니라 JS 가 정한다. */
   /* 화면 가장자리 여백 — 넓어질수록 함께 자라되 88px 에서 멈춘다. */
   --gutter: clamp(32px, 4vw, 88px);
   /* ── 하나의 작업면(Workspace) ──
@@ -5321,6 +5411,15 @@ html { font-size: 17px; }
 /* nav 항목의 활성 배경/바는 슬라이딩 인디케이터가 대신한다(중복 제거) */
 .rmg-rail-nav .rmg-railbtn.on { background: none; }
 .rmg-rail-nav .rmg-railbtn.on:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+/* 손끝 — 행 높이는 JS 가 44 로 올린다(--nav-row). 폭은 여기서 맞춘다.
+   접힌 레일은 64px 이고 그 안에서 버튼은 64 − 좌우 12 − 헤어라인 1 = 39px 이었다.
+   레일을 넓히지 않고 패딩을 3px 씩 안으로 옮긴다: 패널 12 → 9, 버튼 10 → 13.
+   두 값이 서로를 지우므로 아이콘과 글자는 제자리에 그대로 있고, 닿는 자리만 39 → 45 로 자란다
+   (레일이 펼쳐진 216px 상태에서도 같은 상쇄가 성립한다 — 라벨이 흔들리지 않는다). */
+@media (hover: none) and (pointer: coarse) {
+  .rmg-rail-panel { padding-left: 9px; padding-right: 9px; }
+  .rmg-railbtn, .rmg-rail-mark { padding-left: 13px; padding-right: 13px; }
+}
 /* foot(설정)은 nav 밖이지만 같은 언어를 쓴다 — 설정이 현재 워크스페이스보다 강조되면 안 된다. */
 .rmg-rail-foot .rmg-railbtn.on { background: color-mix(in srgb, var(--ink) 7%, transparent); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 5%, transparent); }
 .rmg-rail-foot .rmg-railbtn.on:hover { background: color-mix(in srgb, var(--ink) 9%, transparent); }
@@ -5643,9 +5742,13 @@ html { font-size: 17px; }
 @media (max-width: 1239px) { .rmg-pagebody[data-ctx="true"] { grid-template-columns: minmax(0, var(--reading)) minmax(220px, 1fr); } }
 @media (max-width: 880px) {
   .rmg-pagebody[data-ctx="true"], .rmg-pagebody[data-ctx="false"][data-aside="true"] { grid-template-columns: minmax(0, 1fr); }
-  /* 좁은 화면에서 목록과 대화를 나란히 두면 둘 다 못 읽는다 — 목록 → 대화로 넘어간다. */
-  .rmg-pagebody[data-view="people"][data-aside="true"],
-  .rmg-pagebody[data-view="people"][data-aside="false"] { grid-template-columns: minmax(0, 1fr); }
+  /* 좁은 화면에서 목록과 대화를 나란히 두면 둘 다 못 읽는다 — 목록 → 대화로 넘어간다.
+     :not() 은 장식이 아니라 저울추다. 미디어 쿼리는 명시도를 얹어 주지 않으므로,
+     위(§사람)의 규칙이 :not([data-settings]) 로 한 단계 무거워지면 이 규칙은 그대로 진다.
+     같은 무게로 맞춰야 뒤에 선 이 규칙이 이긴다 — 실제로 졌었고, 목록이 380px 를 고집해
+     좁은 폭에서 오른쪽이 잘렸다('새 그룹' 이 화면 밖으로 나가 눌리지 않았다). */
+  .rmg-pagebody[data-view="people"][data-aside="true"]:not([data-settings="true"]),
+  .rmg-pagebody[data-view="people"][data-aside="false"]:not([data-settings="true"]) { grid-template-columns: minmax(0, 1fr); }
   /* 한 칸짜리 화면 — 고른 뒤에는 상세만 남긴다. 위아래로 쌓아 두면 목록을 지나쳐야
      대화가 나오고, 스크롤 위치가 매번 어긋난다. 아직 아무도 안 골랐으면 목록만 둔다
      (빈 자리 안내는 이 폭에서 할 말이 없다). */
@@ -5749,6 +5852,15 @@ html { font-size: 17px; }
 .rmg-ask-input::placeholder { color: color-mix(in srgb, var(--ink) 38%, transparent); font-weight: 400; opacity: 1; }
 /* ⌘K — 보조 표식. 테두리를 걷고 글자 하나로만 남긴다(작은 상자가 하나 더 늘지 않게). */
 .rmg-ask-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: color-mix(in srgb, var(--ink) 28%, transparent); padding: 0 2px; flex-shrink: 0; }
+/* 손가락만 있는 기기 — 키캡은 지킬 수 없는 약속이다. 누를 키가 없다.
+   펼쳐진 바에서는 그냥 감춘다(placeholder 가 이미 무엇을 하는 자리인지 말한다).
+   접힌 알약에서는 낱말이 대신 선다 — 감추기만 하면 빈 알약이 떠 있게 된다.
+   (달력의 '찾기' 는 키캡이 아니라 낱말이라 여기서 건드리지 않는다 — 감추면 그냥 사라진다.) */
+.rmg-ask-tap { display: none; font-size: 12px; font-weight: 500; letter-spacing: -0.01em; color: var(--faint); flex-shrink: 0; white-space: nowrap; }
+@media (hover: none) and (pointer: coarse) {
+  .rmg-ask-kbd { display: none; }
+  .rmg-ask-tap { display: inline; }
+}
 .rmg-ask-send { display: grid; place-items: center; width: 32px; height: 32px; border: 0; border-radius: 10px; background: var(--accent); color: #141210; cursor: pointer; flex-shrink: 0; transition: transform 0.15s cubic-bezier(0.22,1,0.36,1); }
 .rmg-ask-send:hover { transform: translateY(-1px); }
 .rmg-ask-send:active { transform: scale(0.95); }
@@ -6357,6 +6469,8 @@ html { font-size: 17px; }
 .rmg-tl-nav { width: 22px; height: 22px; display: grid; place-items: center; border: 0; background: none;
   color: var(--faint); font-size: 1rem; cursor: pointer; border-radius: 6px; }
 .rmg-tl-nav:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+/* 날을 넘기는 화살표도 손끝을 받아야 한다 — 글자 크기는 그대로, 닿는 자리만 넓힌다. */
+@media (hover: none) and (pointer: coarse) { .rmg-tl-nav { width: 36px; height: 36px; } }
 .rmg-tl-note { margin: 0 0 2px; font-size: 0.7rem; font-weight: 300; color: var(--faint); line-height: 1.4; }
 
 /* 하루 — 눈금 위에 세 겹이 겹친다: 가능 농도 · 내 일정 · 제안 */

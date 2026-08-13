@@ -131,10 +131,15 @@ export default function Opening() {
       <div className="opn-light" aria-hidden />
       <div className="opn-flash" aria-hidden />
 
-      <button type="button" className="opn-skip" onClick={skip} aria-label="인트로 건너뛰기">
-        건너뛰기
-        <span className="opn-skip-ar" aria-hidden>→</span>
-      </button>
+      {/* 넘길 인트로가 있을 때만 그린다. 카드가 선 뒤에는 이 단추가 할 일이 없다 —
+          skip() 도 그 단계에서는 바로 돌아섰으니, 화면에는 눌러도 아무 일이 없는 단추만 남아 있었다.
+          숨기지 않고 걷어내는 이유: opacity 로만 감추면 눈에는 없는데 Tab 으로는 잡힌다. */}
+      {phase !== "auth" && phase !== "entering" && (
+        <button type="button" className="opn-skip" onClick={skip} aria-label="인트로 건너뛰기">
+          건너뛰기
+          <span className="opn-skip-ar" aria-hidden>→</span>
+        </button>
+      )}
 
       <div className="opn-stage">
         <p className="opn-logo">Comein</p>
@@ -221,8 +226,12 @@ function Glyph({ provider }: { provider: Provider }) {
 
 const CSS = `
 .opn {
-  --paper: #0E0D12; --ink: #F2F0EC; --muted: #98938A; --faint: #565049;
-  --accent: #9B8E86; --glow: rgba(155,142,134,0.16); --surface: #17140F; --hair: #262019;
+  /* 워크스페이스와 같은 어둠을 쓴다(workspace/page.tsx 의 .rmg 토큰과 동일한 값).
+     글자·선·액센트는 원래 같았고, 바탕 셋만 갈려 있었다 — 그런데 그 셋이 온도를 정한다:
+     #0E0D12 는 파랑 쪽(R14 G13 B18), #141210 은 따뜻한 쪽(R20 G18 B16)이라
+     문을 열고 들어오면 색이 한 번 식었다. 들어오는 길과 머무는 곳은 같은 온도여야 한다. */
+  --paper: #141210; --ink: #F2F0EC; --muted: #98938A; --faint: #5E574C;
+  --accent: #9B8E86; --glow: rgba(155,142,134,0.16); --surface: #1B1813; --hair: #262019;
   position: fixed; inset: 0; z-index: 1;
   background: var(--paper); color: var(--ink);
   font-family: var(--font-sans), "Pretendard Variable", -apple-system, system-ui, sans-serif;
@@ -235,7 +244,9 @@ const CSS = `
   background: url('/comein-opening.png') center/cover no-repeat;
   filter: blur(9px) saturate(0.92) brightness(0.9); transform: scale(1.06); opacity: 0.16; }
 .opn-bg::after { content: ""; position: absolute; inset: 0;
-  background: radial-gradient(120% 90% at 50% 42%, transparent 0%, var(--paper) 78%), linear-gradient(180deg, rgba(14,13,18,0.35), rgba(14,13,18,0.68)); }
+  /* 아래로 깔리는 장막도 같은 검정이어야 한다 — 여기만 쿨 톤이면 사진 위에서 색이 갈린다.
+     (rgba(20,18,16) = #141210. var() 를 alpha 와 섞어 쓸 수 없어 값을 풀어 쓴다.) */
+  background: radial-gradient(120% 90% at 50% 42%, transparent 0%, var(--paper) 78%), linear-gradient(180deg, rgba(20,18,16,0.35), rgba(20,18,16,0.68)); }
 :root:not(.dark) .opn-bg { opacity: 0.3; filter: blur(9px) saturate(0.98) brightness(1.03); }
 :root:not(.dark) .opn-bg::after { background: radial-gradient(120% 90% at 50% 42%, transparent 0%, var(--paper) 80%), linear-gradient(180deg, rgba(246,247,249,0.3), rgba(246,247,249,0.62)); }
 
@@ -261,8 +272,14 @@ const CSS = `
 .opn-skip:focus-visible { opacity: 1; outline: 2px solid color-mix(in srgb, var(--accent) 65%, transparent); outline-offset: 3px; }
 .opn-skip-ar { font-size: 14px; line-height: 1; color: var(--muted); transition: transform 0.25s cubic-bezier(0.22,1,0.36,1), color 0.25s; }
 .opn-skip:hover .opn-skip-ar { transform: translateX(3px); color: var(--ink); }
-/* 이미 건너뛴 뒤(전환 중)에는 물러난다 — 두 번 눌리지 않게. */
-.opn.phase-entering .opn-skip { opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+/* 넘기는 340ms 동안만 흐려진다 — 그 뒤에는 아예 그려지지 않는다(위 JSX 참고).
+   animation: none 이 필요하다: 등장 애니메이션이 both 로 끝값(0.72)을 붙들고 있어서
+   opacity 만 0 으로 적으면 애니메이션이 이긴다. 전환 중에 물러나게 해 둔 예전 규칙도
+   그래서 실제로는 흐려지지 않고 클릭만 막고 있었다.
+   숨기는 데 visibility 는 쓰지 않는다 — 트랜지션이 걸리면 값이 넘어가지 않아
+   눈에는 없는데 Tab 으로는 잡히는 단추가 남는다(실제로 그랬다). 그래서 걷어내는 쪽을 택했다. */
+.opn.skipping .opn-skip {
+  animation: none; opacity: 0; pointer-events: none; transition: opacity 0.34s ease; }
 @media (prefers-reduced-motion: reduce) { .opn-skip { animation: none; opacity: 0.72; } }
 
 .opn-stage { position: relative; z-index: 2; min-height: 100dvh; box-sizing: border-box; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 64px 24px; gap: 0; transition: opacity 0.9s ease; }
@@ -302,7 +319,9 @@ const CSS = `
 .opn-card { width: min(392px, 92vw); margin-top: clamp(34px, 6vh, 56px);
   display: flex; flex-direction: column; align-items: stretch;
   padding: 30px 28px 26px; border-radius: 22px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 46%), rgba(18,19,27,0.72);
+  /* 카드 면도 워크스페이스의 표면(#1B1813 = 27,24,19)과 같은 온도로. 투명도는 그대로 둔다 —
+     배경 사진이 비쳐 보이는 정도가 이 화면의 깊이라, 값을 바꾸면 다른 이야기가 된다. */
+  background: linear-gradient(180deg, rgba(255,255,255,0.03), rgba(255,255,255,0) 46%), rgba(27,24,19,0.72);
   border: 1px solid rgba(255,255,255,0.06);
   box-shadow: inset 0 1px 0 rgba(255,255,255,0.05), 0 10px 28px -20px rgba(0,0,0,0.4), 0 30px 70px -34px rgba(0,0,0,0.55), 0 0 64px -22px var(--glow);
   backdrop-filter: blur(10px);
@@ -347,7 +366,8 @@ const CSS = `
 }
 .opn-err { margin: 2px 0 0; font-size: 0.82rem; color: #E57373; text-align: left; }
 .opn-submit { margin-top: 6px; width: 100%; min-height: 52px; border: 0; border-radius: 13px;
-  background: var(--accent); color: #17140F; font-family: inherit; font-size: 0.96rem; font-weight: 600; cursor: pointer;
+  /* 액센트 위에 얹히는 글자색 — 워크스페이스의 보내기 버튼과 같은 값(#141210). */
+  background: var(--accent); color: #141210; font-family: inherit; font-size: 0.96rem; font-weight: 600; cursor: pointer;
   box-shadow: 0 6px 18px -10px rgba(0,0,0,0.5), 0 0 24px -8px var(--glow); transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s; }
 .opn-submit:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 12px 28px -12px rgba(0,0,0,0.55), 0 0 36px -6px var(--glow); }
 .opn-submit:active:not(:disabled) { transform: scale(0.98); box-shadow: 0 4px 14px -10px rgba(0,0,0,0.5), 0 0 22px -8px var(--glow); }
