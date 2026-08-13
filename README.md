@@ -67,20 +67,46 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 
 배포·환경변수·콜드스타트 대응은 [`docs/15_DEPLOY.md`](./docs/15_DEPLOY.md).
 
-### 로컬 실행
+### 다른 PC에서 처음 받았을 때
+
+**git 에 없는 것이 있다.** clone 만으로는 앱이 뜨지 않는다 — 빠진 게 아니라 일부러 뺀 것이다.
+
+| 없는 것 | 왜 | 어떻게 채우나 |
+|---|---|---|
+| `frontend/.env.local` | 키가 들어간다 | `.env.example` 복사 후 Supabase 대시보드에서 값 붙여넣기 |
+| `backend/.env` | DB 비번·API 키가 들어간다 | `.env.example` 복사 후 채우기 |
+| `node_modules/` · `backend/.venv/` | 용량·플랫폼 종속 | `npm install` · `python -m venv` |
 
 ```bash
-# 백엔드
-cd backend && python -m venv .venv && .venv\Scripts\activate
-pip install -r requirements-dev.txt
-copy .env.example .env          # GEMINI_API_KEY / GROQ_API_KEY 채우기
-uvicorn app.main:app --reload   # http://localhost:8000
-
 # 프론트
 cd frontend && npm install
-copy .env.example .env.local    # NEXT_PUBLIC_API_BASE=http://localhost:8000
-npm run dev                     # http://localhost:3000/workspace
+copy .env.example .env.local
+npm run dev                     # http://localhost:3000
+
+# 백엔드 — AI 파싱(/api/chat · /api/summary)에만 필요하다
+cd backend && python -m venv .venv && .venv\Scripts\activate
+pip install -r requirements-dev.txt
+copy .env.example .env
+uvicorn app.main:app --reload   # http://localhost:8000
 ```
+
+**프론트 `.env.local` 은 세 줄이 다 필요하다.** `NEXT_PUBLIC_API_BASE` 만 채우고 마는 실수가 잦다 —
+Supabase 두 줄이 비면 앱은 **에러 없이** 저장도 로그인도 없는 로컬 전용으로 돈다.
+화면은 멀쩡해 보여서 원인을 찾기 어렵다.
+
+```
+NEXT_PUBLIC_API_BASE=http://localhost:8000
+NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co     # 대시보드 → Settings → API
+NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>        #  같은 화면
+```
+
+**백엔드 `DATABASE_URL` 은 Direct 가 아니라 Session Pooler 를 쓴다.** 무료 티어의 Direct
+(`db.<ref>.supabase.co`)는 DNS 가 IPv6 만 돌려주는데 IPv6 미지원 망(예: 학내망)에서는
+`WinError 121 세마포 시간 만료` 로 죽는다. 대시보드의 **Session Pooler** 문자열을 쓸 것
+(`postgres.<ref>@aws-N-<region>.pooler.supabase.com:5432`, 풀러 접두사는 리전마다 다르다).
+
+> DB 스키마는 `supabase/migrations/` 에 커밋되어 있다(0001~). 새 Supabase 프로젝트라면
+> 이걸 순서대로 실행해야 화면이 빈 채로 뜨지 않는다.
 
 ---
 
