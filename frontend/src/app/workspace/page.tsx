@@ -3242,6 +3242,19 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
     return t;
   }, [summary?.title, nameDone, me?.role, event.title]);
   const accepted = participants.filter((p) => p.status === "accepted").length;
+  // 남을 부르고 내보내는 것은 주최자만 할 수 있다 — 서버가 그렇게 받는다
+  // (0001 participants_insert · participants_delete: is_event_owner(event_id) or user_id = auth.uid()).
+  // 손잡이를 아무에게나 보이면 눌러 놓고 조용히 거절당한다.
+  const iAmOwner = me?.role === "owner";
+  // 얼굴은 다섯까지만 눕히고 나머지는 +N 으로 접는다 — 줄이 두 줄로 넘어가면 '얇은 줄'이 아니게 된다.
+  const shownParts = participants.slice(0, 5);
+  const restParts = participants.length - shownParts.length;
+  // 접힌 +N 뒤에 누가 있는지 — 그 숫자만으로는 아무도 알 수 없다.
+  const restNames = participants.slice(5).map((p) => nameOf(p.userId)).join(", ");
+  // 얼굴은 눈으로만 읽히므로, 읽어 주는 쪽에는 말로 남긴다.
+  const whoLabel = en
+    ? `${participants.length} participants, ${accepted} going — manage`
+    : `참여자 ${participants.length}명, 참석 ${accepted} — 관리`;
   const categoryName = categoryLabel(classifyEvent(event, mode), mode, en);
 
   return (
@@ -3331,28 +3344,48 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           다만 그것을 한꺼번에 펼치지 않는다 — 처음 눈에 닿는 건 시각과 제목이고,
           나머지는 이렇게 한 줄로 접혀 있다가 물었을 때 열린다. */}
       <div className="rmg-drawer-people">
-        <button
-          type="button"
-          className="rmg-evdisc"
-          aria-expanded={openWho}
-          onClick={() => { setOpenWho((v) => { if (v) setAdding(false); return !v; }); }}
-        >
-          <span className="rmg-evdisc-k">{en ? "Participants" : "참여자"}</span>
-          <span className="rmg-evdisc-v">
-            {en ? `${accepted}/${participants.length} going` : `${participants.length}명 · 참석 ${accepted}`}
-          </span>
-          <ChevronDown className={`rmg-evdisc-ic ${openWho ? "on" : ""}`} />
-        </button>
+        {/* 누가 와 있는지는 늘 보인다 — 이름 대신 얼굴을 얇게 눕혀 둔다.
+            예전에는 이 자리가 접힌 한 줄이었다. "2명" 이라는 숫자는 읽히는데 그 둘이
+            누구인지는 한 번 더 눌러야 했고, 누르면 목록이 대화를 아래로 밀어냈다 —
+            여럿이 모인 자리의 주인공은 대화인데. 접기·펼치기로는 둘 중 하나만 풀린다.
+            이니셜만 눕히면 자리를 거의 쓰지 않으면서 누가 있는지는 늘 말할 수 있다.
+            사람 패널의 `.rmg-pwith` 칩 줄이 같은 문제를 이미 이렇게 풀었다.
+            초대·제외는 가끔 하는 일이라, 그때만 아래로 연다. */}
+        <div className="rmg-evwho">
+          {/* 아직 아무도 실려 오지 않았으면(첫 하이드레이션) 빈 손잡이를 세우지 않는다. */}
+          {participants.length > 0 && (
+            <button
+              type="button"
+              className="rmg-evwho-faces"
+              aria-expanded={openWho}
+              aria-label={whoLabel}
+              onClick={() => { setOpenWho((v) => { if (v) setAdding(false); return !v; }); }}
+            >
+              {/* 이름은 얼굴마다 따로 붙인다 — 줄 전체에 한 덩어리로 달면
+                  "저 사람이 누구인지" 를 짚어 물을 수가 없다. 읽어 주는 쪽은 위의 aria-label 이 맡는다. */}
+              {shownParts.map((p) => (
+                <span key={p.userId} className={`rmg-evwho-av ${p.status}`} title={nameOf(p.userId)} aria-hidden="true">
+                  {nameOf(p.userId).slice(0, 1)}
+                </span>
+              ))}
+              {restParts > 0 && (
+                <span className="rmg-evwho-more" title={restNames} aria-hidden="true">+{restParts}</span>
+              )}
+            </button>
+          )}
+          <span className="rmg-evwho-going">{en ? `${accepted} going` : `참석 ${accepted}`}</span>
+          {iAmOwner && (
+            <button
+              type="button"
+              className="rmg-evwho-add"
+              onClick={() => { if (adding) { setAdding(false); return; } setOpenWho(true); setAdding(true); }}
+            >
+              {adding ? (en ? "Done" : "완료") : (en ? "Add" : "추가")}
+            </button>
+          )}
+        </div>
         {openWho && (
         <>
-        {/* 제목을 다시 달지 않는다 — 바로 위 접힌 줄이 이미 "참여자 · 2명 · 참석 1" 이라고
-            말했다. 펼쳤더니 같은 말이 한 번 더 서 있으면 그만큼 목록이 아래로 밀린다.
-            여기 남을 것은 손잡이 하나뿐이다. */}
-        <div className="rmg-drawer-peoplehead">
-          <button type="button" className="rmg-ppl-act" onClick={() => setAdding((v) => !v)}>
-            {adding ? (en ? "Done" : "완료") : (en ? "Add" : "추가")}
-          </button>
-        </div>
         <ul className="rmg-drawer-plist">
           {participants.map((p) => (
             <li key={p.userId} className={`rmg-drawer-p ${p.status === "invited" ? "pending" : ""}`}>
@@ -3364,8 +3397,9 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
                   : p.status === "declined" ? (en ? "Can't" : "불참")
                     : (en ? "Invited" : "미정")}
               </span>
-              {/* 주최자는 뺄 수 없다 — 일정의 주인이 사라지면 남는 사람들의 권한이 모호해진다. */}
-              {adding && p.role !== "owner" && (
+              {/* 주최자는 뺄 수 없다 — 일정의 주인이 사라지면 남는 사람들의 권한이 모호해진다.
+                  그리고 빼는 사람도 주최자여야 한다(위 iAmOwner 참고). */}
+              {adding && iAmOwner && p.role !== "owner" && (
                 <button type="button" className="rmg-drawer-px" onClick={() => onRemoveParticipant(p.userId)} aria-label={en ? "Remove" : "제외"}>
                   <X className="rmg-drawer-pxic" />
                 </button>
@@ -6392,7 +6426,32 @@ html { font-size: 17px; }
   transition: transform 220ms cubic-bezier(0.22,1,0.36,1); }
 .rmg-evdisc-ic.on { transform: rotate(180deg); }
 @media (prefers-reduced-motion: reduce) { .rmg-evdisc, .rmg-evdisc-ic { transition: none; } }
-.rmg-drawer-peoplehead { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-2); }
+/* 늘 보이는 참여자 줄 — 얼굴만 눕힌다. 접힌 줄이 차지하던 자리를 그대로 쓴다. */
+.rmg-evwho { display: flex; align-items: center; gap: var(--sp-1); padding: 6px 0; }
+.rmg-evwho-faces { display: inline-flex; align-items: center; gap: 4px; border: 0; background: none; font: inherit;
+  padding: 4px; margin: 0 -4px; border-radius: 999px; cursor: pointer; transition: background 170ms ease-out; }
+.rmg-evwho-faces:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.rmg-evwho-faces:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 겹쳐 눕히지 않는다 — 다른 제품의 얼굴 더미(face pile)는 원끼리 겹치고 테두리로 갈라내지만,
+   그건 테두리가 바탕과 뚜렷이 다를 때만 성립한다. 여기 팔레트는 대비를 일부러 죽여서
+   --hair 가 --surface 와 거의 같은 값이다(다크 #262019 : #1B1813 · 라이트 #E7E2D8 : #FCFBF9).
+   겹치면 갈라 줄 힘이 없어 이니셜이 뭉개진 얼룩으로 읽힌다 — 양쪽 테마에서 확인했다.
+   4px 씩 띄운다. 구획은 대비가 아니라 여백이 한다(§6). */
+.rmg-evwho-av { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--hair); font-size: 0.72rem; font-weight: 600;
+  color: var(--muted); flex-shrink: 0; }
+/* 참석 여부는 색이 아니라 테두리·농도로만 말한다(§17 강한 accent 금지).
+   아직 답이 없으면 테두리를 끊어 두고, 못 온다고 답했으면 옅게 — 지우지는 않는다. */
+.rmg-evwho-av.invited { border-style: dashed; color: var(--faint); }
+.rmg-evwho-av.declined { opacity: 0.4; }
+.rmg-evwho-more { margin-left: 2px; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rmg-evwho-going { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rmg-evwho-add { border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint);
+  padding: 5px 6px; border-radius: 8px; cursor: pointer; flex-shrink: 0;
+  transition: color 170ms ease-out, background 170ms ease-out; }
+.rmg-evwho-add:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+@media (prefers-reduced-motion: reduce) { .rmg-evwho-faces, .rmg-evwho-add { transition: none; } }
 /* 참석 여부 — 색이 아니라 굵기·농도로만 구분한다(§17 강한 accent 금지). */
 .rmg-drawer-prole.accepted { color: var(--muted); }
 .rmg-drawer-prole.declined { color: var(--faint); text-decoration: line-through; }
