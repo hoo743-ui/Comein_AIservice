@@ -127,26 +127,28 @@ npm run dev
 
 **Render (백엔드)** — 레포 루트 `render.yaml` 이 설정을 갖고 있다.
 1. New → **Blueprint** → 레포 선택 → Apply (Root Directory·Build·Start·헬스체크 자동 적용)
-2. 환경변수 입력: `DATABASE_URL`, `CORS_ORIGINS`, (선택) `CORS_ORIGIN_REGEX`, LLM 키
+2. 환경변수 입력: `CORS_ORIGINS`, (선택) `CORS_ORIGIN_REGEX`, LLM 키
    - `CORS_ORIGINS` 는 **쉼표 구분** 문자열 (`https://a.com,https://b.com`) — JSON 배열도 허용
-   - `DATABASE_URL` 은 Supabase URI 그대로 붙여넣으면 됨 (asyncpg 변환 자동)
-   - `JWT_SECRET` 은 Render 가 자동 생성
-3. `/health` 200 확인, `/health/db` 로 DB 연결 확인
+   - **DB 값은 없다.** 백엔드는 DB 에 붙지 않는다(2026-08-13 정리, `docs/24` §16)
+3. `/health` 200 확인
 
 **Vercel (프론트)**
-1. Settings → Environment Variables → `NEXT_PUBLIC_API_BASE = https://xxx.onrender.com`
-2. 재배포
+1. Settings → Environment Variables
+   - `NEXT_PUBLIC_API_BASE = https://xxx.onrender.com`
+   - `NEXT_PUBLIC_SUPABASE_URL` · `NEXT_PUBLIC_SUPABASE_ANON_KEY` — **여기가 진짜 데이터 경로다**
+2. 재배포 (`NEXT_PUBLIC_*` 은 빌드 타임에 번들에 구워지므로 값만 바꾸면 반영되지 않는다)
 
 ---
 
 ## 9. Render 무료 티어 콜드스타트 대응
 
-- **증상**: 15분 무요청 → 슬립 → 첫 요청 30초~1분. + 첫 DB 커넥션 풀 생성 지연.
-- **keep-alive**: UptimeRobot/cron-job.org 로 `/health/db` 를 10분마다 GET → 백엔드+DB 상시 깨움
+- **증상**: 15분 무요청 → 슬립 → 첫 요청 30초~1분.
+- **keep-alive**: UptimeRobot/cron-job.org 로 `/health` 를 10분마다 GET
   (무료 월 750시간 = 서비스 1개 24/7 무료 한도 안). self-ping 불가, 반드시 외부에서.
-- **DB 워밍업**: `main.py` startup 이벤트에서 `SELECT 1` 실행해 풀 미리 생성.
-  `create_async_engine(..., pool_pre_ping=True)`.
-- **함정**: Supabase 무료 DB는 1주 무활동 시 일시정지 → `/health` 가 DB를 실제로 건드리게(SELECT 1) 하면 같이 깸.
+- **콜드스타트가 화면을 멈추지는 않는다.** 일정·대화는 Supabase 직행이라 백엔드가 자고 있어도
+  그려진다. 느려지는 것은 캡처 바의 AI 파싱뿐이다.
+- 예전에는 DB 커넥션 풀 워밍업과 `/health/db` keep-alive 가 여기 있었다. 백엔드가 DB 에
+  붙지 않게 되면서 둘 다 사라졌다 — Supabase 를 깨우는 것은 이제 **사람이 쓰는 것** 뿐이다.
 - **진짜 해결**: Render Starter $7/월(슬립 없음) 또는 Fly.io/Cloud Run 등.
 
 ---

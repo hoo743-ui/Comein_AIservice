@@ -10,16 +10,12 @@ backend/
 ├── app/
 │   ├── main.py                # FastAPI 앱 진입점, CORS, /health
 │   ├── core/
-│   │   ├── config.py          # .env 기반 Settings (DB/Redis/JWT/LLM 키)
-│   │   └── database.py        # 비동기 SQLAlchemy 엔진/세션, Base, get_db
-│   ├── models/                # SQLAlchemy ORM (User/Schedule/Todo/Memo/Meeting)
-│   ├── schemas/                # Pydantic 요청/응답 스키마 (도메인별 파일 분리)
-│   ├── services/               # DB 저장/조회 로직 (엔드포인트에서 분리)
+│   │   └── config.py          # .env 기반 Settings (CORS/JWT/LLM 키)
+│   ├── schemas/               # ParsedItem(AI 결과 검증) · AiResult(응답 계약)
 │   └── api/
-│       ├── router.py           # 도메인별 라우터 집약
-│       └── endpoints/          # 실제 라우트 정의
-├── alembic/                     # DB 마이그레이션
-├── tests/                       # pytest, SQLite 인메모리 기반 E2E
+│       ├── router.py          # 라우터 집약
+│       └── endpoints/         # chat.py · summary.py
+├── tests/                     # pytest — 상태가 없어 DB 픽스처도 없다
 └── requirements.txt / requirements-dev.txt
 ```
 
@@ -28,22 +24,29 @@ backend/
 | 메서드/경로 | 파일 | 역할 |
 |---|---|---|
 | `POST /api/chat` | `api/endpoints/chat.py` | 자연어 메시지를 AI Router(`ai/router.py`)로 전달하고, 결과를 검증/보정해 `AiResult`로 응답 |
-| `POST /api/items` | `api/endpoints/items.py` | AI 파싱 결과(`ParsedItem[]`)를 카테고리별 테이블에 저장 |
-| `GET /api/schedules` | `api/endpoints/schedules.py` | `user_id` 필수, `from`/`to`(ISO datetime) 선택 — 기간으로 일정 조회 |
-| `GET /api/todos` | `api/endpoints/todos.py` | `user_id` 필수, `status` 선택 필터 |
-| `GET /api/memos` | `api/endpoints/memos.py` | `user_id` 필수 — 메모 조회 |
-| `GET /api/meetings` | `api/endpoints/meetings.py` | `user_id` 필수 — `Schedule`과 join해 제목/시각/장소 포함 반환 |
-| `GET /api/users/demo` | `api/endpoints/users.py` | 인증 붙기 전 임시 데모 사용자 get-or-create |
+| `POST /api/summary` | `api/endpoints/summary.py` | 대화(`transcript`)를 네 갈래(무슨 얘기였나/정해진 것/미정/다음 할 일)로 접어 응답 |
+| `GET /health` | `main.py` | Render 헬스체크 |
 
-인증이 아직 없어 조회/저장 엔드포인트 모두 `user_id`를 쿼리 파라미터/요청 바디로 직접 받는다. 각 카테고리의 단건 조회·수정(PATCH)은 아직 없음 — 목록 조회만 구현됨.
+**이 셋이 전부다.** 저장·조회 엔드포인트(`POST /api/items`, `GET /api/{schedules,todos,memos,meetings}`,
+`GET /api/users/demo`)와 그것들이 딛고 있던 `models/`·`services/`·`alembic/`·`core/database.py` 는
+2026-08-13 에 걷어냈다. 저장이 Supabase 직행으로 옮겨간 뒤 아무도 부르지 않았기 때문이다
+(`docs/24_AI_PIPELINE_STATUS.md` §16). **이 서버는 DB 에 붙지 않는다 — 상태가 없다.**
 
 ## 패턴
 
-- **DB 세션**: 모든 라우터는 `Depends(get_db)`로 `AsyncSession`을 주입받는다(`app/core/database.py`). 테스트는 `tests/conftest.py`에서 `get_db`를 SQLite 인메모리로 오버라이드한다.
-- **응답 스키마**: `app/schemas/`에 도메인별로 분리(`items.py`, `schedules.py`, `todos.py`, `memos.py`, `meetings.py`, `ai_result.py`, `users.py`). 모델→스키마 변환은 `model_validate(orm_instance)`(`from_attributes=True`)를 사용하되, join이 필요한 경우(`meetings.py`)는 스키마를 직접 구성한다.
+- **상태 없음**: 라우터에 DB 세션 주입이 없다. 그래서 테스트도 앱에 붙는 클라이언트 하나면 끝난다(`tests/conftest.py`).
+- **응답 스키마**: `app/schemas/` 에 둘만 남았다 — `items.py`(`ParsedItem`: AI 가 무엇을 뽑았는지 재는 자)와 `ai_result.py`(`/api/chat` 응답 계약).
 - **AI 결과 검증**: `ai.router.route()`의 반환값은 아직 형태가 확정되지 않았으므로, `chat.py`가 `ParsedItem.model_validator`로 방어적으로 검증하고 실패 시 자연스러운 대화형 폴백으로 응답한다(`docs/24_AI_PIPELINE_STATUS.md` §5 참고).
 - **LLM Provider 추상화**: `ai/llm/`에 위치(백엔드가 아니라 AI 파트 소유). `backend/requirements.txt`가 `google-genai`, `groq`를 명시적으로 포함해 백엔드 venv에서도 `ai/` import가 가능하도록 한다.
 
-## 절대 건드리지 않는 영역
+## 저장은 왜 여기 없나
 
-`app/core/database.py`, `app/api/endpoints/items.py`, `app/services/items_service.py`, `alembic/*`는 이미 완성·안정 상태로 취급한다. 구조 변경 시 반드시 사전 협의.
+프론트가 Supabase 에 직접 붙기 때문이다(`frontend/src/lib/remote.ts` — RLS + Realtime).
+그 편이 실시간 반영과 행 단위 권한을 공짜로 얻는다. 백엔드를 한 번 더 지나면 둘 다 직접 만들어야 한다.
+
+그래서 **백엔드에는 AI 키만 있고 DB 비밀번호가 없다.** 브라우저에 둘 수 없는 것(LLM 키)만
+여기에 남고, 사용자별 권한으로 지킬 수 있는 것(데이터)은 Supabase 가 맡는다.
+
+> 이 문서에는 예전에 "절대 건드리지 않는 영역" 으로 `database.py`·`items.py`·`items_service.py`·
+> `alembic/*` 가 적혀 있었다. 그 코드들이 통째로 사라졌으므로 함께 걷는다 —
+> **안정된 코드와 쓰이지 않는 코드는 다르다.**

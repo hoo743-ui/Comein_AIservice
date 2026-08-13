@@ -761,3 +761,73 @@ Dashboard → Logs → Auth
 | 배포 `/api/summary` | ✅ `decided` / `next` 로 갈라 돌아옴 |
 
 `/health/db` 만 `down` 이고, 그 이유는 15.1 에 적었다 — 지금 앱이 쓰는 경로가 아니다.
+
+---
+
+## 16. 죽은 경로를 걷어냈다 (2026-08-13)
+
+`§15.1` 이 남겨 둔 갈림길 — "백엔드의 DB 라우터들을 걷어낼 것인가, 새 DB 로 살릴 것인가" —
+에서 **걷어내는 쪽**을 택했다.
+
+### 16.1 왜 살리지 않았나
+
+살리는 쪽은 값 하나(`DATABASE_URL`)와 `alembic upgrade head` 한 번이면 끝나서 더 싸 보인다.
+그런데 그렇게 하면 **아무도 부르지 않는 API 6개와 테이블 5개를 계속 유지하게 된다.**
+저장은 이미 Supabase 직행이고(§8.4·§10.4) 되돌릴 계획도 없다.
+
+그리고 이 코드는 가만히 있지 않았다. `16_TASK.md` 에 "배포 환경변수를 갈아끼워야 한다" 는
+급한 일로 서 있었고(§15.1), `/health/db` 는 멀쩡한 서비스에 `down` 을 띄우고 있었다.
+**쓰이지 않는 코드는 조용히 있지 않는다 — 사실이 아닌 그림을 계속 그린다.**
+
+### 16.2 무엇을 지웠나
+
+| | |
+|---|---|
+| 엔드포인트 | `items` · `users` · `schedules` · `todos` · `memos` · `meetings` |
+| 그 아래 | `app/models/*`(ORM 5종) · `app/services/items_service.py` · `app/core/database.py` · `alembic/*` · `alembic.ini` |
+| 스키마 | `schemas/{schedules,todos,memos,meetings,users}.py`, 그리고 `items.py` 의 저장 계약 3종 |
+| 표시등 | `/health/db` — 지킬 것이 없어졌고, 옛 DB 를 가리켜 `down` 을 띄워 고장으로 읽혔다 |
+| 설정 | `DATABASE_URL` · `REDIS_URL` 과 asyncpg URL 보정 코드(`_normalize_db_url`) |
+| 의존성 | `sqlalchemy` · `asyncpg` · `alembic` · `redis` · `aiosqlite`, 그리고 쓰인 적 없는 `python-jose` · `passlib` |
+| 테스트 | `test_{items,schedules,todos,memos,meetings}.py` 와 `conftest.py` 의 SQLite 픽스처 |
+
+**남긴 것:** `schemas/items.py` 의 `ParsedItem`. 저장 계약이 아니라 **AI 가 무엇을 뽑았는지
+재는 자**라서, `/api/chat` 과 `ai/router.py` 가 지금도 쓴다.
+
+### 16.3 남은 백엔드
+
+```
+POST /api/chat      자연어 → 항목 (또는 되묻기, §14)
+POST /api/summary   대화 → 네 갈래 요약
+GET  /health        Render 헬스체크
+```
+
+**상태가 없다.** DB 세션도, 커넥션 풀도, 기동 시 워밍업(`lifespan`)도 없다.
+그래서 백엔드가 자고 있어도 일정·대화는 그려진다 — 그건 Supabase 가 그리기 때문이다.
+느려지는 것은 캡처 바의 파싱뿐이다.
+
+경계가 선명해진 자리가 하나 더 있다: **백엔드에 DB 비밀번호가 없다.** 브라우저에 둘 수 없는
+것(LLM 키)만 서버에 남고, 사용자별 권한으로 지킬 수 있는 것(데이터)은 Supabase 의 RLS 가 맡는다.
+
+### 16.4 확인
+
+로컬 `.venv` 에는 지운 패키지가 아직 남아 있어 여기서만 통과할 수 있다. 그래서 **빈 venv 에
+새 `requirements.txt` 만 설치해** Render 가 하는 일을 그대로 재현했다.
+
+| | 결과 |
+|---|---|
+| 깨끗한 venv 설치 → 앱 로드 | ✅ 38개 패키지(전 58개), `ai.router` import 까지 정상 |
+| OpenAPI 경로 | ✅ `/api/chat` · `/api/summary` · `/health` — 셋뿐 |
+| `/health/db` · `/api/items` | ✅ 404 (사라진 것 확인) |
+| `/api/chat` 실호출 | ✅ "meeting with the professor tomorrow 3pm" → meeting `2026-08-14T15:00:00+09:00`, participants `["professor"]` |
+| pytest | ✅ 15 passed (27 → 15, 지운 경로의 12개가 함께 사라짐) |
+
+### 16.5 남은 것
+
+- **Render 대시보드의 옛 `DATABASE_URL` · `REDIS_URL`** — 코드가 읽지 않으므로 무해하다.
+  지우는 것은 사람 손이 필요한 일이라 남겨 둔다.
+- **`google-genai` 의존성** — `ai/llm/gemini.py` 는 REST(`httpx`)로 직접 부르고 이 SDK 를
+  import 하지 않는다. 지울 수 있어 보이지만 **살아 있는 AI 경로**를 건드리는 일이라
+  이번에 함께 손대지 않았다. 확인하고 지우면 빌드가 더 가벼워진다.
+- **`JWT_SECRET` 등 인증 설정** — 아직 아무도 읽지 않는다. 인증은 Supabase Auth 가
+  프론트에서 맡고 있다. 백엔드 인증을 언젠가 붙일 것인지 정하면 함께 정리된다.

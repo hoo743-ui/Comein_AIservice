@@ -95,12 +95,13 @@
   Supabase 직행으로 옮겨간 뒤 **아무도 부르지 않는 옛 경로**다. 이 문서의 예전
   항목은 저장이 아직 `/api/items` 를 지나던 시절에 쓰인 것이라 낡았다.
 
-  **정할 것:** 그 라우터들을 걷어낼 것인가, 아니면 새 DB 로 살려 둘 것인가.
-  살린다면 Render 에 새 값을 넣고(ref `mbamzjivpdzjnvzcbamp` · 도쿄 ·
-  풀러 `aws-0-ap-northeast-1` — 예전 서울 `aws-1-ap-northeast-2` 에서 리전까지
-  바뀌었다), **새 Supabase 에는 alembic 스키마가 없으므로**(`alembic_version`
-  테이블 자체가 없고 public 에는 프론트 쪽 14개 테이블뿐) `alembic upgrade head`
-  를 한 번 돌려야 한다. 걷어낸다면 `/health/db` 도 함께 정리한다.
+  **정했다 — 걷어냈다 (2026-08-13).** 라우터 6개(`items`·`users`·`schedules`·`todos`·
+  `memos`·`meetings`)와 그것들이 딛고 있던 `models/`·`services/`·`alembic/`·
+  `core/database.py`, 그리고 `/health/db` 까지 함께 지웠다. 백엔드는 이제 DB 에 붙지
+  않는다 — 남은 것은 `/api/chat` · `/api/summary` · `/health` 셋뿐이다.
+
+  Render 에 값을 넣는 일도 함께 없어졌다. 대시보드에 옛 `DATABASE_URL` 이 남아 있어도
+  무해하지만, 지우는 편이 다음에 여는 사람의 오해를 줄인다. 자세히는 `docs/24` §16.
 
 - **옛 시험 데이터** — `claudetest`, `claudetest2` 계정과 `실시간 확인 92902`,
   `저장확인 60704`, `수정테스트 0538` 같은 메시지가 남아 있다. 지울지 정하면 된다.

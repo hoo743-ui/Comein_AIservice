@@ -74,7 +74,7 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 | 없는 것 | 왜 | 어떻게 채우나 |
 |---|---|---|
 | `frontend/.env.local` | 키가 들어간다 | `.env.example` 복사 후 Supabase 대시보드에서 값 붙여넣기 |
-| `backend/.env` | DB 비번·API 키가 들어간다 | `.env.example` 복사 후 채우기 |
+| `backend/.env` | AI 키가 들어간다 | `.env.example` 복사 후 `GEMINI_API_KEY` · `GROQ_API_KEY` 채우기 |
 | `node_modules/` · `backend/.venv/` | 용량·플랫폼 종속 | `npm install` · `python -m venv` |
 
 ```bash
@@ -100,10 +100,9 @@ NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co     # 대시보드 → Settin
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>        #  같은 화면
 ```
 
-**백엔드 `DATABASE_URL` 은 Direct 가 아니라 Session Pooler 를 쓴다.** 무료 티어의 Direct
-(`db.<ref>.supabase.co`)는 DNS 가 IPv6 만 돌려주는데 IPv6 미지원 망(예: 학내망)에서는
-`WinError 121 세마포 시간 만료` 로 죽는다. 대시보드의 **Session Pooler** 문자열을 쓸 것
-(`postgres.<ref>@aws-N-<region>.pooler.supabase.com:5432`, 풀러 접두사는 리전마다 다르다).
+**백엔드에는 DB 설정이 없다.** 이 서버가 하는 일은 자연어 파싱뿐이고(`/api/chat`·
+`/api/summary`), 상태를 두지 않는다. 저장·조회·인증은 프론트가 Supabase 에 직접 한다.
+`.env` 에 채울 것은 AI 키 두 개뿐이다.
 
 > DB 스키마는 `supabase/migrations/` 에 커밋되어 있다(0001~). 새 Supabase 프로젝트라면
 > 이걸 순서대로 실행해야 화면이 빈 채로 뜨지 않는다.

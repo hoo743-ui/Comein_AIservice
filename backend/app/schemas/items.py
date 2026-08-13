@@ -1,15 +1,16 @@
-"""JSON 추출 결과 → 카테고리별 저장 스키마 (docs/10_API.md 계약 필드명 정렬).
+"""AI 가 뽑아낸 항목 1건의 모양 — `/api/chat` 응답의 검증 기준.
 
-AI팀 API는 아직 없다. 이 스키마는 "텍스트 → JSON 추출" 이후 단계의
-입력 계약이며, docs/10_API.md의 `AiResult.entity` 필드명
-(start/end/due/tags/participants/summary)을 그대로 따라 프론트·AI 파트와
-동일한 어휘를 쓴다. 테이블 컬럼명과 다른 것(start→start_time 등)은
-서비스 레이어에서 매핑한다.
+`docs/10_API.md` 의 `AiResult.entity` 필드명(start/end/due/tags/participants/
+summary)을 그대로 따라 프론트·AI 파트와 같은 어휘를 쓴다.
+
+예전에는 이 파일에 저장 계약(`ItemsCreateRequest`·`ItemResult`·
+`ItemsCreateResponse`)도 함께 있었다. 저장이 Supabase 직행으로 옮겨가
+`POST /api/items` 가 사라지면서 함께 걷었다(docs/24 §16). 남은 것은
+"AI 가 무엇을 뽑았는가" 를 재는 자 하나뿐이다.
 """
-import uuid
 from typing import Literal
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, model_validator
 
 Category = Literal["schedule", "todo", "memo", "meeting"]
 Priority = Literal["high", "mid", "low"]
@@ -53,26 +54,3 @@ class ParsedItem(BaseModel):
             if not self.content:
                 raise ValueError("memo: content는 필수입니다.")
         return self
-
-
-class ItemsCreateRequest(BaseModel):
-    """POST /api/items 요청 본문.
-
-    user_id는 인증 시스템이 아직 없어 임시로 요청 바디에 직접 받는다.
-    추후 JWT 인증이 붙으면 이 필드는 `get_current_user` 의존성으로 대체된다.
-    """
-
-    user_id: uuid.UUID
-    items: list[ParsedItem] = Field(min_length=1)
-
-
-class ItemResult(BaseModel):
-    """저장된 엔티티 1건의 응답 요약."""
-
-    category: Category
-    id: uuid.UUID
-    title: str | None = None
-
-
-class ItemsCreateResponse(BaseModel):
-    results: list[ItemResult]

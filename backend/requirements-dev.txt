@@ -2,4 +2,5 @@
 
 pytest>=8.3.0
 pytest-asyncio>=0.24.0
-aiosqlite>=0.20.0
+
+# aiosqlite 는 인메모리 DB 로 저장 경로를 시험할 때 썼다. 그 경로가 없어졌다(docs/24 §16).

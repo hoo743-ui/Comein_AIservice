@@ -1,11 +1,11 @@
 """Comein Backend — FastAPI 진입점.
 
-API Gateway 역할: 클라이언트 요청을 받아 AI Workspace Engine(ai/)과
-Data Layer로 연결한다. 상세 설계: ../docs/06_BACKEND.md, ../docs/10_API.md
-"""
-from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
+이 서버가 하는 일은 **AI 파싱 하나**다. 클라이언트의 자연어를 받아
+AI Workspace Engine(`ai/`)에 넘기고 결과를 돌려준다 — 상태를 두지 않는다.
 
+데이터는 여기를 지나지 않는다. 프론트가 Supabase 에 직접 붙는다.
+상세 설계: ../docs/06_BACKEND.md, ../docs/10_API.md
+"""
 from dotenv import load_dotenv
 
 load_dotenv()  # .env 값을 os.environ 으로 — ai/ 쪽이 환경변수를 직접 읽는다
@@ -15,22 +15,11 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from app.core.config import settings
-from app.core.database import ping_db
-
-
-@asynccontextmanager
-async def lifespan(_: FastAPI) -> AsyncGenerator[None, None]:
-    # 기동 시 커넥션 풀을 미리 만들어 첫 요청 지연을 줄인다(콜드스타트 대응).
-    # DB 미설정/슬립이어도 기동은 계속한다 — docs/15_DEPLOY.md
-    await ping_db()
-    yield
-
 
 app = FastAPI(
     title="Comein API",
-    description="대화형 AI 워크스페이스 백엔드",
+    description="대화형 AI 워크스페이스 백엔드 — 자연어 파싱·요약",
     version="0.1.0",
-    lifespan=lifespan,
 )
 
 app.add_middleware(
@@ -47,11 +36,11 @@ app.include_router(api_router, prefix="/api")
 
 @app.get("/health", tags=["system"])
 async def health() -> dict[str, str]:
-    """Render 헬스체크용 — DB를 건드리지 않아 항상 빠르다."""
+    """Render 헬스체크용.
+
+    예전에는 `/health/db` 가 따로 있었다. DB 를 왕복해 Supabase 를 깨우는
+    용도였는데, 그 DB 를 쓰던 라우터들이 사라지면서 아무것도 재우지 않고
+    아무것도 지키지 않는 표시등만 남았다 — 게다가 옛 DB 를 가리킨 채
+    `down` 을 띄워 고장으로 읽혔다. 함께 걷었다(docs/24 §16).
+    """
     return {"status": "ok", "env": settings.ENV}
-
-
-@app.get("/health/db", tags=["system"])
-async def health_db() -> dict[str, str]:
-    """외부 keep-alive(cron)용 — DB까지 한 번 왕복해 Supabase도 같이 깨운다."""
-    return {"status": "ok", "db": "ok" if await ping_db() else "down"}

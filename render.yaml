@@ -24,11 +24,9 @@ services:
       # Vercel 프리뷰 도메인 허용이 필요할 때만. 예) https://.*\.vercel\.app
       - key: CORS_ORIGIN_REGEX
         sync: false
-      # Supabase → Project Settings → Database → Connection string (URI)
-      - key: DATABASE_URL
-        sync: false
-      - key: REDIS_URL
-        sync: false
+      # DATABASE_URL · REDIS_URL 은 없다 — 이 서버는 DB 에 붙지 않는다.
+      # 저장은 프론트가 Supabase 로 직행한다(docs/24 §16). 대시보드에 옛 값이
+      # 남아 있어도 무해하지만, 지우는 편이 오해를 줄인다.
       - key: JWT_SECRET
         generateValue: true   # Render 가 임의 값 생성 (직접 넣지 말 것)
       - key: GEMINI_API_KEY

@@ -39,13 +39,26 @@
   확인 카드는 사용자에게 폼을 채우게 만들어 제품 원칙(CLAUDE.md — 일이 스스로 정리되게)과 어긋났다.
 - `POST /api/items` 연결 전이라 **저장은 아직 없다.** 새로고침하면 사라진다(화면 상태에만 존재).
 
-### `POST /api/items`
+### ~~`POST /api/items`~~ · ~~`GET /api/schedules|todos|memos|meetings`~~ · ~~`GET /api/users/demo`~~ — 없어졌다 (2026-08-13)
 
-`backend/app/schemas/items.py`의 `ItemsCreateRequest`/`ItemsCreateResponse` 그대로 — 5절 참고 문서 없이 코드가 단일 기준(주석에 필드 설명 포함).
+저장이 Supabase 직행으로 옮겨간 뒤 이 엔드포인트들은 아무도 부르지 않았고, 그 상태로
+남아 있으면서 "저장은 백엔드를 지난다" 는 잘못된 그림만 계속 그렸다. 걷어냈다
+(사정은 `docs/24_AI_PIPELINE_STATUS.md` §16).
 
-### `GET /api/schedules|todos|memos|meetings`
+**백엔드 계약은 이제 `POST /api/chat` · `POST /api/summary` · `GET /health` 셋뿐이다.**
 
-`user_id` 쿼리 파라미터 기준 목록 조회(스키마는 `backend/app/schemas/{schedules,todos,memos,meetings}.py`). 상세는 `docs/06_BACKEND.md` "엔드포인트 현황" 표 참고.
+저장·조회의 실제 계약은 HTTP 가 아니라 **Supabase 스키마**다 —
+`supabase/migrations/*.sql`(테이블·RLS·RPC)와 그것을 부르는 `frontend/src/lib/remote.ts`
+가 단일 기준이다. 권한은 엔드포인트가 아니라 RLS 정책이 정한다
+(예: `participants_insert` 는 `is_event_owner(event_id) or user_id = auth.uid()`).
+
+### `POST /api/summary`
+
+`backend/app/api/endpoints/summary.py` 의 `SummaryRequest`/`SummaryResponse`.
+요청은 `transcript`("이름: 말" 을 줄바꿈으로 이은 것) · `title?` · `lang`.
+응답은 네 갈래로 나뉜다 — `recap`(무슨 얘기였나) · `decided`(정해진 것) ·
+`pending`(아직 안 정해진 것) · `next`(다음에 할 일). 근거 없는 갈래는 빈 채로 둔다.
+`lines` 는 예전 화면과의 호환을 위해 넷을 이어 붙인 것이다.
 
 ---
 

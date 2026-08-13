@@ -19,10 +19,26 @@ git push main → 두 플랫폼이 각자 자기 폴더만 보고 병렬 자동 
 | 프론트 | `https://frontend-pied-one-74.vercel.app` | ✅ Live (프로덕션 별칭) |
 | 프론트(브랜치) | `https://frontend-git-main-hoo743-uis-projects.vercel.app` | ✅ 같은 빌드 |
 | LLM | Gemini (Render 환경변수에 키 등록) | ✅ 실제 호출 확인 |
-| DB | Supabase 미연결 | ❌ `/health/db` → `db: down`, **저장 안 됨** |
+| DB | 백엔드는 DB 에 붙지 않는다 | — 저장은 프론트가 Supabase 로 직행(§0-1) |
 
 > Render 서비스 이름은 `comein-aiservice` 다 (`render.yaml` 의 `comein-api` 와 다름 —
 > 대시보드에서 손으로 만들었기 때문). Blueprint 로 다시 만들면 이름이 갈리니 주의.
+
+### 0-1. 배포가 둘로 갈리는 지점 — 무엇이 어디에 사는가
+
+| | Vercel (프론트) | Render (백엔드) |
+|---|---|---|
+| 하는 일 | 화면, **그리고 데이터 전부** — Supabase 에 직접 붙는다(RLS + Realtime) | **AI 파싱만** — `/api/chat` · `/api/summary` |
+| 상태 | Supabase 가 갖는다 | 없다. 요청 하나가 끝나면 아무것도 남지 않는다 |
+| 비밀값 | `NEXT_PUBLIC_SUPABASE_*` (공개 anon 키 — 방어는 RLS 가 한다) | `GEMINI_API_KEY` · `GROQ_API_KEY` (브라우저에 둘 수 없는 것) |
+| DB 접속 | — (클라이언트 SDK) | **없다** |
+
+**나누는 기준은 "브라우저에 둘 수 있는가" 다.** LLM 키는 노출되면 남이 내 쿼터를 쓰므로
+서버에 숨긴다. 데이터는 숨길 필요가 없다 — 사용자별 권한(RLS)으로 지킬 수 있기 때문이다.
+그래서 백엔드에 DB 비밀번호가 없고, 백엔드가 죽어도 일정·대화는 계속 보인다.
+
+2026-08-13 에 백엔드의 저장·조회 라우터(`/api/items` 등)와 `models/`·`alembic/`·
+`core/database.py` 를 걷어내면서 이 그림이 코드와 일치하게 됐다 — `docs/24` §16.
 
 ---
 
@@ -46,12 +62,11 @@ git push main → 두 플랫폼이 각자 자기 폴더만 보고 병렬 자동 
 
 ```
 https://<서비스명>.onrender.com/health      → {"status":"ok","env":"production"}
-https://<서비스명>.onrender.com/docs        → Swagger UI
-https://<서비스명>.onrender.com/health/db   → {"status":"ok","db":"ok"}  (DB 연결 후)
+https://<서비스명>.onrender.com/docs        → Swagger UI (경로는 /api/chat · /api/summary 둘뿐)
 ```
 
-`/health` 는 DB를 건드리지 않는다 → Render 헬스체크가 DB 상태에 끌려가지 않는다.
-`/health/db` 는 `SELECT 1` 까지 왕복한다 → keep-alive·DB 점검용.
+`/health/db` 는 없다(2026-08-13 제거). DB 를 쓰던 라우터들이 사라지면서, 아무것도 지키지
+않으면서 옛 DB 를 가리켜 `down` 을 띄우는 표시등만 남았기 때문이다 — §0-1.
 
 ### 1-3. 환경변수
 
@@ -73,8 +88,7 @@ https://<서비스명>.onrender.com/health/db   → {"status":"ok","db":"ok"}  (
 >   -H "Origin: https://<확인할-도메인>" -H "Access-Control-Request-Method: POST" \
 >   | grep -i access-control-allow-origin      # 헤더가 나오면 허용된 것
 > ```
-| `DATABASE_URL` | Supabase Connection string | 아래 2절 |
-| `REDIS_URL` | Upstash URL | 아직 미사용 — 비워도 됨 |
+| ~~`DATABASE_URL`~~ · ~~`REDIS_URL`~~ | — | **더 이상 없다.** 백엔드는 DB 에 붙지 않는다(§0-1). 대시보드에 옛 값이 남아 있어도 무해하지만 지우는 편이 오해를 줄인다 |
 | `JWT_SECRET` | Render 자동 생성 | 직접 넣지 말 것 |
 | `GEMINI_API_KEY` / `GROQ_API_KEY` | LLM 키 | AI 확정 후 |
 
@@ -83,24 +97,21 @@ https://<서비스명>.onrender.com/health/db   → {"status":"ok","db":"ok"}  (
 
 ---
 
-## 2. Supabase(DB) 연결
+## 2. Supabase(DB) 연결 — 백엔드에는 없다
 
-1. Supabase 프로젝트 → **Project Settings → Database → Connection string → URI** 복사
-2. 그대로 Render `DATABASE_URL` 에 붙여넣는다.
-   `postgresql://...?sslmode=require` 형태여도 된다 — 백엔드가 기동 시
-   `postgresql+asyncpg://` 로 바꾸고 `sslmode` 는 드라이버 옵션으로 옮긴다
-   (`app/core/config.py`). 손으로 고칠 필요 없음.
-3. **마이그레이션은 로컬에서 1회 적용한다** (Render 무료 플랜은 셸이 없다):
+**Render 에 넣을 DB 값은 없다.** 백엔드는 DB 에 붙지 않는다(§0-1).
 
-```bash
-cd backend
-# .env 의 DATABASE_URL 을 잠시 Supabase 주소로 바꾼 뒤
-alembic upgrade head
-```
+DB 는 프론트가 직접 쓴다. 그래서 Supabase 관련 값은 전부 **Vercel** 쪽에 있다 —
+`NEXT_PUBLIC_SUPABASE_URL` 과 `NEXT_PUBLIC_SUPABASE_ANON_KEY`(3절).
 
-> 매 배포마다 자동 적용하고 싶으면 Start Command 를
-> `alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT` 로 바꾼다.
-> 단 DB가 잠들어 있으면 기동 자체가 실패하므로, DB 연결이 안정된 뒤에 적용할 것.
+> anon key 를 프론트에 두는 것은 실수가 아니다. 이 키는 **브라우저에 나가라고 만든 공개
+> 키**이고, 실제 방어선은 키가 아니라 행 단위 권한(RLS)이다 — `supabase/migrations/*.sql`
+> 의 정책이 `auth.uid()` 로 누가 무엇을 볼 수 있는지 정한다. 반대로 `service_role` 키는
+> RLS 를 통째로 무시하므로 **프론트에 절대 두지 않는다.**
+
+**스키마를 새 프로젝트에 세울 때**는 `supabase/migrations/` 의 `.sql` 을 번호순으로
+대시보드 SQL Editor 에 붙여 실행한다(0001~). alembic 은 더 이상 쓰지 않는다 —
+백엔드가 갖고 있던 5개 테이블과 함께 걷어냈다.
 
 ---
 
@@ -119,7 +130,7 @@ alembic upgrade head
 |---|---|---|
 | 첫 요청 30초~1분 | Render 무료: 15분 무요청 시 슬립 | 외부 cron 으로 `/health` 10분마다 GET (UptimeRobot·cron-job.org). self-ping 은 안 됨 |
 | DB 첫 쿼리 지연 | 커넥션 풀 미생성 | 기동 시 `SELECT 1` 워밍업 (`app/main.py` lifespan) — 적용됨 |
-| 1주 뒤 DB 정지 | Supabase 무료: 무활동 시 일시정지 | keep-alive 를 `/health/db` 로 걸어 DB까지 깨움 |
+| 1주 뒤 DB 정지 | Supabase 무료: 무활동 시 일시정지 | 프론트가 직접 붙으므로 **사람이 쓰면 안 잔다.** 백엔드로는 깨울 수 없다(붙지 않으므로) |
 | 커넥션 끊김 오류 | 풀러가 유휴 커넥션 종료 | `pool_pre_ping` + `pool_recycle=1800` (`app/core/database.py`) — 적용됨 |
 
 - 무료 750시간/월 = 서비스 1개 24/7 가능. keep-alive 를 켜도 한도 안.
@@ -152,7 +163,6 @@ npm run dev
 - [x] Vercel `NEXT_PUBLIC_API_BASE` 설정 → 재배포
 - [x] Render `CORS_ORIGIN_REGEX` 로 Vercel 도메인 허용 (프리플라이트로 확인)
 - [x] LLM 키 입력 → `/api/chat` 실제 파싱 확인
-- [ ] Supabase 프로젝트 생성 → `DATABASE_URL` 입력 → `alembic upgrade head`
-- [ ] `/health/db` 가 `db: ok`
-- [ ] `/api/chat` 결과를 `POST /api/items` 로 저장 연결 (지금은 화면 상태에만 존재)
-- [ ] keep-alive cron 등록 (`/health/db`, 10분)
+- [x] ~~Supabase `DATABASE_URL` → `alembic upgrade head` → `/health/db` 가 `ok`~~
+      → **없어진 일이다.** 저장은 프론트가 Supabase 로 직행하고 백엔드는 DB 에 붙지 않는다(§0-1).
+- [ ] keep-alive cron 등록 (`/health`, 10분) — 백엔드 슬립만 막으면 된다. 깨울 DB 가 없다
