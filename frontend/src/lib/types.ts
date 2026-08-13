@@ -1,10 +1,10 @@
 // Comein 도메인 타입 (CLAUDE.md §7 데이터 모델 기준)
 //
 // 사용자 유형(Student·Professional·Personal)마다 다른 모델을 만들지 않는다.
-// 하나의 Schedule, 하나의 Contact 를 두고 `category`·`relation` 으로 의미만 가른다.
+// 하나의 Schedule 을 두고 `category` 로 의미만 가른다.
 // 그 의미를 어떻게 읽을지는 `lib/mode.ts` 한 곳에 모여 있다.
 
-import type { EventCategory, PersonRelation } from "./mode";
+import type { EventCategory } from "./mode";
 
 export type ID = string;
 
@@ -168,9 +168,6 @@ export interface Contact {
   incomingRequestId?: ID;
   /** 함께 있는 일정 수 */
   sharedEvents?: number;
-  /** 나와 이 사람의 관계(교수·동료·가족…). 유형마다 다른 이름으로 불리지만 사람은 하나다 —
-   *  같은 사람을 학생용·직장용으로 복제하지 않는다. 비어 있으면 소속·태그에서 읽어 낸다. */
-  relation?: PersonRelation;
   /** 자유 태그. 관계를 규칙으로 읽을 때의 실마리이자, 나중에 검색이 붙을 자리. */
   tags?: string[];
 }

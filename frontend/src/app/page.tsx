@@ -11,7 +11,8 @@ import { ArrowRight, Moon, Sun } from "lucide-react";
  *
  * 배경 아트워크: 흩어진 점들이 등장과 함께 '질서'로 정렬된다 — 철학을 3초 안에 시각으로 전달.
  * 장식이 아니라 의미. (모노크롬·초저대비, 단 한 번 정렬 후 정지)
- * 흐름: Landing → (들어가기) Experience → Enter → Workspace. 재방문은 '바로 입장' → Enter.
+ * 흐름: Landing → (들어가기) Experience → Workspace.
+ * 재방문은 '바로 입장' → /experience?auth=1 — 8.2초짜리 인트로를 건너뛰고 로그인 칸으로 곧장 간다.
  */
 
 const COLS = 8;
@@ -90,7 +91,7 @@ export default function Landing() {
             들어가기
             <ArrowRight className="lnd-cta-arrow" />
           </Link>
-          <Link href="/enter" className="lnd-whisper">
+          <Link href="/experience?auth=1" className="lnd-whisper">
             이미 Comein을 아시나요 · 바로 입장
           </Link>
         </div>
@@ -198,13 +199,16 @@ const CSS = `
 .lnd-cta-arrow { width: 17px; height: 17px; stroke-width: 1.8; transition: transform 0.25s cubic-bezier(0.22,1,0.36,1); }
 .lnd-cta:hover .lnd-cta-arrow { transform: translateX(3px); }
 
-.lnd-whisper { font-size: 13px; font-weight: 400; letter-spacing: -0.005em; color: var(--faint); text-decoration: none; transition: color 0.3s; }
-.lnd-whisper:hover { color: var(--muted); }
+/* 재방문자가 인트로를 건너뛰는 유일한 길이다. 그런데 --faint 로 두니 흰 바탕에서
+   2.27:1 이라 읽기도 어렵고(AA 4.5:1), 밑줄도 없어 '눌리는 것' 으로 보이지 않았다.
+   조용한 톤은 유지하되 읽히게 하고, 옅은 밑줄로 링크임을 알린다. */
+.lnd-whisper { font-size: 13px; font-weight: 400; letter-spacing: -0.005em; color: var(--muted); text-decoration: underline; text-decoration-color: color-mix(in srgb, var(--muted) 32%, transparent); text-underline-offset: 4px; transition: color 0.3s, text-decoration-color 0.3s; }
+.lnd-whisper:hover { color: var(--ink); text-decoration-color: color-mix(in srgb, var(--ink) 45%, transparent); }
 .lnd-whisper:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; border-radius: 4px; }
 
 /* 하단 — 침묵에 가까운 서명 */
 .lnd-foot { position: relative; z-index: 1; padding: 26px clamp(24px, 7vw, 72px) 34px; text-align: center; }
-.lnd-foot span { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--faint); animation: lnd-fade 1.4s ease 1s both; }
+.lnd-foot span { font-size: 11px; font-weight: 500; letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); animation: lnd-fade 1.4s ease 1s both; }
 
 @keyframes lnd-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 @keyframes lnd-fade { from { opacity: 0; } to { opacity: 1; } }

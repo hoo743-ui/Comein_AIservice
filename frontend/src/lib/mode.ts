@@ -30,8 +30,12 @@ export function normalizeMode(v: unknown): UserMode {
 }
 
 // ── 분류 체계 ──────────────────────────────────────────
-// 일정과 사람은 Context 마다 다른 이름으로 불리지만, 저장되는 실체는 하나다.
+// 일정은 Context 마다 다른 이름으로 불리지만, 저장되는 실체는 하나다.
 // 그래서 category 는 Schedule 의 필드이면서 동시에 '해석의 결과'일 수 있다.
+//
+// 사람 쪽에도 같은 분류표(peopleCategories · PersonRelation · classifyPerson)가 있었다.
+// 만들어 두고 화면에 붙인 적이 없어 걷어냈다 — 사람 화면을 붙이는 날 그때의 화면을
+// 보면서 다시 세우는 편이, 쓰이지 않은 채 굳은 이름표를 물려받는 것보다 낫다.
 
 export type EventCategory =
   // student
@@ -41,12 +45,6 @@ export type EventCategory =
   // personal
   | "appointment" | "family" | "friend" | "personal" | "travel"
   // 어디에도 매이지 않는 것 — 억지로 이름 붙이지 않는다.
-  | "other";
-
-export type PersonRelation =
-  | "professor" | "ta" | "teammate" | "classmate"
-  | "colleague" | "manager" | "customer" | "partner"
-  | "familyMember" | "closeFriend" | "acquaintance"
   | "other";
 
 /** 라벨은 두 언어를 함께 갖는다 — 화면에서 사전을 한 번 더 뒤지지 않게. */
@@ -66,12 +64,7 @@ export interface ModeConfig {
   label: Label;
   /** '오늘' 화면이 자기를 부르는 이름 — 같은 하루가 Context 마다 다른 흐름으로 읽힌다. */
   todayFlow: Label;
-  /** 캘린더가 자기를 부르는 이름 */
-  calendarFlow: Label;
-  /** 사람 화면이 자기를 부르는 이름 */
-  peopleFlow: Label;
   eventCategories: CategoryDef<EventCategory>[];
-  peopleCategories: CategoryDef<PersonRelation>[];
 }
 
 // ── 설정 ───────────────────────────────────────────────
@@ -81,57 +74,34 @@ export const MODE_CONFIG: Record<UserMode, ModeConfig> = {
   student: {
     label: { ko: "학생", en: "Student" },
     todayFlow: { ko: "오늘의 학업 흐름", en: "Today's study flow" },
-    calendarFlow: { ko: "수업과 시험의 흐름", en: "Classes & exams" },
-    peopleFlow: { ko: "교수·팀원·친구", en: "Professors, teammates, friends" },
     eventCategories: [
       { key: "class", label: { ko: "수업", en: "Class" }, hints: ["수업", "강의", "실습", "class", "lecture"] },
       { key: "exam", label: { ko: "시험", en: "Exam" }, hints: ["시험", "중간", "기말", "퀴즈", "exam", "quiz", "midterm", "final"] },
       { key: "assignment", label: { ko: "과제", en: "Assignment" }, hints: ["과제", "제출", "레포트", "보고서", "assignment", "report", "due"] },
       { key: "team", label: { ko: "팀 프로젝트", en: "Team project" }, hints: ["팀", "조별", "캡스톤", "프로젝트", "team", "capstone"] },
     ],
-    peopleCategories: [
-      { key: "professor", label: { ko: "교수", en: "Professor" }, hints: ["교수", "prof"] },
-      { key: "ta", label: { ko: "조교", en: "TA" }, hints: ["조교", "ta"] },
-      { key: "teammate", label: { ko: "팀원", en: "Teammate" }, hints: ["팀", "조", "team"] },
-      { key: "classmate", label: { ko: "친구", en: "Friend" } },
-    ],
   },
 
   professional: {
     label: { ko: "직장인", en: "Professional" },
     todayFlow: { ko: "오늘의 업무 흐름", en: "Today's work flow" },
-    calendarFlow: { ko: "회의와 프로젝트의 흐름", en: "Meetings & projects" },
-    peopleFlow: { ko: "동료·고객·파트너", en: "Colleagues, clients, partners" },
     eventCategories: [
       { key: "meeting", label: { ko: "회의", en: "Meeting" }, hints: ["회의", "미팅", "스탠드업", "meeting", "sync", "1:1"] },
       { key: "project", label: { ko: "프로젝트", en: "Project" }, hints: ["프로젝트", "스프린트", "릴리즈", "project", "sprint", "release"] },
       { key: "deadline", label: { ko: "마감", en: "Deadline" }, hints: ["마감", "데드라인", "제출", "deadline", "due"] },
       { key: "client", label: { ko: "고객", en: "Client" }, hints: ["고객", "클라이언트", "거래처", "client", "customer"] },
     ],
-    peopleCategories: [
-      { key: "colleague", label: { ko: "동료", en: "Colleague" } },
-      { key: "manager", label: { ko: "상사", en: "Manager" }, hints: ["팀장", "부장", "대표", "manager", "lead"] },
-      { key: "customer", label: { ko: "고객", en: "Client" }, hints: ["고객", "클라이언트", "client"] },
-      { key: "partner", label: { ko: "파트너", en: "Partner" }, hints: ["파트너", "협력", "partner"] },
-    ],
   },
 
   personal: {
     label: { ko: "개인", en: "Personal" },
     todayFlow: { ko: "오늘의 생활 흐름", en: "Today's flow" },
-    calendarFlow: { ko: "약속과 일상의 흐름", en: "Plans & everyday" },
-    peopleFlow: { ko: "가족·친구·지인", en: "Family, friends, people" },
     eventCategories: [
       { key: "appointment", label: { ko: "약속", en: "Appointment" }, hints: ["약속", "예약", "병원", "appointment"] },
       { key: "family", label: { ko: "가족", en: "Family" }, hints: ["가족", "부모", "생일", "family", "birthday"] },
       { key: "friend", label: { ko: "친구", en: "Friend" }, hints: ["친구", "모임", "friend"] },
       { key: "travel", label: { ko: "여행", en: "Travel" }, hints: ["여행", "출발", "비행", "travel", "flight", "trip"] },
       { key: "personal", label: { ko: "개인", en: "Personal" }, hints: ["운동", "취미", "휴식", "gym", "personal"] },
-    ],
-    peopleCategories: [
-      { key: "familyMember", label: { ko: "가족", en: "Family" }, hints: ["가족", "엄마", "아빠", "family"] },
-      { key: "closeFriend", label: { ko: "친구", en: "Friend" }, hints: ["친구", "friend"] },
-      { key: "acquaintance", label: { ko: "지인", en: "Acquaintance" } },
     ],
   },
 };

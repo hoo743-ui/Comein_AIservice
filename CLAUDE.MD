@@ -12,7 +12,7 @@
 ## 0. Product Vision & North Star
 
 > **북극성.** 모든 화면·기능·디자인 결정은 이 문서를 기준으로 판단한다.
-> **채택된 틀:** 워크플로우 중심 · 문턱 인트로 · 슬림 레일 + 단일 캔버스. 라이브 앱 최상위 라우트(`/` Landing · `/experience` · `/enter` · `/workspace`)로 구현되어 있다.
+> **채택된 틀:** 워크플로우 중심 · 문턱 인트로 · 슬림 레일 + 단일 캔버스. 라이브 앱 최상위 라우트(`/` Landing · `/experience` · `/workspace`)로 구현되어 있다.
 > **시각 언어 규격(토큰·타이포·색·여백·모션): `docs/22_DESIGN_LANGUAGE.md`**, **화면 여정·IA: `docs/23_USER_JOURNEY.md`** — "feel expensive, not look expensive".
 
 ### Core Principle
@@ -257,7 +257,7 @@ API Gateway (REST API)  ← backend/
 - 배경은 flat 금지 — 웜 오프화이트/다크 위 대형 확산광 + 코너 그림자로 명암 대비(돔형 깊이감), 중앙은 밝게 유지.
 - 라우트 리디렉션은 `template.tsx`의 전역 페이드로 부드럽게 이어짐(입장 문턱 연출은 유지). AI 어시스트(우측 문) 사이드는 제거해 캔버스를 비웠다.
 - 입장: 문턱(threshold) 전환 1회 재생 — 문이 열리듯 워크스페이스로 (브랜드 스토리 연결).
-- 진입 여정: `/` Landing → `/experience`(시네마틱 + 로그인) → `/enter`(간편 로그인) → `/workspace`.
+- 진입 여정: `/` Landing → `/experience`(시네마틱 + 로그인) → `/workspace`. 재방문은 `/experience?auth=1` 로 인트로를 건너뛴다.
 
 ---
 

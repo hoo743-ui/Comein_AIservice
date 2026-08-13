@@ -18,7 +18,7 @@ npm run build   # 프로덕션 빌드(타입·린트 검증)
 |------|------|
 | `/` | **Landing** — 갤러리형 정체성(철학). 들어가기→Experience, 바로입장→Enter |
 | `/experience` | **Experience** — Co·me·in 시네마틱 리빌 + 로그인(소셜/이메일) → Workspace |
-| `/enter` | **Enter** — 간편 소셜 로그인("바로 입장") → Workspace |
+| ~~`/enter`~~ | 걷어냈다(2026-08-13) — `/experience` 의 부분집합이었다. 빠른 로그인은 `/experience?auth=1` |
 | `/workspace` | **Workspace** — 슬림 레일 + 단일 캔버스(6뷰: Today·Calendar·Tasks·Notes·Meetings·People), 캡처 바 |
 | `/lab` | Living Intelligence 시그니처 비주얼(canvas 데모) |
 

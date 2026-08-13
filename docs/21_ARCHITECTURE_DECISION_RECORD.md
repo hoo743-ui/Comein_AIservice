@@ -67,7 +67,8 @@
 ## ADR-010 · reimagine 정식 채택 — 슬림 레일 + 단일 캔버스, 디자인 랭귀지 전환
 
 - **결정**: 프로토타입 `reimagine`을 **정식 틀로 채택**하고 최상위 라우트로 승격. 구 3분할 셸(사이드바·컨텍스트 패널·Chat 홈)과 그 크롬(shadcn 스타일 `ui/*`·`config/nav`·`layout/*`·`enter-transition`·`feature-mindmap`·`brand/*`·`theme-toggle`·전역 `i18n`)을 **삭제**.
-- **라우트**: `/`(Landing) · `/experience`(시네마틱 리빌 + 로그인) · `/enter`(간편 소셜 로그인) · `/workspace`(슬림 레일 + 단일 캔버스, 6뷰) · `/lab`(시그니처 비주얼).
+- **라우트**: `/`(Landing) · `/experience`(시네마틱 리빌 + 로그인, `?auth=1` 이면 인트로를 건너뛴다) · `/workspace`(슬림 레일 + 단일 캔버스).
+  `/enter`(간편 소셜 로그인)는 2026-08-13 에 걷어냈다 — `/experience` 가 이미 같은 로그인을 다 갖고 있어 부분집합이었다.
 - **디자인 랭귀지**: 카드/글래스/입체 그림자/세리프를 버리고 **모노크롬 + 브랜드 퍼플 액센트 한 지점 · 블록 + 1px 헤어라인 · 세리프 없는 그로테스크**로 전환. 규격은 `22_DESIGN_LANGUAGE.md`, 여정은 `23_USER_JOURNEY.md`.
 - **UI 프레임워크**: shadcn/FullCalendar/dnd-kit/Recharts/Framer Motion/React Query **미사용**. 각 화면은 컴포넌트 로컬 `<style>` + CSS 토큰으로 자체 완결(lucide·next-themes·zustand만).
 - **연동 보존**: 구글 캘린더/연락처(`lib/google.ts`)·좌표/경로(`lib/geo.ts`)·카카오맵(`components/workspace/kakao-map.tsx`)은 **삭제하지 않고 보존** — 향후 워크스페이스에 이식.

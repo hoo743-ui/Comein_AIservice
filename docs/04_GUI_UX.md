@@ -8,7 +8,9 @@
 
 ## 화면 여정 (4개의 순간)
 
-`/` **Landing**(정체성·철학) → `/experience` **Experience**(시네마틱 리빌 + 로그인) → `/enter` **Enter**(간편 소셜 로그인, "바로 입장") → `/workspace` **Workspace**. 상세 흐름·분기·전환은 `23_USER_JOURNEY.md`.
+`/` **Landing**(정체성·철학) → `/experience` **Experience**(시네마틱 리빌 + 로그인) → `/workspace` **Workspace**.
+재방문자는 Landing 의 "바로 입장" 으로 `/experience?auth=1` 에 닿아 인트로를 건너뛰고 로그인 칸으로 곧장 간다.
+상세 흐름·분기·전환은 `23_USER_JOURNEY.md`.
 
 ## 워크스페이스 레이아웃 (슬림 레일 + 단일 캔버스)
 

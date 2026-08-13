@@ -751,11 +751,11 @@ export default function Reimagine() {
 
   // 연결이 켜져 있는데 로그인하지 않았다면 문 앞으로 돌려보낸다.
   // ready 를 기다리는 이유: 세션 확인 전에 단정하면 이미 들어와 있는 사람까지 쫓아낸다.
-  // exiting 을 빼 두는 이유: 나가는 사람은 세션이 풀리는 순간 이 가드에도 걸려 /enter 로
+  // exiting 을 빼 두는 이유: 나가는 사람은 세션이 풀리는 순간 이 가드에도 걸려 로그인 화면으로
   // 끌려간다 — 나가려는 곳과 가드가 미는 곳이 달라 화면이 두 번 바뀐다.
   React.useEffect(() => {
     if (exiting) return;
-    if (remote.configured && remote.ready && !remote.signedIn) router.replace("/enter");
+    if (remote.configured && remote.ready && !remote.signedIn) router.replace("/experience?auth=1");
   }, [exiting, remote.configured, remote.ready, remote.signedIn, router]);
 
   /** 나가기 — 묻지 않고 그냥 나간다.
@@ -5126,7 +5126,7 @@ html { font-size: 17px; }
   animation: rmg-arrive-out 1.3s cubic-bezier(0.4,0,0.2,1) both; }
 @keyframes rmg-arrive-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rmg-arrive { display: none; } }
-.rmg-eyebrow { margin: 0 0 var(--sp-3); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--faint); }
+.rmg-eyebrow { margin: 0 0 var(--sp-3); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 
 /* ══ 화면 아래의 세 겹 ══════════════════════════════════════════════
    같은 자리에 서지만 같은 무게로 서지 않는다. 역할이 다르면 재질도 달라야 한다.
@@ -5397,11 +5397,14 @@ html { font-size: 17px; }
 /* 좌측 3px 표식 — 글로우 없이. 지금 어느 공간에 있는지만 조용히 말한다. */
 .rmg-rail-ind::before { content: ""; position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 3px; height: 18px; border-radius: 0 3px 3px 0; background: color-mix(in srgb, var(--ink) 42%, transparent); }
 .rmg-rail-ind[data-hidden="true"] { opacity: 0; }
-.rmg-railbtn { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: 100%; height: var(--nav-row); padding: 0 10px; box-sizing: border-box; border: 0; border-radius: var(--r); background: none; color: var(--faint); cursor: pointer; text-decoration: none;
+/* 레일은 이 앱을 돌아다니는 주 수단이다. 기본색이 --faint 였는데 흰 바탕에서 2.35:1 이라
+   (AA 4.5:1) 펼쳐도 이름이 잘 읽히지 않았다 — 호버해야 비로소 보였다. 한 단계 올린다.
+   지금·호버·선택의 층은 그대로다: --muted → --ink → --ink + 굵기 600. */
+.rmg-railbtn { position: relative; z-index: 1; display: flex; align-items: center; gap: 12px; width: 100%; height: var(--nav-row); padding: 0 10px; box-sizing: border-box; border: 0; border-radius: var(--r); background: none; color: var(--muted); cursor: pointer; text-decoration: none;
   transition: background 170ms ease-out, color 170ms ease-out; }
 .rmg-railbtn > .rmg-railicon { flex: 0 0 19px; }
 /* Hover — 배경이 아주 조금 오르고 대비가 한 단계 오른다. 자리는 움직이지 않는다(마우스가 지나가도 흔들리지 않게). */
-.rmg-railbtn:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--muted); }
+.rmg-railbtn:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); color: var(--ink); }
 /* Click — 아주 약한 스케일(리플 없음) */
 .rmg-railbtn:active { transform: scale(0.98); transition: transform 90ms ease-out; }
 /* 선택 — 쉬는 상태(faint) → hover(muted) → 선택(ink). 세 단계가 분명해야 '지금 여기'가 읽힌다. */
@@ -5490,12 +5493,16 @@ html { font-size: 17px; }
 .rmg-mc-nav { display: flex; align-items: center; gap: 2px; }
 .rmg-mc-today { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font-family: inherit; font-size: 0.72rem; font-weight: 600; letter-spacing: 0.01em; padding: 5px 11px; border-radius: 999px; cursor: pointer; margin-right: 4px; transition: color 0.2s, border-color 0.2s, background 0.2s; }
 .rmg-mc-today:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
-.rmg-mc-arrow { width: 26px; height: 26px; display: grid; place-items: center; border: 0; background: none; color: var(--muted); font-size: 1.1rem; line-height: 1; cursor: pointer; border-radius: 8px; transition: background 0.2s, color 0.2s; }
+/* 달을 넘기는 손잡이. --muted 로 두면 다크에서 이 패널 표면 위에 3.34:1 로 앉는다
+   (패널이 --paper 보다 밝아 대비가 깎인다). 글리프 하나뿐이라 놓치면 길이 막히므로
+   쉬는 상태부터 또렷하게 두고, 손이 닿았다는 신호는 배경으로 준다. */
+.rmg-mc-arrow { width: 26px; height: 26px; display: grid; place-items: center; border: 0; background: none; color: var(--ink); font-size: 1.1rem; line-height: 1; cursor: pointer; border-radius: 8px; transition: background 0.2s, color 0.2s; }
 .rmg-mc-arrow:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); color: var(--ink); }
 .rmg-mc-search { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; padding: 5px 10px 5px 9px; border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); border-radius: 9px; cursor: pointer; transition: color 0.2s, border-color 0.2s, background 0.2s; }
 .rmg-mc-search:hover { color: var(--ink); border-color: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
 .rmg-mc-search-ic { width: 15px; height: 15px; stroke-width: 1.8; }
-.rmg-mc-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.02em; color: var(--faint); }
+/* 버튼 안의 글자가 버튼 자신(--muted)보다 옅으면 손잡이가 제 이름을 못 읽게 한다. */
+.rmg-mc-kbd { font-family: ui-monospace, "SF Mono", monospace; font-size: 0.66rem; font-weight: 600; letter-spacing: 0.02em; color: inherit; }
 
 /* 월/연 피커 — 제목 클릭 시 */
 .rmg-mc-picker { margin-bottom: 14px; padding: 12px; border: 1px solid var(--hair); border-radius: 14px; background: color-mix(in srgb, var(--surface) 60%, transparent); animation: rmg-cs-pop 0.18s cubic-bezier(0.22,1,0.36,1) both; }
@@ -5508,7 +5515,9 @@ html { font-size: 17px; }
 
 /* 요일 행과 날짜 그리드는 같은 컬럼 규격 + 같은 gap 이어야 한 격자 위에 선다. */
 .rmg-mc-wd { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; margin-bottom: 4px; }
-.rmg-mc-wd span { text-align: center; font-size: 0.68rem; font-weight: 500; color: var(--faint); padding: 4px 0; }
+/* 요일 머리글은 장식이 아니라 달력을 읽는 기준선이다 — 가장 옅은 톤(--faint)에 두면
+   흰 바탕에서 2.35:1 로 읽기 어렵다(AA 4.5:1). 한 단계 올린다. */
+.rmg-mc-wd span { text-align: center; font-size: 0.68rem; font-weight: 500; color: var(--muted); padding: 4px 0; }
 .rmg-mc-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 2px; animation: rmg-mc-fade 0.19s ease both; }
 .rmg-mc-grid.in-l { animation: rmg-mc-slide-l 0.2s cubic-bezier(0.22,1,0.36,1) both; }
 .rmg-mc-grid.in-r { animation: rmg-mc-slide-r 0.2s cubic-bezier(0.22,1,0.36,1) both; }
@@ -5652,9 +5661,9 @@ html { font-size: 17px; }
 
 /* 글자 크기 — 칸이 아니라 바. 양 끝의 '가' 가 무엇을 조절하는지 말해 준다. */
 .rmg-size { display: flex; align-items: center; gap: var(--sp-1); }
-.rmg-size-a { font-size: 0.8rem; color: var(--faint); }
+.rmg-size-a { font-size: 0.8rem; color: var(--muted); }
 .rmg-size-b { font-size: 1.15rem; color: var(--muted); }
-.rmg-size-v { font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; min-width: 3em; text-align: right; }
+.rmg-size-v { font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; min-width: 3em; text-align: right; }
 .rmg-size-bar { flex: 1; min-width: 90px; height: 2px; appearance: none; -webkit-appearance: none; background: var(--hair); border-radius: 2px; outline: none; cursor: pointer; }
 .rmg-size-bar::-webkit-slider-thumb { appearance: none; -webkit-appearance: none; width: 14px; height: 14px; border-radius: 50%; background: var(--ink); border: 0; cursor: pointer; transition: transform 150ms ease-out; }
 .rmg-size-bar::-webkit-slider-thumb:hover { transform: scale(1.15); }
@@ -5773,18 +5782,20 @@ html { font-size: 17px; }
    (안의 세 줄 — 인사·날씨·숫자 — 은 서로의 정렬을 그대로 지킨다.) */
 .rmg-hero { display: flex; flex-direction: column; padding-left: var(--sp-2); }
 .rmg-mood { margin: 0; font-size: clamp(1.1rem, 2.6vw, 1.4rem); font-weight: 300; letter-spacing: -0.015em; color: var(--muted); }
-.rmg-env-line { margin: var(--sp-3) 0 0; display: inline-flex; align-items: center; gap: var(--sp-1); font-size: 0.9rem; font-weight: 400; color: var(--faint); }
+.rmg-env-line { margin: var(--sp-3) 0 0; display: inline-flex; align-items: center; gap: var(--sp-1); font-size: 0.9rem; font-weight: 400; color: var(--muted); }
 .rmg-env-icon { width: 15px; height: 15px; stroke-width: 1.7; }
 .rmg-counts { margin-top: var(--sp-5); display: flex; gap: var(--sp-6); }
 .rmg-count { display: flex; flex-direction: column; gap: var(--sp-1); }
 .rmg-count-n { font-size: 1.75rem; font-weight: 300; color: var(--ink); letter-spacing: -0.02em; line-height: 1; font-variant-numeric: tabular-nums; }
-.rmg-count-l { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--faint); }
+/* 숫자 밑의 이 한 마디가 그 숫자의 뜻이다 — 못 읽으면 "2" 가 무엇의 2인지 알 수 없다. */
+.rmg-count-l { font-size: 0.74rem; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); }
 
 /* CONTEXT (큐레이션) */
 /* 세 줄이 하나의 정보 덩어리 — 줄 사이를 넓혀 숨 쉬게 하되 묶임은 유지한다. */
 .rmg-ctx-line { display: grid; grid-template-columns: 6.5em 1fr; gap: var(--sp-3); align-items: baseline; padding: var(--sp-3) 0; border-top: 1px solid var(--hair); }
 .rmg-ctx-line:first-of-type { border-top: 0; padding-top: var(--sp-1); }
-.rmg-ctx-k { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em; color: var(--faint); }
+/* 줄의 이름표(다가오는 순간·오늘의 흐름…) — 값보다 조용하되 읽히긴 해야 한다. */
+.rmg-ctx-k { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em; color: var(--muted); }
 .rmg-ctx-v { font-size: 1.06rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); line-height: 1.5; }
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
 /* 좁은 폭 — 라벨과 값을 나란히 두면 값 칸이 6.5em 남짓으로 짜부라져
@@ -5893,7 +5904,8 @@ html { font-size: 17px; }
   .rmg-cv-split { grid-template-columns: minmax(0, 1fr); gap: var(--sp-4); }
 }
 .rmg-cv-col { display: flex; flex-direction: column; gap: var(--sp-2); min-width: 0; }
-.rmg-cv-eyebrow { margin: 0; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+/* 지금 무엇을 보고 있는지 말하는 줄 — 작고 대문자라 더 읽기 어렵다. --faint 로는 부족하다. */
+.rmg-cv-eyebrow { margin: 0; font-size: 0.74rem; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 /* 일(日) 화면 — 달력 컬럼과 같은 폭을 쓴다. 월↔일을 오갈 때 좌우 기준선과 무게가 그대로다. */
 /* 시간표 머리 — 본문과 같은 폭을 쓴다(880px 에 묶여 있어 표만 넓어지면 어깨가 어긋난다). */
 .rmg-cv-head { max-width: min(1280px, 100%); display: flex; align-items: center; gap: var(--sp-2); }
@@ -6110,9 +6122,9 @@ html { font-size: 17px; }
 /* 내 핸들 — 한 줄. 라벨·값·복사가 한 덩어리로 붙는다. 검색창 위에 놓여
    '여기는 사람을 주고받는 자리' 라는 것을 조용히 말한다. */
 .rmg-mine { display: flex; align-items: baseline; gap: var(--sp-1); margin: 0 0 var(--sp-1); padding: 0 8px; }
-.rmg-mine-k { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--faint); }
+.rmg-mine-k { font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
 .rmg-mine-v { font-size: 0.9rem; font-weight: 500; color: var(--ink); font-variant-numeric: tabular-nums; }
-.rmg-mine-copy { border: 0; background: none; font: inherit; font-size: 0.76rem; color: var(--faint);
+.rmg-mine-copy { border: 0; background: none; font: inherit; font-size: 0.76rem; color: var(--muted);
   cursor: pointer; padding: 2px 6px; border-radius: 6px; transition: color 160ms ease-out, background 160ms ease-out; }
 .rmg-mine-copy:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .rmg-mine-copy:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
@@ -6226,19 +6238,19 @@ html { font-size: 17px; }
 .rmg-lane { display: flex; align-items: center; gap: var(--sp-3); padding: 0 8px;
   border-bottom: 1px solid var(--hair); margin: 0 0 var(--sp-1); }
 .rmg-lane-btn { position: relative; display: inline-flex; align-items: baseline; gap: 5px;
-  border: 0; background: none; font: inherit; font-size: 0.84rem; font-weight: 400; color: var(--faint);
+  border: 0; background: none; font: inherit; font-size: 0.84rem; font-weight: 400; color: var(--muted);
   padding: 0 0 9px; cursor: pointer; transition: color 160ms ease-out; }
 .rmg-lane-btn:hover { color: var(--muted); }
 .rmg-lane-btn.on { color: var(--ink); font-weight: 500; }
 .rmg-lane-btn.on::after { content: ""; position: absolute; left: 0; right: 0; bottom: -1px; height: 1.5px;
   background: color-mix(in srgb, var(--ink) 65%, transparent); }
-.rmg-lane-n { font-size: 0.7rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+.rmg-lane-n { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rmg-lane-btn.on .rmg-lane-n { color: var(--muted); }
 @media (prefers-reduced-motion: reduce) { .rmg-lane-btn { transition: none; } }
 
 /* 만들기 — 버튼이 아니라 한 줄의 말 */
 .rmg-ppl-make { border: 0; background: none; font: inherit; font-size: 0.78rem; font-weight: 500;
-  color: var(--faint); cursor: pointer; padding: 4px 2px; flex-shrink: 0; transition: color 160ms ease-out; }
+  color: var(--muted); cursor: pointer; padding: 4px 2px; flex-shrink: 0; transition: color 160ms ease-out; }
 .rmg-ppl-make:hover { color: var(--ink); }
 .rmg-ppl-make:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; border-radius: 4px; }
 
@@ -6249,12 +6261,12 @@ html { font-size: 17px; }
 .rmg-ppl-bottom { display: flex; align-items: center; gap: var(--sp-1); min-width: 0; margin-top: 2px; }
 .rmg-ppl-prev { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   font-size: 0.8rem; font-weight: 300; color: var(--muted); }
-.rmg-ppl-prev.faint { color: var(--faint); }
+.rmg-ppl-prev.faint { color: var(--muted); }
 .rmg-ppl-av.grp { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .rmg-ppl-avic { width: 15px; height: 15px; stroke-width: 1.7; color: var(--muted); }
 
 /* 함께하는 일정 수 — 이 사람과 나의 접점. 숫자 하나면 충분하다. */
-.rmg-ppl-n { margin-left: auto; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+.rmg-ppl-n { margin-left: auto; font-size: 0.74rem; color: var(--muted); font-variant-numeric: tabular-nums; flex-shrink: 0; }
 /* 고른 사람 — 레일과 같은 언어(뉴트럴 면 + 좌측 3px). 목록이 출렁이지 않는다. */
 .rmg-ppl.on .rmg-ppl-head { background: color-mix(in srgb, var(--ink) 6%, transparent); }
 .rmg-ppl.on .rmg-ppl-head::before { content: ""; position: absolute; left: 0; top: 50%; transform: translateY(-50%); width: 3px; height: 20px; border-radius: 0 3px 3px 0; background: color-mix(in srgb, var(--ink) 42%, transparent); }
@@ -6280,7 +6292,7 @@ html { font-size: 17px; }
 .rmg-pnone-mark { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 50%;
   border: 1px solid var(--hair); color: var(--faint); }
 .rmg-pnone-ic { width: 18px; height: 18px; stroke-width: 1.4; }
-.rmg-pnone-t { margin: 0; font-size: 0.9rem; font-weight: 300; letter-spacing: -0.01em; color: var(--faint); }
+.rmg-pnone-t { margin: 0; font-size: 0.9rem; font-weight: 300; letter-spacing: -0.01em; color: var(--muted); }
 
 /* 머리 — 얼굴·이름·핸들, 오른쪽 끝에 아주 작은 더보기 */
 .rmg-phead { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
