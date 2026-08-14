@@ -1,28 +1,108 @@
-import os
-import urllib.request
+"""데모 전 사전 점검 — 우리가 부르는 그 모델이 오늘도 있는가.
+
+전에는 Gemini 의 모델 **목록**만 찍어 줬다. 목록은 눈으로 읽어야 하고, 눈은 자기가
+찾는 이름이 없다는 것을 잘 못 본다. 그리고 Groq 은 아예 확인 대상이 아니었다 —
+폴백이 살아 있는지 아무도 묻지 않았다는 뜻이다.
+
+이제 **코드가 실제로 쓰는 이름**을 두 Provider 에서 각각 확인하고, 하나라도 없으면
+0이 아닌 값으로 끝난다. 데모 전에 이것 하나만 돌리면 된다:
+
+    python scripts/check_models.py
+
+값은 backend/.env 에서 읽는다(커밋되지 않는 파일). 배포본은 Render 대시보드의
+환경변수를 쓰므로, 여기서 통과했다고 배포본이 통과하는 것은 아니다 — 키가 다르면
+결과도 다를 수 있다.
+"""
 import json
+import os
+import sys
+import urllib.error
+import urllib.request
+
 from dotenv import load_dotenv
 
-load_dotenv(os.path.join(os.path.dirname(__file__), "..", "backend", ".env"))
-api_key = os.getenv("GEMINI_API_KEY")
+ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+sys.path.insert(0, ROOT)
+load_dotenv(os.path.join(ROOT, "backend", ".env"))
 
-if not api_key:
-    print("Error: GEMINI_API_KEY not found in backend/.env")
-    exit(1)
+# 코드가 실제로 쓰는 이름을 그대로 가져온다 — 여기에 이름을 또 적으면 언젠가 갈린다.
+from ai.llm.gemini import DEFAULT_MODEL as GEMINI_MODEL  # noqa: E402
+from ai.llm.groq import DEFAULT_MODEL as GROQ_MODEL  # noqa: E402
 
-url = f"https://generativelanguage.googleapis.com/v1beta/models?key={api_key}"
+OK, FAIL, SKIP = "[ok]  ", "[FAIL]", "[skip]"
 
-try:
-    req = urllib.request.Request(url)
-    with urllib.request.urlopen(req) as response:
-        data = json.loads(response.read().decode())
-        print("=== 사용 가능한 Gemini 모델 목록 ===")
-        for model in data.get("models", []):
-            name = model.get("name")
-            supported = model.get("supportedGenerationMethods", [])
-            if "generateContent" in supported:
-                print(f"- {name}")
-except urllib.error.HTTPError as e:
-    print(f"API 요청 실패: {e.code} - {e.read().decode()}")
-except Exception as e:
-    print(f"에러 발생: {e}")
+
+def check_gemini(model_name: str) -> bool:
+    key = os.getenv("GEMINI_API_KEY")
+    if not key:
+        print(f"{SKIP} gemini — GEMINI_API_KEY 가 backend/.env 에 없다")
+        return True  # 없는 것은 실패가 아니다. Groq 단독으로도 돈다.
+    url = f"https://generativelanguage.googleapis.com/v1beta/models?key={key}"
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url), timeout=20) as resp:
+            data = json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        print(f"{FAIL} gemini — 모델 목록을 못 받았다: {e.code} {e.read().decode()[:200]}")
+        return False
+    except Exception as e:
+        print(f"{FAIL} gemini — {e}")
+        return False
+
+    usable = [
+        m["name"].removeprefix("models/")
+        for m in data.get("models", [])
+        if "generateContent" in m.get("supportedGenerationMethods", [])
+    ]
+    if model_name in usable:
+        print(f"{OK} gemini — '{model_name}' 있음 (generateContent 가능 모델 {len(usable)}개)")
+        return True
+
+    print(f"{FAIL} gemini — '{model_name}' 이(가) 목록에 없다. 이름이 바뀌었거나 은퇴했다.")
+    near = [m for m in usable if "flash" in m][:8]
+    if near:
+        print("        비슷한 것들: " + ", ".join(near))
+    print("        고칠 곳: ai/llm/gemini.py 의 GeminiProvider(model_name=...)")
+    return False
+
+
+def check_groq(model_name: str) -> bool:
+    key = os.getenv("GROQ_API_KEY")
+    if not key:
+        # 이건 경고다. 폴백이 없어도 Gemini 단독으로 돌지만, 흔들릴 때 받을 곳이 없다.
+        print(f"{SKIP} groq — GROQ_API_KEY 가 없다. 폴백 없이 Gemini 단독으로 돈다.")
+        return True
+    # SDK 로 묻는다. urllib 로 직접 부르면 Cloudflare 가 403(1010)으로 막는다 —
+    # 그리고 어차피 실제 호출도 SDK 를 지나므로, 같은 길로 확인하는 편이 맞다.
+    try:
+        from groq import Groq
+
+        usable = [m.id for m in Groq(api_key=key).models.list().data]
+    except Exception as e:
+        print(f"{FAIL} groq   — 모델 목록을 못 받았다: {type(e).__name__} {str(e)[:200]}")
+        return False
+    if model_name in usable:
+        print(f"{OK} groq   — '{model_name}' 있음 (모델 {len(usable)}개)")
+        return True
+
+    print(f"{FAIL} groq   — '{model_name}' 이(가) 없다. Groq 은 낡은 모델을 실제로 내린다.")
+    near = [m for m in usable if "llama" in m][:8]
+    if near:
+        print("        비슷한 것들: " + ", ".join(near))
+    print("        고칠 곳: ai/llm/groq.py 의 GroqProvider(model_name=...)")
+    return False
+
+
+def main() -> int:
+    print("=== 데모 전 모델 점검 ===")
+    gemini_ok = check_gemini(GEMINI_MODEL)
+    groq_ok = check_groq(GROQ_MODEL)
+
+    if gemini_ok and groq_ok:
+        print("\n둘 다 살아 있다. 흔들려도 받을 곳이 있다.")
+        return 0
+    print("\n하나 이상이 사라졌다. 이대로 데모하면 그 자리에서 알게 된다.")
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

@@ -4,12 +4,19 @@
 - 파싱/요약 등 품질 중요 호출     → Gemini
 상세: ../../docs/07_AI_SYSTEM.md
 """
+import asyncio
 from enum import Enum
 import logging
 import os
-from typing import Type
+from typing import Any, Awaitable, Callable, Type
 
-from ai.llm.base import LLMProvider, LLMError, T
+from ai.llm.base import (
+    LLMProvider,
+    LLMError,
+    LLMModelUnavailableError,
+    LLMTransientError,
+    T,
+)
 from ai.llm.gemini import GeminiProvider
 from ai.llm.groq import GroqProvider
 
@@ -20,32 +27,65 @@ class Task(str, Enum):
     GENERATE = "generate"   # → Gemini (fallback to Groq)
 
 class FallbackProvider(LLMProvider):
+    """Gemini 로 묻고, 안 되면 Groq 에 묻는다. 그리고 흔들림에는 한 번 더 묻는다.
+
+    예전에는 층이 하나였다 — 주 Provider 가 실패하면 곧바로 보조로 넘기고, 보조가
+    실패하면 그것으로 끝. 그런데 실제로 본 실패의 대부분은 "잘못한 것이 없는데 실패"
+    였다(503 high demand · 타임아웃). 그런 실패는 잠깐 뒤 다시 물으면 대개 답한다.
+    한 번도 다시 묻지 않고 사용자에게 오류를 보내고 있었다.
+
+    무엇을 다시 묻고 무엇을 넘길지는 예외의 이름이 정한다:
+
+      LLMTransientError       같은 곳에 한 번 더 (짧게 쉬고)
+      LLMRateLimitError       같은 문을 두드려도 소용없다 → 바로 넘긴다
+      LLMModelUnavailableError 사람이 고쳐야 한다 → 넘기되 큰 소리로 남긴다
+      LLMGenerationError      모양이 어긋났다. temperature 0 이라 다시 물어도 같다 → 넘긴다
+
+    두 층 모두 실패하면 마지막 예외를 그대로 올린다 — 어디서 무엇이 무너졌는지
+    로그에 남아야 다음에 같은 자리를 찾을 수 있다.
+    """
+
     name = "fallback"
+
+    #: 흔들림에 한 번 더 물어보기 전에 쉬는 시간. 길면 화면이 그만큼 더 멈춘다.
+    RETRY_PAUSE_SECONDS = 0.6
 
     def __init__(self, primary: LLMProvider, secondary: LLMProvider):
         self.primary = primary
         self.secondary = secondary
 
-    async def generate(self, prompt: str, *, json_mode: bool = False) -> str:
+    async def _attempt(self, provider: LLMProvider, call: Callable[[LLMProvider], Awaitable[Any]], *, label: str) -> Any:
+        """한 Provider 에게 묻는다. 흔들림이면 한 번만 더 묻는다."""
         try:
-            return await self.primary.generate(prompt, json_mode=json_mode)
+            return await call(provider)
+        except LLMTransientError as e:
+            logger.warning("%s(%s) 흔들림 — 한 번 더 묻는다: %s", label, provider.name, e)
+            await asyncio.sleep(self.RETRY_PAUSE_SECONDS)
+            return await call(provider)
+
+    async def _with_fallback(self, call: Callable[[LLMProvider], Awaitable[Any]]) -> Any:
+        try:
+            return await self._attempt(self.primary, call, label="primary")
+        except LLMModelUnavailableError as e:
+            # 흔들림이 아니라 사실이다. 폴백으로 가려지면 다음 사람이 못 찾는다.
+            logger.error("주 모델이 사라졌다 — 이름을 갈아야 한다: %s", e)
         except LLMError as e:
-            logger.warning(f"Primary provider {self.primary.name} failed: {e}. Falling back to {self.secondary.name}")
-            return await self.secondary.generate(prompt, json_mode=json_mode)
+            logger.warning("주 Provider(%s) 실패: %s → %s 로 넘긴다", self.primary.name, e, self.secondary.name)
+
+        try:
+            return await self._attempt(self.secondary, call, label="secondary")
+        except LLMModelUnavailableError as e:
+            logger.error("폴백 모델도 사라졌다 — 이제 갈 곳이 없다: %s", e)
+            raise
+
+    async def generate(self, prompt: str, *, json_mode: bool = False) -> str:
+        return await self._with_fallback(lambda p: p.generate(prompt, json_mode=json_mode))
 
     async def generate_structured(self, prompt: str, schema: Type[T]) -> T:
-        try:
-            return await self.primary.generate_structured(prompt, schema)
-        except LLMError as e:
-            logger.warning(f"Primary provider {self.primary.name} failed: {e}. Falling back to {self.secondary.name}")
-            return await self.secondary.generate_structured(prompt, schema)
+        return await self._with_fallback(lambda p: p.generate_structured(prompt, schema))
 
     async def classify(self, text: str, labels: list[str]) -> str:
-        try:
-            return await self.primary.classify(text, labels)
-        except LLMError as e:
-            logger.warning(f"Primary provider {self.primary.name} failed: {e}. Falling back to {self.secondary.name}")
-            return await self.secondary.classify(text, labels)
+        return await self._with_fallback(lambda p: p.classify(text, labels))
 
 _gemini_instance = None
 _groq_instance = None

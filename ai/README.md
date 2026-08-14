@@ -43,7 +43,19 @@ POST /api/chat (backend/app/api/endpoints/chat.py)
 - **Gemini 에 `responseSchema` 를 보내지 않는다.** 중첩 `$ref` 를 지원하지 않아서다.
   즉 목표 JSON 모양은 프롬프트 산문으로만 말하고 있다 — 지금 잘 돌지만, 모델을 바꿀 때
   가장 먼저 확인할 자리다.
-- **재시도는 없다.** Gemini → Groq 한 홉이 전부다.
+- **흔들림에는 한 번 더 묻는다.** 실패를 네 갈래로 나누고, 그 이름이 곧 정책이다:
+
+  | 예외 | 무엇을 하는가 |
+  |---|---|
+  | `LLMTransientError` (503·타임아웃·연결 끊김) | 같은 곳에 한 번 더 (0.6초 쉬고) |
+  | `LLMRateLimitError` (429) | 같은 문을 두드려도 소용없다 → 바로 넘긴다 |
+  | `LLMModelUnavailableError` (404·은퇴) | 넘기되 `logger.error` 로 크게 남긴다 |
+  | `LLMGenerationError` (모양 어긋남) | temperature 0 이라 다시 물어도 같다 → 넘긴다 |
+
+  두 층 모두 실패하면 마지막 예외를 그대로 올린다. 정책은 `backend/tests/test_llm_fallback.py`
+  가 가짜 Provider 로 검증한다 — 429·503·모델 은퇴는 실제 API 로는 원할 때 만들 수 없다.
+- **Gemini 타임아웃은 15초다**(`GEMINI_TIMEOUT_SECONDS`). 성공한 호출은 2~7초에 끝난다 —
+  30초를 기다리는 것은 이미 실패한 요청을 붙들고 폴백을 막는 시간일 뿐이었다.
 - **키 두 개.** `GEMINI_API_KEY` · `GROQ_API_KEY` (`backend/.env`). Groq 키가 없어도
   Gemini 단독으로 돈다(`factory._groq()` 가 없으면 None 을 돌려준다).
 
