@@ -12,9 +12,10 @@ class GroqProvider(LLMProvider):
     def __init__(self, model_name: str = "llama-3.3-70b-versatile"):
         self.model_name = model_name
         self.api_key = os.getenv("GROQ_API_KEY")
-        if not self.api_key:
-            pass
-        self.client = AsyncGroq()
+        # 키를 명시적으로 넘긴다. 넘기지 않으면 SDK 가 환경변수를 다시 읽고, 없으면
+        # 여기서 GroqError 를 던진다 — 팩토리가 그걸 모르고 무조건 세우던 것이 문제였다.
+        # 키의 유무는 factory._groq() 가 먼저 판단한다.
+        self.client = AsyncGroq(api_key=self.api_key)
 
     async def generate(self, prompt: str, *, json_mode: bool = False) -> str:
         try:

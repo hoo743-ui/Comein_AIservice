@@ -23,10 +23,13 @@ class GeminiProvider(LLMProvider):
         }
         if json_mode:
             payload["generationConfig"] = {"responseMimeType": "application/json"}
-            
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30.0)
-            
+
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload, timeout=30.0)
+        except httpx.HTTPError as e:
+            raise LLMGenerationError(f"Gemini transport error: {e!r}")
+
         if resp.status_code == 429:
             raise LLMRateLimitError(f"Gemini Rate Limit Exceeded: {resp.text}")
         if resp.status_code != 200:
@@ -53,20 +56,27 @@ class GeminiProvider(LLMProvider):
             }
         }
         
-        async with httpx.AsyncClient() as client:
-            resp = await client.post(url, json=payload, timeout=30.0)
-            
+        # 타임아웃·연결 끊김은 httpx 의 예외라 LLMError 가 아니다. 감싸지 않으면
+        # FallbackProvider(LLMError 만 잡는다)를 그대로 지나쳐 Groq 으로 넘어가지 못한다 —
+        # 광고한 failover 가 정작 가장 흔한 실패에서 열리지 않았다.
+        try:
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(url, json=payload, timeout=30.0)
+        except httpx.HTTPError as e:
+            raise LLMGenerationError(f"Gemini transport error: {e!r}")
+
         if resp.status_code == 429:
             raise LLMRateLimitError(f"Gemini Rate Limit Exceeded: {resp.text}")
         if resp.status_code != 200:
             raise LLMGenerationError(f"Gemini API Error ({resp.status_code}): {resp.text}")
-            
-        data = resp.json()
+
         try:
+            data = resp.json()
             text = data["candidates"][0]["content"]["parts"][0]["text"]
             return schema.model_validate_json(text)
         except Exception as e:
-            raise LLMGenerationError(f"Gemini Structured Generation Error: {e}\nRaw Response: {data}")
+            # 본문이 JSON 이 아니면 data 조차 없다 — 그럴 땐 원문을 그대로 싣는다.
+            raise LLMGenerationError(f"Gemini Structured Generation Error: {e}\nRaw Response: {resp.text}")
 
     async def classify(self, text: str, labels: list[str]) -> str:
         prompt = f"Classify the following text into exactly one of these categories: {labels}\n\nText: {text}\n\nCategory:"
