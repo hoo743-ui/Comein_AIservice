@@ -346,7 +346,10 @@ const CSS = `
 
 .opn-div { display: flex; align-items: center; gap: 12px; margin: 18px 0 14px; }
 .opn-div::before, .opn-div::after { content: ""; height: 1px; flex: 1; background: rgba(255,255,255,0.07); }
-.opn-div span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--faint); }
+/* 로그인 카드는 어두운 면(#1B1813) 위에 있어 --faint 가 2.2:1 로 앉는다.
+   §18 의 대비 점검은 워크스페이스 4개 뷰와 랜딩만 훑었고 이 화면은 보지 않았다 —
+   '무엇으로 들어갈지' 를 가르는 한 줄이라 읽히지 않으면 두 방식이 하나로 보인다. */
+.opn-div span { font-size: 11px; font-weight: 500; letter-spacing: 0.04em; color: var(--muted); }
 .opn-form { display: flex; flex-direction: column; gap: 10px; }
 /* 아이디·비밀번호 칸만 흰 종이로 — 어두운 문 앞에서 여기만 '적는 자리' 라는 걸
    색 하나로 말한다. 브라우저 자동완성이 제 파란 면을 칠하던 것도 같은 흰색으로 덮는다
