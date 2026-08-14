@@ -6853,6 +6853,10 @@ html { font-size: 17px; }
   /* 방 안 컴포저의 보내기는 30px 이라 기본 과녁(-6)으로는 42 였다. 2px 이 모자랐다. */
   .rmg-drawer-compose .rmg-ask-send::after { inset: -7px; }
 
+  /* '최근 대화로' — 28px. 이미 absolute 라 relative 를 줄 필요가 없다.
+     숨어 있을 때는 pointer-events:none 이라 넓힌 과녁이 헛되이 탭을 삼키지 않는다. */
+  .rmg-tolast::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+
   /* 손잡이가 호버로만 나타나면 터치에는 없는 것이다 — 폰에서는 보낸 말을 고치거나
      지울 길이 아예 없었다. 사람 목록은 이미 같은 방식으로 열어 두었다(.rmg-ppl-rowact). */
   .rmg-mg-act { opacity: 1; }
