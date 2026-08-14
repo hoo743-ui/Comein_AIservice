@@ -97,6 +97,10 @@ IMPORTANT DATE/TIME RULES:
 - When the user says "글피" (two days after tomorrow), add 3 days.
 - When the user says "다음 주" (next week) or specific days (e.g. "다음 주 월요일"), calculate the exact date based on the current date.
 - ALWAYS return the parsed `start` and `end` times as a fully qualified ISO 8601 datetime string.
+- AM/PM: a bare hour with no marker means the WAKING-HOURS reading, not the small hours.
+  "3시" / "at 3" -> 15:00, "9시" -> 09:00, "7시 저녁" -> 19:00.
+  Only produce an hour between 00:00 and 05:59 when the user says so explicitly
+  ("새벽 3시", "3am", "오전 3시"). People do not schedule meetings at 3 in the morning.
 
 {follow_up}
 User Message: {message}
