@@ -19,8 +19,8 @@ npm run build   # 프로덕션 빌드(타입·린트 검증)
 | `/` | **Landing** — 갤러리형 정체성(철학). 들어가기→Experience, 바로입장→Enter |
 | `/experience` | **Experience** — Co·me·in 시네마틱 리빌 + 로그인(소셜/이메일) → Workspace |
 | ~~`/enter`~~ | 걷어냈다(2026-08-13) — `/experience` 의 부분집합이었다. 빠른 로그인은 `/experience?auth=1` |
-| `/workspace` | **Workspace** — 슬림 레일 + 단일 캔버스(6뷰: Today·Calendar·Tasks·Notes·Meetings·People), 캡처 바 |
-| `/lab` | Living Intelligence 시그니처 비주얼(canvas 데모) |
+| `/workspace` | **Workspace** — 슬림 레일 + 단일 캔버스(Today·Calendar·People), 캡처 바 |
+| ~~`/lab`~~ | 없다. 만든 적이 있었으나 걷혔다 |
 
 > 각 페이지는 루트 레이아웃 아래에서 **자체 완결형**으로 렌더된다(중간 레이아웃·전역 사이드바 없음). 뷰 전환은 라우트 이동 없이 캔버스 크로스페이드.
 
@@ -31,24 +31,30 @@ src/
 ├── app/
 │   ├── page.tsx               # Landing
 │   ├── experience/page.tsx    # Experience(시네마틱 + 로그인)
-│   ├── enter/page.tsx         # Enter(간편 로그인)
-│   ├── workspace/page.tsx     # Workspace(슬림 레일 + 단일 캔버스)
-│   ├── lab/page.tsx           # 시그니처 비주얼
-│   ├── layout.tsx             # 루트(폰트 + ThemeProvider + Pretendard CDN)
+│   ├── workspace/page.tsx     # Workspace(슬림 레일 + 단일 캔버스) — 화면 전체가 여기 있다
+│   ├── layout.tsx             # 루트(폰트 + ThemeProvider)
+│   ├── template.tsx           # 라우트 전환 전역 페이드
 │   └── globals.css            # 전역 토큰/베이스
 ├── components/
-│   ├── theme-provider.tsx     # next-themes 래퍼
-│   └── workspace/kakao-map.tsx  # 카카오맵(연동 — 향후 워크스페이스에 이식)
+│   └── theme-provider.tsx     # next-themes 래퍼
 └── lib/
-    ├── store.ts               # Zustand 도메인 스토어(시드·CRUD·간이 인텐트·충돌감지)
-    ├── types.ts               # 도메인 타입(§7 데이터 모델)
-    ├── format.ts              # 날짜/시간 포맷(ko-KR)
-    ├── auth.ts                # 로그인/회원가입/소셜(데모 스텁)
-    ├── use-hydrated.ts        # 마운트 훅(SSR 불일치 방지)
-    ├── utils.ts               # cn()
-    ├── google.ts              # 구글 캘린더/연락처 연동(향후 이식용 보존)
-    └── geo.ts                 # 좌표/경로(캠퍼스 — 향후 이식용 보존)
+    ├── store.ts               # Zustand 도메인 스토어(CRUD → Supabase push)
+    ├── remote.ts              # Supabase 접근 — 인증·일정·참여자·대화·연결
+    ├── useRemoteSync.ts       # Realtime 구독(한 번만 건다)
+    ├── supabase.ts            # 클라이언트. 키가 없으면 null → 앱은 로컬 전용으로 조용히 돈다
+    ├── api.ts                 # 백엔드 베이스 URL 한 줄(API_BASE)
+    ├── types.ts               # 도메인 타입
+    ├── format.ts              # 날짜/시간 포맷
+    ├── mode.ts                # 사람 분류표(peopleCategories)
+    └── conversation/          # 대화 해석 — intent·temporal·availability·summary + 테스트
 ```
+
+> **`workspace/page.tsx` 는 6700줄이 넘는다.** 화면 하나가 파일 하나인 것이 이 프로젝트의
+> 선택이었고(컴포넌트 로컬 `<style>` 과 짝이 맞는다), 그 대가로 이 파일은 크다.
+> 순수 로직은 `lib/conversation/` 으로 빼내 테스트가 붙어 있다.
+>
+> 예전 이 표에 있던 `enter/page.tsx` · `lab/page.tsx` · `components/workspace/kakao-map.tsx` ·
+> `lib/{auth,use-hydrated,utils,google,geo}.ts` 는 **전부 없다.** 걷혔거나 만든 적이 없다.
 
 > 각 화면 스타일은 **컴포넌트 로컬 `<style>` + CSS 토큰**으로 자체 완결(무거운 UI 프레임워크 비의존). 외부 UI 라이브러리(shadcn/FullCalendar/dnd-kit 등)는 사용하지 않는다 — 절제가 곧 럭셔리(`22_DESIGN_LANGUAGE.md`).
 

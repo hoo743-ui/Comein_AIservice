@@ -22,10 +22,19 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 ### 예시
 
 ```
-"다음 주 화요일 3시에 교수님 미팅 잡아줘"
- → AI가 의도 파악 → 일정 충돌 검사 → 캘린더 자동 등록
- → "7/14(화) 15:00 '교수님 미팅' 등록했어요."
+"내일 3시 교수님 미팅"
+ → AI 가 갈래(회의)와 시각을 뽑고, 이름은 참여자로 갈라낸다
+ → { category: "meeting", title: "미팅",
+     start: "2026-08-15T15:00:00+09:00", participants: ["교수님"] }
+ → 캘린더에 제안(pending)으로 앉고, 확정은 사람이 누른다
+
+"언제 한번 보자"
+ → 시각이 없다. 지어내지 않고 되묻는다 — "언제로 일정을 잡을까요?"
 ```
+
+> 위 두 줄은 배포된 백엔드에 실제로 넣어 받은 응답이다(2026-08-14). AI 가 뽑지 못하면
+> 화면은 로컬 규칙으로라도 정리하되 **"AI 없이 정리했어요"** 라고 그 자리에서 말한다 —
+> 조용히 그럴듯한 답을 내놓지 않는다.
 
 ---
 
@@ -45,15 +54,16 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 
 | 영역 | 스택 |
 |------|------|
-| Frontend | Next.js · TypeScript · Tailwind CSS (슬림 레일 + 단일 캔버스, 커스텀) |
-| Backend | FastAPI (Python) |
-| AI | Gemini API · Groq API (Multi-Agent Architecture) |
-| Database | PostgreSQL (Supabase) |
-| Vector DB | Chroma |
-| Cache | Redis (Upstash) |
-| Infra | Vercel · Render/Railway |
+| Frontend | Next.js 15 · React 19 · TypeScript (슬림 레일 + 단일 캔버스, 커스텀 CSS) |
+| Backend | FastAPI (Python) — **무상태**, 자연어 파싱 전용 |
+| AI | Gemini `gemini-flash-latest` (실패 시 Groq `llama-3.3-70b-versatile` 폴백) |
+| Database · Auth · Realtime | Supabase (PostgreSQL + RLS) — 프론트가 직접 붙습니다 |
+| Infra | Vercel(프론트) · Render(백엔드) |
 
 > 모든 API·인프라는 **무료 티어** 기준으로 구성됩니다.
+>
+> 저장·조회·인증은 화면이 Supabase 로 직행하고, 백엔드를 거치는 것은 AI 파싱뿐입니다
+> (LLM 키를 브라우저에 둘 수 없어서). 그래서 백엔드가 자고 있어도 일정·대화는 그려집니다.
 
 ---
 
@@ -66,6 +76,11 @@ Comein은 **채팅 한 줄로 일정·메모·할 일·회의가 자동으로 �
 | API 문서 | `https://comein-aiservice.onrender.com/docs` | Swagger UI |
 
 배포·환경변수·콜드스타트 대응은 [`docs/15_DEPLOY.md`](./docs/15_DEPLOY.md).
+
+> **처음 열어 보신다면** — 백엔드가 자고 있을 수 있습니다. 화면은 바로 뜨지만(일정·대화는
+> Supabase 직행), **캡처 바에 넣은 첫 한 줄만 20~30초 걸립니다.** 미리 깨워 두려면
+> `https://comein-aiservice.onrender.com/health` 를 한 번 열어 두시면 됩니다.
+> 두 번째 문장부터는 2~3초입니다.
 
 ### 다른 PC에서 처음 받았을 때
 
@@ -113,13 +128,14 @@ NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon public key>        #  같은 화면
 
 ```
 Comein_AIservice/
-├── frontend/     # Next.js 웹 클라이언트
-├── backend/      # FastAPI 서버
-├── ai/           # AI Router · Agents · Prompt · Memory
-├── docs/         # 설계 문서 (00~24)
-├── scripts/      # 손으로 돌려보는 확인용 스크립트
-├── render.yaml   # 백엔드 배포 정의 (Render Blueprint)
-├── CLAUDE.md     # 프로젝트 전체 컨텍스트 문서 ⭐
+├── frontend/             # Next.js 웹 클라이언트 (Supabase 에 직접 붙는다)
+├── backend/              # FastAPI 서버 — 파싱 전용, 엔드포인트 3개
+├── ai/                   # router.py(프롬프트) + llm/(Gemini·Groq)
+├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0014)
+├── docs/                 # 설계 문서 (CLAUDE.md §9 표에 있는 것만)
+├── scripts/              # 손으로 돌려보는 확인용 스크립트
+├── render.yaml           # 백엔드 배포 정의 (Render Blueprint)
+├── CLAUDE.md             # 프로젝트 전체 컨텍스트 문서 ⭐
 └── README.md
 ```
 

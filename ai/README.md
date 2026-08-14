@@ -1,31 +1,51 @@
 # Comein AI Engine
 
-AI Workspace Engine — Router → Intent Classifier → Agent 라우팅 → Memory → LLM.
-상세: [`../docs/07_AI_SYSTEM.md`](../docs/07_AI_SYSTEM.md), [`../docs/08_AI_AGENTS.md`](../docs/08_AI_AGENTS.md)
+자연어 한 줄을 **항목(items)** 으로 바꾸는 곳. 그것뿐이다.
 
-## 구조
+한때 이 문서는 `agents/` 아래 Agent 15종을 그리고 있었다. **그 디렉터리는 없다** — 만든 적이
+없거나, 스켈레톤만 있다가 걷혔다. 실제로 도는 것은 프롬프트 하나와 Provider 두 개다.
+그림이 코드보다 커 보이면 다음 사람이 없는 것을 찾아다니게 된다.
+
+## 구조 (실제)
 
 ```
 ai/
-├── router.py            # AI Router — 의도 파악 후 Agent 라우팅
-├── agents/              # Agent 15종 (MVP: intent, parser, schedule, todo, memo)
-│   ├── base.py          # BaseAgent — 공통 인터페이스
-│   ├── intent.py
-│   ├── parser.py
-│   ├── schedule.py
-│   ├── todo.py
-│   └── memo.py
-├── llm/                 # Provider 교체 가능한 LLM 추상화 레이어
-│   ├── base.py          # LLMProvider 인터페이스
-│   ├── gemini.py        # 생성/파싱 (품질 우선)
-│   ├── groq.py          # 분류 (초고속)
-│   └── factory.py       # 쿼터 이원화 라우팅
-├── prompts/             # Prompt 템플릿 (docs/13_PROMPT.md)
-└── memory/              # Short/Long Memory, Embedding/RAG (docs/11_MEMORY.md)
+├── router.py            # route() — 프롬프트 1개로 분류·추출·되묻기를 함께 한다
+├── llm/
+│   ├── base.py          # LLMProvider 인터페이스 + LLMError 계열
+│   ├── gemini.py        # 주 경로. httpx 로 REST 직접 호출(SDK 미사용)
+│   ├── groq.py          # 폴백. groq SDK
+│   └── factory.py       # get_provider(Task) — Gemini → (실패 시) Groq
+├── prompts/             # 자리만 있다 (프롬프트는 지금 router.py 안에 있다)
+└── memory/              # 자리만 있다 (Short/Long Memory 는 아직 없다)
 ```
 
-## 설계 원칙
+## 흐름
 
-- **LLM 추상화**: Gemini(파싱·요약) / Groq(분류) 이원화로 무료 쿼터 분산. Provider 교체 가능.
-- **Agent 계약**: 각 Agent는 역할/입력/출력/Prompt/JSON Schema/Validation/Confidence/Retry/Error 정의.
-- **AI↔백엔드 경계**: API JSON Schema로 고정(docs/10_API.md) → 병렬 개발.
+```
+POST /api/chat (backend/app/api/endpoints/chat.py)
+  → ai.router.route(message, context={now, tz, pending})
+      프롬프트: 갈래(schedule·todo·memo·meeting) · 필수 필드 · 참여자 · 되묻기 규칙
+      → provider.generate_structured(prompt, ParseResponse)
+          Gemini: responseMimeType=application/json → model_validate_json
+          (LLMError 면 Groq 으로 한 번 더 — 그쪽은 스키마를 프롬프트에 싣는다)
+  → chat.py 가 ParsedItem 으로 한 번 더 검증 → AiResult{intent, reply, items[], ask}
+```
+
+## 알아 둘 것
+
+- **계약의 기준자는 하나다.** `backend/app/schemas/items.py` 의 `ParsedItem` 을 `ai/` 가
+  그대로 import 한다(`router.py`). 스키마를 두 벌로 관리하지 않는다.
+- **모르면 지어내지 않는다.** 일정·회의에 시각이 없으면 항목을 만들지 않고 `ask` 한 줄을
+  돌려준다. 뽑았으면 묻지 않고, 물었으면 뽑지 않는다.
+- **'지금' 은 화면이 알려 준다.** Render 는 UTC 로 돈다. `context.now` 를 먼저 믿되,
+  파싱해 보고 어긋나면 KST 로 떨어진다(`_now_iso`).
+- **Gemini 에 `responseSchema` 를 보내지 않는다.** 중첩 `$ref` 를 지원하지 않아서다.
+  즉 목표 JSON 모양은 프롬프트 산문으로만 말하고 있다 — 지금 잘 돌지만, 모델을 바꿀 때
+  가장 먼저 확인할 자리다.
+- **재시도는 없다.** Gemini → Groq 한 홉이 전부다.
+- **키 두 개.** `GEMINI_API_KEY` · `GROQ_API_KEY` (`backend/.env`). Groq 키가 없어도
+  Gemini 단독으로 돈다(`factory._groq()` 가 없으면 None 을 돌려준다).
+
+현재 상태·실측·알려진 한계: [`../docs/24_AI_PIPELINE_STATUS.md`](../docs/24_AI_PIPELINE_STATUS.md) §20
+계약(JSON Schema): [`../docs/10_API.md`](../docs/10_API.md)
