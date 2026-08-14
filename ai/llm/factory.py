@@ -14,6 +14,7 @@ from ai.llm.base import (
     LLMProvider,
     LLMError,
     LLMModelUnavailableError,
+    LLMTimeoutError,
     LLMTransientError,
     T,
 )
@@ -36,7 +37,8 @@ class FallbackProvider(LLMProvider):
 
     무엇을 다시 묻고 무엇을 넘길지는 예외의 이름이 정한다:
 
-      LLMTransientError       같은 곳에 한 번 더 (짧게 쉬고)
+      LLMTransientError       503 처럼 곧바로 돌아온 실패 → 같은 곳에 한 번 더 (짧게 쉬고)
+      LLMTimeoutError         이미 제한 시간을 다 썼다 → 여기서 또 기다리지 않고 넘긴다
       LLMRateLimitError       같은 문을 두드려도 소용없다 → 바로 넘긴다
       LLMModelUnavailableError 사람이 고쳐야 한다 → 넘기되 큰 소리로 남긴다
       LLMGenerationError      모양이 어긋났다. temperature 0 이라 다시 물어도 같다 → 넘긴다
@@ -55,9 +57,16 @@ class FallbackProvider(LLMProvider):
         self.secondary = secondary
 
     async def _attempt(self, provider: LLMProvider, call: Callable[[LLMProvider], Awaitable[Any]], *, label: str) -> Any:
-        """한 Provider 에게 묻는다. 흔들림이면 한 번만 더 묻는다."""
+        """한 Provider 에게 묻는다. 흔들림이면 한 번만 더 묻는다.
+
+        **타임아웃은 예외다.** 처음엔 그것도 흔들림으로 묶어 한 번 더 물었는데, 그러면
+        15초를 기다린 뒤 또 15초를 기다리고서야 폴백이 시작한다 — 배포본에서 25초 넘는
+        응답이 그렇게 나왔다. 기다림의 값이 다르면 정책도 달라야 한다.
+        """
         try:
             return await call(provider)
+        except LLMTimeoutError:
+            raise  # 이미 기다릴 만큼 기다렸다. 다음 Provider 가 받는다.
         except LLMTransientError as e:
             logger.warning("%s(%s) 흔들림 — 한 번 더 묻는다: %s", label, provider.name, e)
             await asyncio.sleep(self.RETRY_PAUSE_SECONDS)

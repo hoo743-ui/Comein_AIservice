@@ -9,6 +9,7 @@ from ai.llm.base import (
     LLMGenerationError,
     LLMModelUnavailableError,
     LLMRateLimitError,
+    LLMTimeoutError,
     LLMTransientError,
     T,
 )
@@ -23,7 +24,11 @@ def _classify(e: Exception, model_name: str) -> Exception:
     """
     if isinstance(e, RateLimitError):
         return LLMRateLimitError(f"Groq Rate Limit Exceeded: {e}")
-    if isinstance(e, (APITimeoutError, APIConnectionError)):
+    # 타임아웃은 연결 오류와 값이 다르다 — 이미 제한 시간을 통째로 쓴 뒤라 같은 문 앞에서
+    # 한 번 더 기다리면 안 된다(ai/llm/base.py 의 LLMTimeoutError 참고).
+    if isinstance(e, APITimeoutError):
+        return LLMTimeoutError(f"Groq timed out: {e!r}")
+    if isinstance(e, APIConnectionError):
         return LLMTransientError(f"Groq transport error: {e!r}")
     if isinstance(e, APIStatusError):
         status = getattr(e, "status_code", None)

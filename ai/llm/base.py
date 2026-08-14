@@ -30,6 +30,18 @@ class LLMTransientError(LLMError):
     """
     pass
 
+class LLMTimeoutError(LLMTransientError):
+    """기다렸는데 답이 없었다.
+
+    흔들림의 일종이지만 **값이 다르다.** 503 은 곧바로 돌아오므로 한 번 더 물어도 잃는
+    것이 없다. 타임아웃은 이미 제한 시간을 통째로 쓴 뒤다 — 같은 문 앞에서 한 번 더
+    기다리면 폴백은 그만큼 늦게 시작하고, 화면에서는 그냥 멈춘 것으로 보인다.
+    (실제로 그래서 배포본에서 25초 넘는 응답이 나왔다.)
+
+    그래서 이것만은 재시도하지 않고 곧바로 다음 Provider 로 넘긴다.
+    """
+    pass
+
 class LLMModelUnavailableError(LLMError):
     """404 / model_decommissioned — 그 모델이 이제 없다.
 

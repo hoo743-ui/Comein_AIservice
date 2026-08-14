@@ -22,6 +22,7 @@ from ai.llm.base import (
     LLMModelUnavailableError,
     LLMProvider,
     LLMRateLimitError,
+    LLMTimeoutError,
     LLMTransientError,
 )
 from ai.llm.factory import FallbackProvider
@@ -144,3 +145,31 @@ async def test_plain_generate_and_classify_take_the_same_road():
         out = await (fb.generate("p") if call == "generate" else fb.classify("t", ["a"]))
         assert out == "answer"
         assert (primary.calls, secondary.calls) == (2, 0), call
+
+
+# ── 타임아웃은 흔들림이지만 값이 다르다 ──────────────────────────────
+# 처음엔 503 과 같이 묶어 한 번 더 물었다. 그러면 15초를 기다린 뒤 또 15초를 기다리고서야
+# 폴백이 시작한다 — 배포본에서 25초 넘는 응답이 실제로 그렇게 나왔다.
+
+async def test_a_timeout_does_not_wait_at_the_same_door_twice():
+    primary = Fake("primary", LLMTimeoutError("15s"), Shape())
+    secondary = Fake("secondary", Shape())
+    await FallbackProvider(primary, secondary).generate_structured("p", Shape)
+    assert primary.calls == 1, "이미 기다릴 만큼 기다렸다 — 여기서 또 기다리면 안 된다"
+    assert secondary.calls == 1, "곧바로 다음 Provider 가 받아야 한다"
+
+
+async def test_a_fast_5xx_still_gets_a_second_ask():
+    # 대비: 503 은 곧바로 돌아오므로 한 번 더 물어도 잃는 것이 없다.
+    primary = Fake("primary", LLMTransientError("503"), Shape())
+    secondary = Fake("secondary", Shape())
+    await FallbackProvider(primary, secondary).generate_structured("p", Shape)
+    assert (primary.calls, secondary.calls) == (2, 0)
+
+
+async def test_the_fallback_timing_out_too_is_reported_as_such():
+    primary = Fake("primary", LLMTimeoutError("gemini 15s"))
+    secondary = Fake("secondary", LLMTimeoutError("groq 60s"))
+    with pytest.raises(LLMTimeoutError, match="groq"):
+        await FallbackProvider(primary, secondary).generate_structured("p", Shape)
+    assert (primary.calls, secondary.calls) == (1, 1), "어느 쪽에서도 두 번 기다리지 않는다"

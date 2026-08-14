@@ -7,6 +7,7 @@ from ai.llm.base import (
     LLMGenerationError,
     LLMModelUnavailableError,
     LLMRateLimitError,
+    LLMTimeoutError,
     LLMTransientError,
     T,
 )
@@ -51,7 +52,8 @@ class GeminiProvider(LLMProvider):
         except httpx.TimeoutException as e:
             # 타임아웃·연결 끊김은 httpx 의 예외라 LLMError 가 아니다. 감싸지 않으면
             # FallbackProvider(LLMError 만 잡는다)를 그대로 지나쳐 Groq 으로 가지 못한다.
-            raise LLMTransientError(f"Gemini timed out after {REQUEST_TIMEOUT}s: {e!r}")
+            # 타임아웃은 따로 부른다 — 여기서 한 번 더 기다리면 안 되기 때문이다.
+            raise LLMTimeoutError(f"Gemini timed out after {REQUEST_TIMEOUT}s: {e!r}")
         except httpx.HTTPError as e:
             raise LLMTransientError(f"Gemini transport error: {e!r}")
 
