@@ -12,6 +12,8 @@ import { useWorkspace, dayKeyOf, TEXT_SCALE_MAX, TEXT_SCALE_MIN, type Settings }
 import { MODE_CONFIG, USER_MODES, categoryLabel, classifyEvent, normalizeMode, useCurrentMode, type EventCategory } from "@/lib/mode";
 import { analyzeConversation, analyzeMessage, localIsoNow, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
 import { fmtTime, fmtDate } from "@/lib/format";
+import { pendingAnswers } from "@/lib/awaiting";
+import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
 import { useRemoteSync, type RemoteState } from "@/lib/useRemoteSync";
@@ -44,6 +46,16 @@ type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; not
 const DEST: Record<Kind, { view: View; label: string }> = {
   일정: { view: "calendar", label: "캘린더" },
   "할 일": { view: "today", label: "오늘" },
+};
+
+/** 이 사람이 한 번이라도 문을 지나왔는가 — 탭 하나가 아니라 이 브라우저의 기억이다.
+ *  판정 자체는 lib/entry 에 있다(시험으로 못 박아 둔 표). 여기서는 기억을 읽고 쓰기만 한다. */
+const markEntered = () => {
+  try { localStorage.setItem(ENTERED_KEY, "1"); sessionStorage.setItem(THRESHOLD_KEY, "1"); } catch { /* 사생활 모드 */ }
+};
+const hasEntered = () => {
+  try { return localStorage.getItem(ENTERED_KEY) === "1" || sessionStorage.getItem(THRESHOLD_KEY) === "1"; }
+  catch { return false; }
 };
 const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", people: "사람" };
 
@@ -418,7 +430,7 @@ export default function Reimagine() {
   }, [shownView]);
 
   const enterNow = React.useCallback(() => {
-    try { sessionStorage.setItem("comein:reimagine", "1"); } catch {}
+    markEntered();
     setLeaving(true);
     setTimeout(() => setEntered(true), 900);
   }, []);
@@ -434,21 +446,23 @@ export default function Reimagine() {
     let already = false;
     let justEntered = false;
     try {
-      already = sessionStorage.getItem("comein:reimagine") === "1";
+      // 한 번 들어온 적이 있는가. 예전에는 sessionStorage 만 봤는데, 그건 탭 하나의 기억이라
+      // 새 탭·북마크·복구된 세션에서는 늘 비어 있었다. 그래서 이미 로그인한 사람이
+      // 주소를 다시 열 때마다 인트로부터 다시 봐야 했다("새로고침하면 처음 화면으로 간다").
+      already = hasEntered();
       justEntered = sessionStorage.getItem("comein:justEntered") === "1";
       if (justEntered) sessionStorage.removeItem("comein:justEntered");
     } catch {}
     let a: ReturnType<typeof setTimeout> | undefined;
     if (already) {
+      markEntered();
       setEntered(true);
       if (justEntered) { setArriving(true); a = setTimeout(() => setArriving(false), 1300); }
-    } else {
-      // 처음 들어옴 — 문턱 대신 opening 로그인 시네마틱을 관문으로.
-      setToOpening(true);
-      router.replace("/experience");
     }
+    // 아직 아니라면 여기서 결정하지 않는다 — 로그인 여부를 알기 전이다.
+    // 아래 '문턱 판정' 이 remote.ready 를 기다렸다가 정한다.
     return () => { clearInterval(clock); if (a) clearTimeout(a); };
-  }, [router]);
+  }, []);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -758,6 +772,23 @@ export default function Reimagine() {
     if (remote.configured && remote.ready && !remote.signedIn) router.replace("/experience?auth=1");
   }, [exiting, remote.configured, remote.ready, remote.signedIn, router]);
 
+  /** 문턱 판정 — 아직 한 번도 들어온 적이 없는 사람만 인트로로 보낸다.
+   *
+   *  예전에는 마운트 직후 sessionStorage 하나만 보고 곧바로 /experience 로 되돌렸다.
+   *  그래서 **이미 로그인해 있는 사람**도 새로고침 한 번에 인트로 앞에 다시 세워졌다.
+   *  판단을 remote.ready 까지 미룬다: 세션이 있으면 그 사람은 이미 들어온 사람이다.
+   *  들어온 사람을 문 앞에 다시 세우는 것은 환대가 아니라 검문이다. */
+  React.useEffect(() => {
+    const verdict = entryVerdict({
+      entered, remembered: hasEntered(), leaving: toOpening, exiting,
+      configured: remote.configured, ready: remote.ready, signedIn: remote.signedIn,
+    });
+    if (verdict === "hold") return;
+    if (verdict === "enter") { markEntered(); setEntered(true); return; }
+    setToOpening(true);
+    router.replace("/experience");
+  }, [entered, toOpening, exiting, remote.configured, remote.ready, remote.signedIn, router]);
+
   /** 나가기 — 묻지 않고 그냥 나간다.
    *  "정말 나가시겠어요?" 를 한 겹 세우면 나가는 일이 결심이 된다. 다시 들어오면 되는 일이다.
    *  세션을 먼저 끊고 그 다음에 한 번만 옮긴다(끊기 전에 옮기면 로그아웃이 도중에 잘린다). */
@@ -765,7 +796,7 @@ export default function Reimagine() {
     if (exiting) return;
     setExiting(true);
     // 문턱 연출은 들어올 때의 것이다 — 나갈 때 남겨 두면 다음에 들어올 때 재생되지 않는다.
-    try { sessionStorage.removeItem("comein:reimagine"); } catch { /* 사생활 모드 */ }
+    try { sessionStorage.removeItem("comein:reimagine"); localStorage.removeItem(ENTERED_KEY); } catch { /* 사생활 모드 */ }
     // 나가면 곧바로 다시 들어올 수 있는 자리에 선다 — 랜딩으로 보내면 철학을 한 번 더 읽고
     // '들어가기'를 눌러 8초짜리 인트로를 다시 봐야 로그인 칸에 닿는다. 나가는 사람은
     // 대개 계정을 바꾸거나 다시 들어오려는 것이다. ?auth=1 은 그 인트로를 건너뛴다.
@@ -842,12 +873,16 @@ export default function Reimagine() {
   const [roomDay, setRoomDay] = React.useState<Date>(() => new Date());
   const proposeTime = useWorkspace((s) => s.proposeTime);
   const answerProposal = useWorkspace((s) => s.answerProposal);
+  const proposalError = useWorkspace((s) => s.proposalError);
+  const requestError = useWorkspace((s) => s.requestError);
+  const clearProposalError = useWorkspace((s) => s.clearProposalError);
   const [proposalBusy, setProposalBusy] = React.useState(false);
 
   // 일정을 열면 그 일정에 답을 기다리는 제안이 있는지 확인한다.
   React.useEffect(() => {
+    clearProposalError();
     if (openEventId) void loadProposal(openEventId);
-  }, [openEventId, loadProposal]);
+  }, [openEventId, loadProposal, clearProposalError]);
 
   // 방을 열면 그 일정의 날로 하루를 맞춘다 — 늘 오늘부터 시작하면 매번 손으로 옮겨야 한다.
   React.useEffect(() => {
@@ -1259,46 +1294,63 @@ export default function Reimagine() {
     ? settings.textScale
     : ({ md: 1, lg: 1.12, xl: 1.24 } as Record<string, number>)[settings.textScale as string] ?? 1;
 
-  // ── 사용 가이드 여섯 걸음 ──
+  // ── 사용 가이드 ──
+  //
   // 각 단계는 진짜 화면을 짚는다. 필요한 화면으로 먼저 옮겨 두고 그 위의 요소를 가리킨다.
+  // 가짜 UI 를 만들지 않는다 — 사용자가 배우는 건 지금 눈앞의 그 버튼이다.
+  //
+  // 세 막으로 나눠 둔 이유: 아홉 걸음을 평평하게 늘어놓으면 세 번째쯤에서 "몇 개나 더 남았지"
+  // 가 된다. 막 이름이 있으면 남은 개수가 아니라 **무엇을 배우는 중인지**가 먼저 읽힌다.
+  //   둘러보기 — 이 공간이 어떻게 생겼는가
+  //   함께     — 사람과 일이 어떻게 이어지는가   ← 두 사람이 각자 써 봐야 비로소 보이던 것들
+  //   맡기기   — 무엇을 Comein 에게 넘길 수 있는가
   const tourSteps = React.useMemo<TourStep[]>(() => {
     const en = lang === "en";
-    // 공유 일정이 있는 사람을 하나 골라 둔다 — 5번째 걸음이 가리킬 대상.
+    const ACT = {
+      look: en ? "Looking around" : "둘러보기",
+      together: en ? "Together" : "함께",
+      hand: en ? "Handing over" : "맡기기",
+    };
+    // 공유 일정이 있는 사람을 하나 골라 둔다 — '일정 안에서 대화' 걸음이 가리킬 대상.
     const withShared = contacts.find((c: any) => sharedEventsWith(c.id).length > 0);
     // 고를 사람이 하나라도 있으면 그 사람으로 보여 준다 — 함께한 일정이 없어도 화면은 같다.
     const someone = withShared ?? contacts[0];
     return [
       {
-        key: "today", target: "today",
+        key: "today", target: "today", act: ACT.look,
         title: en ? "Today" : "오늘",
-        body: en ? "What you need today, and what's coming — in one place." : "오늘 해야 할 일과 지금 필요한 정보를 한곳에서 확인하세요.",
+        body: en
+          ? "What you need today, and what is coming — in one place. The line under the greeting is Comein reading your actual day: an unanswered invite, something starting soon, two meetings back to back."
+          : "오늘 해야 할 일과 지금 필요한 정보를 한곳에서 봅니다. 인사말 아래 한 줄은 AI 가 오늘을 실제로 읽고 하는 말이에요 — 답하지 않은 초대, 곧 시작하는 일, 숨 돌릴 틈 없이 붙은 회의 같은 것들.",
         example: en ? "e.g.  Up next · 14:00 Capstone review" : "예)  다가오는 순간 · 14:00 캡스톤 중간발표",
         before: () => { setPanel(null); setView("today"); },
       },
       {
-        key: "calendar", target: "calendar",
+        key: "calendar", target: "calendar", act: ACT.look,
         title: en ? "Calendar" : "캘린더",
         body: en
-          ? "Pick a day to see its 24 hours. Don't remember the date? Press Find and say it in words."
+          ? "Pick a day to see its 24 hours. Do not remember the date? Press Find and say it in words."
           : "날짜를 고르면 그날의 24시간이 열립니다. 날짜가 기억나지 않으면 '찾기'를 눌러 말로 옮겨 가세요.",
         example: en
           ? "e.g.  Find → “next semester”, “week 2 of August”"
-          : "예)  찾기 → \"다음 학기\", \"8월 둘째 주\", \"회의 있는 날\"",
+          : "예)  찾기 → “다음 학기”, “8월 둘째 주”, “회의 있는 날”",
         before: () => setView("calendar"),
       },
       {
-        key: "dial", target: "dial",
+        key: "dial", target: "dial", act: ACT.look,
         title: en ? "24 hours" : "24시간 시간 지도",
-        body: en ? "See where each event sits in the shape of your day." : "일정이 하루의 어느 시간에 놓여 있는지 한눈에 볼 수 있어요.",
+        body: en
+          ? "See where each event sits in the shape of your day — and where the gaps are."
+          : "일정이 하루의 어느 자리에 놓여 있는지, 그리고 어디가 비어 있는지 한눈에 봅니다.",
         example: en ? "e.g.  15:00 Meeting fills the arc from 3 to 4." : "예)  15:00 회의는 원의 3시~4시 구간을 채웁니다.",
         before: () => setView("calendar"),
       },
       {
-        key: "people", target: "people",
+        key: "people", target: "people", act: ACT.together,
         title: en ? "People" : "사람",
         body: en
-          ? "Your handle is your invite code. Tell someone yours, search theirs, and ask to connect — they accept, and you're linked."
-          : "@핸들이 곧 초대코드입니다. 내 핸들을 알려 주고 상대 핸들로 찾아 청하면, 상대가 받았을 때 이어집니다.",
+          ? "Your handle is your invite code. Tell someone yours, search theirs, and ask to connect — they accept, and you are linked. Nobody joins your list without saying yes."
+          : "@핸들이 곧 초대코드입니다. 내 핸들을 알려 주고 상대 핸들로 찾아 청하면, 상대가 받았을 때 이어집니다. 상대의 승낙 없이 누군가가 목록에 들어오는 일은 없어요.",
         example: en
           ? "e.g.  You are @hoo743 · search @fapp1004 → Request"
           : "예)  내 핸들 @hoo743 · 검색창에 @fapp1004 → 요청",
@@ -1307,45 +1359,90 @@ export default function Reimagine() {
       {
         // 사람을 고른 뒤의 화면 — AI 가 여기서 무엇을 하는지 말해 준다.
         // 조용히 돕는 것은 좋지만, 조용하기만 하면 있는 줄도 모른다.
-        key: "person", target: someone ? "person" : "people",
+        key: "person", target: someone ? "person" : "people", act: ACT.together, available: !!someone,
         title: en ? "One person, one screen" : "사람 하나, 한 화면",
         body: en
-          ? "Pick someone and what you said and what you're doing together sit on one screen. Comein listens quietly: when a time comes up it offers one, and it only writes a summary once you've actually settled — not on every message."
+          ? "Pick someone and what you said and what you are doing together sit on one screen. Comein listens quietly: when a time comes up it offers one, and it only writes a summary once you have actually settled — not on every message."
           : "사람을 고르면 나눈 말과 함께하는 일정이 한 화면에 섭니다. AI 는 뒤에서 조용히 듣다가 시간 이야기가 오가면 후보를 한 줄로 권하고, 정리는 정말로 정해졌을 때만 합니다 — 말이 오갈 때마다 요약하지 않아요.",
         example: en
-          ? "e.g.  “Friday evening?” → Fri 19:00, both free  [Propose it]"
-          : "예)  \"금요일 저녁 어때?\" → 금 19:00 · 둘 다 비어 있어요  [일정 제안]",
+          ? "e.g.  “Friday evening?” → Fri 19:00, both free  [Add to calendar]"
+          : "예)  “금요일 저녁 어때?” → 금 19:00 · 둘 다 비어 있어요  [캘린더에 추가]",
+        whenMissing: en
+          ? "No one here yet. Connect with someone on the People screen and this is what it becomes."
+          : "아직 이어진 사람이 없어요. 사람 화면에서 누군가와 이어지면 이 자리가 이렇게 됩니다.",
         before: () => {
           setView("people");
           if (someone) { setPersonId(someone.id); setOpenEventId(null); }
         },
       },
       {
-        key: "shared", target: withShared ? "sharedevent" : "people",
+        key: "shared", target: withShared ? "sharedevent" : "people", act: ACT.together, available: !!withShared,
         title: en ? "Talk inside the event" : "일정 안에서 대화",
         body: en
-          ? "Everyone on an event shares its room. Say a time and Comein checks both calendars and suggests one — you decide. Once everyone agrees, it writes down what was settled."
-          : "같은 일정의 사람들이 그 방을 함께 씁니다. 시각을 말하면 양쪽 달력을 맞춰 보고 시간을 제안해요 — 정하는 건 사람입니다. 전원이 동의하면 그때 무엇이 정해졌는지 정리해 둡니다.",
+          ? "Everyone on an event shares its room. Say a time and Comein checks everyone's calendar and suggests one — with a reason. It never says what anyone is busy with, only whether they are free."
+          : "같은 일정의 사람들이 그 방을 함께 씁니다. 시각을 말하면 참여자들의 달력을 맞춰 보고 근거와 함께 시간을 권해요. 누가 그때 무엇을 하는지는 말하지 않습니다 — 되는지 안 되는지까지만.",
         example: en
-          ? "e.g.  “How about 4pm Thursday?” → Thu 16:00, no conflicts for 2"
-          : "예)  \"그럼 목요일 4시 어때?\" → 목 16:00 · 2명 모두 충돌 없음",
+          ? "e.g.  “How about 4pm Thursday?” → Thu 16:00 · no conflicts for 2"
+          : "예)  “그럼 목요일 4시 어때?” → 목 16:00 · 2명 모두 충돌 없음",
+        whenMissing: en
+          ? "No shared event yet. Make one with someone and its room opens right here."
+          : "아직 함께하는 일정이 없어요. 누군가와 자리를 하나 만들면 그 방이 바로 여기에 열립니다.",
         before: () => {
           setView("people");
           if (withShared) { setPersonId(withShared.id); setOpenEventId(null); }
         },
       },
       {
-        key: "capture", target: "capture",
+        // 두 사람이 각자의 화면에서 쓸 때 비로소 드러나는 자리 — 가이드에 없으면
+        // 초대를 받은 쪽은 화면 위의 이 한 줄이 무엇인지 모른다.
+        key: "await", target: "await", act: ACT.together,
+        title: en ? "Waiting on you" : "답을 기다리는 것",
+        body: en
+          ? "When someone invites you or proposes a time, one line appears at the top of the screen — no popup, nothing blocked. Tap it and that event opens, with Agree / Another time right there. A time is only set once everyone has agreed."
+          : "누군가 나를 부르거나 시간을 내밀면 화면 맨 위에 한 줄이 섭니다 — 팝업으로 가로막지 않아요. 누르면 그 일정이 열리고 거기에 ‘동의 · 다른 시간’ 이 있습니다. 시간은 전원이 동의해야 비로소 앉습니다.",
+        example: en
+          ? "e.g.  “Team sync” — Aug 20 14:00 proposed. Does that work?  [Open]"
+          : "예)  “팀 회의” — 8월 20일 14:00 로 제안됐어요. 괜찮으세요?  [열어 보기]",
+        whenMissing: en
+          ? "Nothing waiting right now — which is how it should look most of the time. When someone asks, the line appears at the top of this screen."
+          : "지금은 기다리는 것이 없어요 — 평소에는 이게 맞는 모습입니다. 누군가 물어 오면 이 화면 맨 위에 한 줄이 섭니다.",
+        before: () => { setPanel(null); setView("today"); },
+      },
+      {
+        key: "capture", target: "capture", act: ACT.hand,
         title: en ? "Just say it" : "말하면 됩니다",
         body: en
-          ? "Type a line and Comein files it where it belongs — as a proposal, not a decision. Confirm it or undo it right there."
-          : "한 줄로 적으면 제자리에 놓입니다. 다만 확정하진 않아요 — 그 자리에서 확정하거나 없던 일로 되돌리면 됩니다.",
+          ? "Type a line and Comein files it where it belongs — as a proposal, not a decision. Confirm it or undo it right there. ⌘K opens this bar from anywhere."
+          : "한 줄로 적으면 제자리에 놓입니다. 다만 확정하진 않아요 — 그 자리에서 확정하거나 없던 일로 되돌리면 됩니다. 어느 화면에서든 ⌘K 로 이 칸이 열려요.",
         example: en
-          ? "e.g.  \"Meet Prof. Kim at 3pm tomorrow\" → Filed · Confirm / Undo"
-          : "예)  \"내일 3시 교수님 미팅 잡아줘\" → 정리했어요 · 확정 / 되돌리기",
+          ? "e.g.  “Meet Prof. Kim at 3pm tomorrow” → Filed · Confirm / Undo"
+          : "예)  “내일 3시 교수님 미팅 잡아줘” → 정리했어요 · 확정 / 되돌리기",
+        before: () => { setPanel(null); setView("today"); },
+      },
+      {
+        // 마지막 걸음이 설정인 이유: 앞의 여덟이 "이렇게 움직입니다" 였다면
+        // 여기는 "그 움직임을 당신이 바꿉니다" 다. 맡기는 정도를 정하는 건 사람이다.
+        key: "settings", target: "settings", act: ACT.hand,
+        title: en ? "Yours to adjust" : "맡기는 정도는 당신이",
+        body: en
+          ? "Theme, language, text size — and how much you hand over. Auto-confirm is off by default: what Comein reads waits for your yes. Signing in is what lets this workspace follow you off this browser."
+          : "테마 · 언어 · 글자 크기, 그리고 얼마나 맡길지. ‘자동 확정’ 은 기본으로 꺼져 있어요 — AI 가 읽은 것은 당신의 확인을 기다립니다. 로그인해야 이 워크스페이스가 이 브라우저 밖으로 나갑니다.",
+        example: en
+          ? "e.g.  Settings → AI auto-confirm · Account · Replay this guide"
+          : "예)  설정 → AI 자동 확정 · 계정 · 이 가이드 다시 보기",
+        before: () => { setPanel(null); setView("today"); },
       },
     ];
   }, [lang, contacts, sharedEventsWith, selectPerson]);
+
+  /** 답을 기다리는 것 — 판단은 lib/awaiting 이 한다(§39). 화면은 한 줄씩 눕히기만 한다. */
+  const awaiting = React.useMemo(
+    () => pendingAnswers({
+      proposals, eventParticipants, schedules, lang,
+      fmt: (d) => `${fmtDate(d)} ${fmtTime(d)}`,
+    }),
+    [proposals, eventParticipants, schedules, lang],
+  );
 
   // ── 오른쪽 칸 ── 한 번에 하나만 놓인다.
   // 일정을 열었으면 그 일정, 아니면 고른 사람, 아니면 새 자리 만들기.
@@ -1389,6 +1486,7 @@ export default function Reimagine() {
           focusChat={chatFocus}
           proposal={proposals[openEventData.id] ?? null}
           proposalBusy={proposalBusy}
+          proposalError={proposalError?.eventId === openEventData.id ? proposalError.message : null}
           summary={summaries[openEventData.id] ?? null}
           summaryAuto={!!autoSummed[openEventData.id]}
           onRename={(t) => renameSchedule(openEventData.id, t)}
@@ -1458,8 +1556,12 @@ export default function Reimagine() {
             <p className="rmg-doorprev-t">{lang === "en" ? "How Comein works" : "Comein 사용 가이드"}</p>
             <p className="rmg-doorprev-b">
               {lang === "en"
-                ? "Pick a day, see its hours, and keep events with the people they belong to."
-                : "날짜를 골라 하루의 흐름을 보고, 사람들과 일정을 함께 관리해보세요."}
+                ? "Nine steps on the real screen — no fake demo. Looking around, then how people and work connect, then what you can hand over."
+                : "진짜 화면 위에서 아홉 걸음 — 따로 만든 데모가 아닙니다. 이 공간을 둘러보고, 사람과 일이 어떻게 이어지는지 보고, 무엇을 맡길 수 있는지까지."}
+            </p>
+            {/* 얼마나 걸리는지 먼저 말한다 — 길이를 모르는 안내는 시작 자체가 결심이 된다. */}
+            <p className="rmg-doorprev-meta">
+              {lang === "en" ? "9 steps · about 2 min · leave anytime with Esc" : "아홉 걸음 · 2분 남짓 · Esc 로 언제든 나가기"}
             </p>
             <p className="rmg-doorprev-cta">{lang === "en" ? "Start the guide →" : "가이드 시작 →"}</p>
           </div>
@@ -1584,6 +1686,7 @@ export default function Reimagine() {
               return (
                 <button
                   key={n.key}
+                  type="button"
                   onClick={() => { setPanel(null); setView(n.key); }}
                   className={`rmg-railbtn ${on ? "on" : ""}`}
                   style={{ ["--i" as string]: i } as React.CSSProperties}
@@ -1605,6 +1708,7 @@ export default function Reimagine() {
           <div className="rmg-rail-foot">
             <button
               type="button"
+              data-tour="settings"
               className={`rmg-railbtn ${panel === "settings" ? "on" : ""}`}
               aria-label={t.topSettings}
               onClick={() => setPanel((p) => (p === "settings" ? null : "settings"))}
@@ -1669,6 +1773,25 @@ export default function Reimagine() {
               </>
             )}
           </header>
+
+          {/* 답을 기다리는 것 — 조용하지만 먼저 온다. 누르면 그 일정이 열린다. */}
+          {panel !== "settings" && awaiting.length > 0 && (
+            <div className="rmg-await rmg-a1" role="list" data-tour="await">
+              {awaiting.map((a) => (
+                <button
+                  key={a.key}
+                  type="button"
+                  role="listitem"
+                  className={`rmg-await-row ${a.kind}`}
+                  onClick={() => openEvent(a.eventId)}
+                >
+                  <span className="rmg-await-dot" aria-hidden />
+                  <span className="rmg-await-text">{a.text}</span>
+                  <span className="rmg-await-go">{lang === "en" ? "Open" : "열어 보기"}</span>
+                </button>
+              ))}
+            </div>
+          )}
 
           {/* PAGE BODY — Context Rail + 본문 (+ 필요하면 오른쪽 칸).
               캘린더는 큰 달력이 레일 자리를 대신하므로 왼쪽 레일이 없다.
@@ -1783,6 +1906,7 @@ export default function Reimagine() {
                   onRequest={requestPerson}
                   onCancelRequest={cancelRequest}
                   requests={connectionRequests}
+                  requestError={requestError}
                   outgoing={outgoingRequests}
                   myHandle={myHandle}
                   onAnswerRequest={answerRequest}
@@ -2382,6 +2506,7 @@ function Feature(props: {
   /** 내 핸들 — 남이 나를 찾을 때 쓰는 이름. */
   myHandle: string | null;
   onAnswerRequest: (id: string, accept: boolean) => Promise<void>;
+  requestError?: string | null;
   unreadOf: (personId: string) => number;
   /** 세 갈래가 읽는 것 — 사람별 마지막 말·안 읽은 수, 그리고 함께하는 자리들. */
   convo: {
@@ -2972,12 +3097,14 @@ function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, participantsO
 /** AI 일정 제안 — 대화에서 나온 시각을 각자의 달력과 대조해 내놓은 한 칸.
  *  AI 는 여기까지만 한다. 확정은 사람들이 한다(전원이 동의해야 일정이 앉는다).
  *  누가 그 시간에 바쁜지는 말하되, 무엇을 하는지는 말하지 않는다 — 서버가 아예 보내지 않는다. */
-function ProposalCard({ proposal, participants, nameOf, lang, busy, onAnswer }: {
+function ProposalCard({ proposal, participants, nameOf, lang, busy, error, onAnswer }: {
   proposal: ScheduleProposal;
   participants: EventParticipant[];
   nameOf: (userId: string) => string;
   lang: Lang;
   busy: boolean;
+  /** 답이 서버에서 막혔다면 그 이유. 눌렀는데 아무 일도 안 일어나는 것이 가장 나쁜 답이다. */
+  error?: string | null;
   onAnswer: (r: "accepted" | "declined") => void;
 }) {
   const en = lang === "en";
@@ -3038,6 +3165,9 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, onAnswer }: 
           {en ? "Another time" : "다른 시간"}
         </button>
       </div>
+
+      {/* 막혔으면 막혔다고 말한다. 조용한 실패는 사용자에게 '내가 잘못 눌렀나' 로만 남는다. */}
+      {error && <p className="rmg-prop-err" role="alert">{error}</p>}
     </section>
   );
 }
@@ -3233,7 +3363,7 @@ function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, partici
   );
 }
 
-function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
+function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -3244,6 +3374,7 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
   /** 이 일정에 열려 있는 AI 제안(없으면 null) */
   proposal?: ScheduleProposal | null;
   proposalBusy?: boolean;
+  proposalError?: string | null;
   onAnswerProposal?: (r: "accepted" | "declined") => void;
   /** 대화 요약 — 스스로 갱신하지 않는다. 사람이 부를 때만 다시 읽는다. */
   summary?: ChatSummary | null;
@@ -3413,6 +3544,7 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
           nameOf={nameOf}
           lang={lang}
           busy={!!proposalBusy}
+          error={proposalError ?? null}
           onAnswer={onAnswerProposal}
         />
       )}
@@ -3592,7 +3724,10 @@ function EventPanel({ event, participants, contacts, messages, myName, lang, foc
             placeholder={en ? "Write to everyone on this event…" : "이 일정의 사람들에게…"}
             aria-label={en ? "Message" : "메시지"}
           />
-          <button type="submit" className="rmg-ask-send" aria-label={en ? "Send" : "보내기"}>
+          {/* 캡처 바는 빈 입력이면 보내기를 아예 감춘다. 여기서도 같은 말을 해야 한다 —
+              같은 화살표가 어떤 자리에서는 눌리고 어떤 자리에서는 아무 일도 안 하면
+              사용자는 자기가 뭘 잘못했는지를 먼저 의심한다. */}
+          <button type="submit" className="rmg-ask-send" disabled={!draft.trim()} aria-label={en ? "Send" : "보내기"}>
             <ArrowUp className="rmg-railicon" />
           </button>
         </form>
@@ -4002,7 +4137,7 @@ function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend
           placeholder={placeholder}
           aria-label={en ? "Message" : "메시지"}
         />
-        <button type="submit" className="rmg-ask-send" aria-label={en ? "Send" : "보내기"}>
+        <button type="submit" className="rmg-ask-send" disabled={!draft.trim()} aria-label={en ? "Send" : "보내기"}>
           <ArrowUp className="rmg-railicon" />
         </button>
       </form>
@@ -4057,7 +4192,7 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
     <aside className="rmg-evpanel" role="region" aria-label={en ? "New event" : "새 자리"}>
       <div className="rmg-drawer-head">
         <div className="rmg-drawer-when">
-          <p className="rmg-drawer-title">{en ? "New event" : "만들기"}</p>
+          <p className="rmg-drawer-title">{en ? "New event" : "새 자리"}</p>
           <p className="rmg-drawer-time">{en ? "Everyone here gets the room too." : "부른 사람들이 곧 이 자리의 대화 상대가 됩니다"}</p>
         </div>
         <button type="button" className="rmg-panel-close" onClick={onClose} aria-label={en ? "Close" : "닫기"}>
@@ -4362,6 +4497,10 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
                       {fmtDate(new Date(suggestion.start))} · {suggestionLine(suggestion, en)}
                     </em>
                   </span>
+                  {/* '제안' 이라 부르지 않는다. 이 제품에서 제안은 이미 다른 기제의 이름이고
+                      (schedule_proposals — 전원이 동의해야 일정이 앉는다), 이 버튼은 그 길을
+                      가지 않는다. 여기서 하는 일은 같은 패널 위쪽 버튼과 **완전히 같다** —
+                      달력에 자리를 세우고 상대를 부른다. 같은 일에는 같은 이름을 쓴다. */}
                   <button
                     type="button"
                     className="rmg-pctx-act"
@@ -4370,7 +4509,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
                       onAnswerSuggestion(suggestion.key, "accepted");
                     }}
                   >
-                    {en ? "Propose it" : "일정 제안"}
+                    {en ? "Add to calendar" : "캘린더에 추가"}
                   </button>
                   <button
                     type="button"
@@ -4392,7 +4531,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
+function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   // 앞의 @ 는 이름의 일부가 아니라 '핸들을 부르는 방식' 이다. 여기서 벗겨야
@@ -4428,6 +4567,8 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
   const [asked, setAsked] = React.useState<Record<string, string>>({});
   const [copied, setCopied] = React.useState(false);
   const [askErr, setAskErr] = React.useState<string | null>(null);
+  /** 지금 답하고 있는 요청 · 무르고 있는 사람. 같은 것을 두 번 누르면 서버에 두 번 간다. */
+  const [answering, setAnswering] = React.useState<string | null>(null);
 
   React.useEffect(() => {
     if (!onFind || q.length < 2) { setFound([]); setFinding(false); return; }
@@ -4461,8 +4602,17 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
   };
 
   const unask = async (id: string) => {
-    await onCancelRequest?.(id);
+    if (answering) return;
+    setAnswering(id);
+    try { await onCancelRequest?.(id); } finally { setAnswering(null); }
     setAsked((m) => { const n = { ...m }; delete n[id]; return n; });
+  };
+
+  /** 받은 요청에 답한다. 답하는 동안 잠근다 — 두 번 누르면 두 번 나간다. */
+  const answer = async (id: string, accept: boolean) => {
+    if (answering) return;
+    setAnswering(id);
+    try { await onAnswerRequest?.(id, accept); } finally { setAnswering(null); }
   };
 
   return (
@@ -4481,9 +4631,12 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
             <X className="rmg-drawer-pxic" />
           </button>
         )}
-        {/* 만들기는 큰 버튼이 아니라 한 줄의 말이다 — 늘 눌리길 기다리는 얼굴을 하지 않는다. */}
+        {/* 만들기는 큰 버튼이 아니라 한 줄의 말이다 — 늘 눌리길 기다리는 얼굴을 하지 않는다.
+            '그룹' 이라 부르지 않는다: 이 제품에 group 이라는 것은 없고, 이 버튼이 여는 패널은
+            스스로를 '새 자리(New event)' 라고 부른다. 여는 것과 열리는 것의 이름이 다르면
+            누른 사람은 자기가 무엇을 만들었는지 모른다. */}
         <button type="button" className="rmg-ppl-make" onClick={onNewRoom}>
-          {en ? "New group" : "새 그룹"}
+          {en ? "New event" : "새 자리"}
         </button>
       </div>
 
@@ -4526,15 +4679,17 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                   <span className="rmg-req-name">{r.name}</span>
                   <span className="rmg-req-handle">@{r.handle}</span>
                 </span>
-                <button type="button" className="rmg-ppl-act primary" onClick={() => void onAnswerRequest?.(r.id, true)}>
-                  {en ? "Accept" : "수락"}
+                <button type="button" className="rmg-ppl-act primary" disabled={answering === r.id} onClick={() => void answer(r.id, true)}>
+                  {answering === r.id ? "…" : (en ? "Accept" : "수락")}
                 </button>
-                <button type="button" className="rmg-ppl-act" onClick={() => void onAnswerRequest?.(r.id, false)}>
+                <button type="button" className="rmg-ppl-act" disabled={answering === r.id} onClick={() => void answer(r.id, false)}>
                   {en ? "Decline" : "거절"}
                 </button>
               </li>
             ))}
           </ul>
+          {/* 서버가 받지 않았으면 그렇다고 말한다 — 요청만 사라지고 아무 일도 없는 것처럼 두지 않는다. */}
+          {requestError && <p className="rmg-ppl-none rmg-req-err">{requestError}</p>}
         </section>
       )}
 
@@ -4649,8 +4804,8 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                     넣을 수 없어(중첩 금지), 형제로 두고 오른쪽 끝에 세운다. */}
                 {lane === "contacts" && !c.connected && (
                   (asked[c.id] || (outgoing ?? []).includes(c.id)) ? (
-                    <button type="button" className="rmg-ppl-act rmg-ppl-rowact" onClick={() => void unask(c.id)}>
-                      {en ? "Requested · Undo" : "요청함 · 취소"}
+                    <button type="button" className="rmg-ppl-act rmg-ppl-rowact" disabled={answering === c.id} onClick={() => void unask(c.id)}>
+                      {answering === c.id ? "…" : (en ? "Requested · Undo" : "요청함 · 취소")}
                     </button>
                   ) : (
                     <button type="button" className="rmg-ppl-act rmg-ppl-rowact" disabled={joining === c.id} onClick={() => void ask(c.id)}>
@@ -4689,13 +4844,13 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
                   ) : p.incomingRequestId ? (
                     <span className="rmg-ppl-req">
                       <span className="rmg-ppl-reqt">{en ? "Wants to connect" : "요청이 와 있어요"}</span>
-                      <button type="button" className="rmg-ppl-act primary" onClick={() => { void onAnswerRequest?.(p.incomingRequestId, true); onQuery(""); }}>
-                        {en ? "Accept" : "수락"}
+                      <button type="button" className="rmg-ppl-act primary" disabled={answering === p.incomingRequestId} onClick={() => { void answer(p.incomingRequestId, true).then(() => onQuery("")); }}>
+                        {answering === p.incomingRequestId ? "…" : (en ? "Accept" : "수락")}
                       </button>
                     </span>
                   ) : asked[p.id] || p.requested ? (
-                    <button type="button" className="rmg-ppl-act" onClick={() => void unask(p.id)}>
-                      {en ? "Requested · Undo" : "요청함 · 취소"}
+                    <button type="button" className="rmg-ppl-act" disabled={answering === p.id} onClick={() => void unask(p.id)}>
+                      {answering === p.id ? "…" : (en ? "Requested · Undo" : "요청함 · 취소")}
                     </button>
                   ) : (
                     <button type="button" className="rmg-ppl-act" disabled={joining === p.id} onClick={() => void ask(p.id)}>
@@ -4715,7 +4870,26 @@ function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith
 /** 사용 가이드 투어 — 화면을 덮는 모달이 아니라, 진짜 화면 위에서 한 곳씩 짚어 준다.
  *  각 단계는 실제 요소(data-tour)를 가리키고, 필요하면 그 화면으로 먼저 옮겨 간다.
  *  가짜 UI 를 만들지 않는다 — 사용자가 배우는 건 지금 눈앞의 그 버튼이다. */
-type TourStep = { key: string; target: string; title: string; body: string; example?: string; before?: () => void };
+type TourStep = {
+  key: string;
+  target: string;
+  /** 어느 막(幕)에 속하는가 — "지금 어디쯤 왔는가" 를 점 아홉 개보다 잘 말한다. */
+  act: string;
+  title: string;
+  body: string;
+  example?: string;
+  /** 가리킬 실물이 아직 화면에 없을 때 대신 하는 말.
+   *  가짜 UI 를 지어내지 않는다 — 없으면 없다고 말하고, 언제 생기는지 알려 준다. */
+  whenMissing?: string;
+  /** 그 실물이 지금 있는가. 없으면 target 은 '그리로 가는 길'(레일 버튼)을 가리키고,
+   *  카드는 whenMissing 을 함께 말한다.
+   *
+   *  왜 rect 로 판단하지 않는가 — 대체 대상(레일 버튼)은 늘 화면에 있어서 rect 가 잡힌다.
+   *  그러면 "아직 이어진 사람이 없어요" 를 말할 기회가 영영 오지 않는다.
+   *  (반대로 '답을 기다리는 것' 줄은 정말로 없을 때 사라지므로 rect 만으로 충분하다.) */
+  available?: boolean;
+  before?: () => void;
+};
 
 function GuideTour({ steps, index, lang, onIndex, onClose }: {
   steps: TourStep[];
@@ -4805,14 +4979,36 @@ function GuideTour({ steps, index, lang, onIndex, onClose }: {
         />
       )}
       <div ref={cardRef} className="rmg-tour-card" style={{ left: card.left, top: card.top }}>
+        {/* 지금 어디쯤 왔는가 — 점 아홉 개만으로는 "몇 개 남았지" 밖에 읽히지 않는다.
+            막 이름을 앞에 두면 남은 개수가 아니라 무엇을 배우는 중인지가 먼저 읽힌다. */}
+        <p className="rmg-tour-act">
+          <span className="rmg-tour-actname">{step.act}</span>
+          <span className="rmg-tour-count">{index + 1} / {steps.length}</span>
+        </p>
         <p className="rmg-tour-title">{step.title}</p>
         <p className="rmg-tour-body">{step.body}</p>
-        {/* 아직 아무것도 없는 워크스페이스라 가리킬 실물이 없다 —
-            대신 '이런 모습이 된다' 를 한 조각 보여 준다. */}
+        {/* 가리킬 실물이 아직 없다 — 없는 것을 있는 척 그리지 않고, 언제 생기는지 말한다. */}
+        {step.whenMissing && (step.available === false || !rect) && (
+          <p className="rmg-tour-none">{step.whenMissing}</p>
+        )}
+        {/* 이런 모습이 된다 — 한 조각. */}
         {step.example && <p className="rmg-tour-eg">{step.example}</p>}
         <div className="rmg-tour-foot">
-          <span className="rmg-tour-dots" aria-label={`${index + 1} / ${steps.length}`}>
-            {steps.map((s, i) => <span key={s.key} className={`rmg-tour-dot ${i === index ? "on" : ""}`} />)}
+          {/* 점은 표식이 아니라 손잡이다 — 되짚고 싶은 걸음으로 바로 간다.
+              아홉 걸음을 되돌아가려고 '이전' 을 여덟 번 누르게 두지 않는다. */}
+          <span className="rmg-tour-dots" role="tablist" aria-label={en ? "Steps" : "걸음"}>
+            {steps.map((st, i) => (
+              <button
+                key={st.key}
+                type="button"
+                role="tab"
+                aria-selected={i === index}
+                aria-label={`${i + 1}. ${st.title}`}
+                title={st.title}
+                className={`rmg-tour-dot ${i === index ? "on" : ""} ${i < index ? "past" : ""}`}
+                onClick={() => onIndex(i)}
+              />
+            ))}
           </span>
           <div className="rmg-tour-acts">
             {index > 0 && (
@@ -4823,6 +5019,8 @@ function GuideTour({ steps, index, lang, onIndex, onClose }: {
             </button>
           </div>
         </div>
+        {/* 화살표로도 넘어간다는 것을 말해 준다 — 되던 일인데 아무도 몰랐다. */}
+        <p className="rmg-tour-keys" aria-hidden>{en ? "← → to move · Esc to leave" : "← → 로 이동 · Esc 로 나가기"}</p>
         <button type="button" className="rmg-tour-skip" onClick={() => onClose(true)}>{en ? "Skip" : "건너뛰기"}</button>
       </div>
     </div>
@@ -4852,7 +5050,10 @@ function AccountRow({ lang, remote }: { lang: Lang; remote: RemoteState }) {
           {!remote.configured
             ? (en ? "Not connected — everything stays in this browser." : "연결되지 않았어요 — 지금 만든 것은 이 브라우저에만 있습니다.")
             : remote.signedIn
-              ? (en ? "Connected. Your workspace follows you." : "연결됐어요. 워크스페이스가 기기를 따라옵니다.")
+              // 실시간이 붙어 있는지도 여기서 말한다 — 끊긴 줄 모르는 것이 가장 나쁜 상태다.
+              ? remote.live
+                ? (en ? "Connected. Your workspace follows you." : "연결됐어요. 워크스페이스가 기기를 따라옵니다.")
+                : (en ? "Signed in — reconnecting live updates…" : "로그인됐어요 — 실시간 연결을 다시 잇는 중이에요.")
               : (en ? "Sign in to keep your workspace." : "로그인하면 워크스페이스가 저장됩니다.")}
           {remote.error ? ` · ${remote.error}` : ""}
           {err ? ` · ${err}` : ""}
@@ -5010,7 +5211,12 @@ function SettingsPanel({ settings, onChange, theme, onTheme, mounted, lang, onRe
       <div className="rmg-set-row">
         <div className="rmg-set-label">
           <p className="rmg-set-k">{lang === "en" ? "Guide" : "사용 가이드"}</p>
-          <p className="rmg-set-d">{lang === "en" ? "Walk through Comein again." : "Comein을 다시 한 번 둘러봅니다."}</p>
+          {/* 길이를 먼저 말한다 — 얼마나 걸리는지 모르는 안내는 다시 보기 자체가 결심이 된다. */}
+          <p className="rmg-set-d">
+            {lang === "en"
+              ? "Nine steps on the real screen. About 2 min — Esc leaves anytime."
+              : "진짜 화면 위에서 아홉 걸음. 2분 남짓이고, Esc 로 언제든 나갈 수 있어요."}
+          </p>
         </div>
         <button type="button" className="rmg-ppl-act" onClick={onReplayGuide}>
           {lang === "en" ? "Replay" : "다시 보기"}
@@ -5216,6 +5422,42 @@ html { font-size: 17px; }
   animation: rmg-arrive-out 1.3s cubic-bezier(0.4,0,0.2,1) both; }
 @keyframes rmg-arrive-out { from { opacity: 1; } to { opacity: 0; } }
 @media (prefers-reduced-motion: reduce) { .rmg-arrive { display: none; } }
+/* ══ 손이 닿는 것들의 공통 규격 ═══════════════════════════════════════
+   버튼이 55가지 이름으로 흩어져 있어, 어떤 것은 키보드 초점을 말하고 어떤 것은
+   말하지 않았다. 주 액션인 .rmg-ppl-act(동의·수락·참석·요청·만들기·로그인…)조차
+   초점 표시가 없었다 — 마우스로만 쓸 수 있는 버튼이었던 셈이다.
+
+   클래스마다 규칙을 서른 번 적는 대신 여기 한 번 적는다. 더 아래의 클래스 규칙이
+   필요하면 덮는다(구체성이 높으므로). 규격은 CLAUDE.md §6 이 정한 그대로:
+   호버는 살짝 밝아지고, 누름은 scale(0.97) 미세 반응, 초점은 액센트 1겹. */
+.rmg button,
+.rmg [role="button"],
+.rmg [role="menuitem"],
+.rmg [role="tab"] { -webkit-tap-highlight-color: transparent; }
+
+.rmg button:focus-visible,
+.rmg [role="button"]:focus-visible,
+.rmg [role="menuitem"]:focus-visible,
+.rmg [role="tab"]:focus-visible,
+.rmg input:focus-visible,
+.rmg textarea:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  outline-offset: 2px;
+  border-radius: var(--r-sm);
+}
+
+/* 누름 — 손끝에 닿았다는 것만 말한다(리플 X).
+   목록의 한 줄이나 달력 칸처럼 넓은 표면은 줄어들면 오히려 어색하므로 비켜선다. */
+.rmg button:not(:disabled):active { transform: scale(0.97); }
+.rmg-ppl-head:active, .rmg-mc-cell:active, .rmg-tt-block:active, .rmg-tl-slot:active,
+.rmg-await-row:active, .rmg-doorway:active, .rmg-thr:active, .rmg-railbtn:active,
+.rmg-evwho-faces:active, .rmg-dial-keyrow:active { transform: none; }
+.rmg button { transition: transform 140ms cubic-bezier(0.22,1,0.36,1); }
+@media (prefers-reduced-motion: reduce) { .rmg button { transition: none; } .rmg button:active { transform: none; } }
+
+/* 잠긴 버튼은 어디서나 같은 얼굴을 한다 — 눌러도 되는지가 클래스마다 달라 보이면 안 된다. */
+.rmg button:disabled { opacity: 0.45; cursor: default; }
+
 .rmg-eyebrow { margin: 0 0 var(--sp-3); font-size: 11px; font-weight: 600; letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
 
 /* ══ 화면 아래의 세 겹 ══════════════════════════════════════════════
@@ -5393,6 +5635,7 @@ html { font-size: 17px; }
 .rmg-doorway-wrap:hover .rmg-doorprev { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
 .rmg-doorprev-t { margin: 0 0 6px; font-size: 0.88rem; font-weight: 500; color: var(--ink); }
 .rmg-doorprev-b { margin: 0 0 var(--sp-1); font-size: 0.82rem; font-weight: 400; line-height: 1.6; color: color-mix(in srgb, var(--ink) 76%, transparent); }
+.rmg-doorprev-meta { margin: 0 0 8px; font-size: 0.76rem; letter-spacing: 0.02em; color: var(--faint); }
 .rmg-doorprev-cta { margin: 0; font-size: 0.8rem; font-weight: 500; color: color-mix(in srgb, var(--ink) 68%, transparent); }
 .rmg-doorway-wrap:hover .rmg-doorprev:hover .rmg-doorprev-cta { color: var(--ink); }
 @media (prefers-reduced-motion: reduce) {
@@ -5449,17 +5692,38 @@ html { font-size: 17px; }
 .rmg-tour-eg { margin: 0 0 20px; padding: 10px 12px; border-left: 2px solid color-mix(in srgb, var(--ink) 24%, var(--hair)); border-radius: 0 var(--r-sm) var(--r-sm) 0;
   background: color-mix(in srgb, var(--ink) 5%, transparent);
   font-size: 0.875rem; font-weight: 400; line-height: 1.62; color: color-mix(in srgb, var(--ink) 74%, transparent); }
-.rmg-tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-2); padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--ink) 10%, var(--hair)); }
-.rmg-tour-acts { display: flex; gap: 8px; }
+.rmg-tour-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--sp-1) var(--sp-2); flex-wrap: wrap; padding-top: 14px; border-top: 1px solid color-mix(in srgb, var(--ink) 10%, var(--hair)); }
+.rmg-tour-acts { display: flex; gap: 8px; margin-left: auto; }
 .rmg-tour-acts .rmg-ppl-act { font-size: 0.875rem; font-weight: 500; padding: 7px 16px; color: color-mix(in srgb, var(--ink) 70%, transparent); border-color: color-mix(in srgb, var(--ink) 15%, var(--hair)); }
 .rmg-tour-acts .rmg-ppl-act:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, var(--hair)); }
 /* '다음' 은 이 카드에서 할 일이 하나뿐임을 말한다 — 채워서 분명히 하되,
    색으로 소리치지 않는다(무채색 잉크. 이 화면에 액센트 컬러를 들이지 않는다). */
 .rmg-tour-acts .rmg-ppl-act.primary { background: color-mix(in srgb, var(--ink) 92%, transparent); border-color: transparent; color: var(--paper); }
 .rmg-tour-acts .rmg-ppl-act.primary:hover { background: var(--ink); color: var(--paper); border-color: transparent; }
-.rmg-tour-dots { display: flex; gap: 6px; }
-.rmg-tour-dot { width: 6px; height: 6px; border-radius: 50%; background: color-mix(in srgb, var(--ink) 24%, transparent); transition: background 200ms ease-out; }
-.rmg-tour-dot.on { background: color-mix(in srgb, var(--ink) 88%, transparent); }
+.rmg-tour-dots { display: flex; align-items: center; margin-left: -5px; flex: 0 1 auto; min-width: 0; }
+/* 점은 6px 이지만 닿는 자리는 16×18 이다 — 손끝으로도 걸음을 되짚을 수 있어야 한다.
+   (테두리로 넓히면 세로가 6px 그대로라 손가락이 빗나간다. 안쪽 여백으로 넓힌다.) */
+.rmg-tour-dot { box-sizing: content-box; width: 6px; height: 6px; padding: 6px 5px; border: 0; border-radius: 50%;
+  cursor: pointer; background: color-mix(in srgb, var(--ink) 20%, transparent); background-clip: content-box;
+  transition: background 200ms ease-out, transform 200ms cubic-bezier(0.22,1,0.36,1); }
+.rmg-tour-dot.past { background: color-mix(in srgb, var(--ink) 44%, transparent); }
+.rmg-tour-dot.on { background: color-mix(in srgb, var(--ink) 88%, transparent); transform: scale(1.35); }
+.rmg-tour-dot:hover { background: color-mix(in srgb, var(--ink) 66%, transparent); }
+.rmg-tour-dot:active { transform: scale(1.15); }
+
+/* 막 이름 + 걸음 수 — 제목 위 한 줄. 제목보다 작고 조용하게. */
+.rmg-tour-act { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2);
+  margin: 0 0 10px; font-size: 11px; font-weight: 600; letter-spacing: 0.14em; text-transform: uppercase; }
+.rmg-tour-actname { color: var(--muted); }
+.rmg-tour-count { color: var(--faint); font-variant-numeric: tabular-nums; letter-spacing: 0.06em; }
+
+/* 가리킬 것이 아직 없을 때 — 사과하지 않고, 언제 생기는지만 말한다. */
+.rmg-tour-none { margin: 0 0 18px; padding: 10px 12px; border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+  font-size: 0.88rem; line-height: 1.65; color: color-mix(in srgb, var(--ink) 66%, transparent); }
+
+/* 키보드 안내 — 되던 일인데 아무도 몰랐다. 있는 줄만 알면 되므로 가장 옅게. */
+.rmg-tour-keys { margin: 12px 0 0; font-size: 0.74rem; letter-spacing: 0.02em; color: var(--faint); }
 /* 건너뛰기 — 강조하지 않되, 찾는 사람 눈에는 보여야 한다. */
 .rmg-tour-skip { position: absolute; top: 10px; right: 12px; border: 0; background: none; font: inherit; font-size: 0.85rem; font-weight: 400; color: color-mix(in srgb, var(--ink) 70%, transparent); cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: color 170ms ease-out; }
 .rmg-tour-skip:hover { color: var(--ink); }
@@ -6327,6 +6591,32 @@ html { font-size: 17px; }
 .rmg-prop-sum { margin: var(--sp-1) 0 0; font-size: 0.8rem; color: color-mix(in srgb, var(--ink) 62%, transparent); }
 .rmg-prop-acts { display: flex; gap: 6px; margin-top: 4px; }
 .rmg-prop-acts .rmg-ppl-act { font-size: 0.84rem; padding: 6px 14px; }
+/* 막힌 이유 — 붉게 소리치지 않는다. 다만 분명히 읽히게. */
+.rmg-prop-err { margin: 6px 0 0; font-size: 0.8rem; line-height: 1.55;
+  color: color-mix(in srgb, 18 42% 48%, var(--ink) 34%); }
+
+/* ── 답을 기다리는 것 ──
+   상대가 부르거나 시간을 내밀었는데 내가 아직 답하지 않은 자리. 배너가 아니라 한 줄이다:
+   가로막지 않고, 화면 맨 위 기준선 위에 조용히 서 있다가 누르면 그 일정이 열린다. */
+.rmg-await { display: flex; flex-direction: column; gap: 1px; margin-top: var(--sp-2); }
+.rmg-await-row { display: flex; align-items: center; gap: var(--sp-1); width: 100%;
+  padding: 10px var(--sp-1) 10px 0; border: 0; border-top: 1px solid var(--hair); background: transparent;
+  font: inherit; font-size: 0.86rem; color: var(--ink); text-align: left; cursor: pointer;
+  transition: color 0.32s cubic-bezier(0.22,1,0.36,1), transform 0.32s cubic-bezier(0.22,1,0.36,1); }
+.rmg-await-row:last-child { border-bottom: 1px solid var(--hair); }
+.rmg-await-row:hover { transform: translateX(2px); }
+.rmg-await-row:active { transform: scale(0.995); }
+.rmg-await-row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 점 하나 — 아직 답하지 않았다는 표시. 제안은 AI 가 낸 것이라 보라, 초대는 사람이 낸 것이라 잉크. */
+.rmg-await-dot { flex: 0 0 auto; width: 5px; height: 5px; border-radius: 50%;
+  background: color-mix(in srgb, var(--ink) 45%, transparent); }
+.rmg-await-row.proposal .rmg-await-dot { background: var(--accent); }
+.rmg-await-text { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  color: color-mix(in srgb, var(--ink) 82%, transparent); }
+.rmg-await-go { flex: 0 0 auto; font-size: 0.76rem; letter-spacing: 0.02em; color: var(--faint);
+  transition: color 0.32s cubic-bezier(0.22,1,0.36,1); }
+.rmg-await-row:hover .rmg-await-text { color: var(--ink); }
+.rmg-await-row:hover .rmg-await-go { color: color-mix(in srgb, var(--ink) 70%, transparent); }
 /* ── 세 갈래 탭 ──
    버튼처럼 보이지 않는다. 밑줄 하나와 농도 차이만으로 지금 어디를 보는지 말한다. */
 .rmg-lane { display: flex; align-items: center; gap: var(--sp-3); padding: 0 8px;

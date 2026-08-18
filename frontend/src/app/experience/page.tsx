@@ -83,6 +83,19 @@ export default function Opening() {
     setTimeout(() => router.push("/workspace"), 1300);
   }, [router]);
 
+  /** 이미 들어와 있는 사람은 인트로 앞에 다시 세우지 않는다.
+   *
+   *  이 화면은 로그인하지 않은 사람을 위한 관문이다. 그런데 세션이 살아 있는 사람이
+   *  주소를 다시 열면(새로고침·북마크·뒤로가기) 여기 서서 "로그인하세요" 를 다시 봤다 —
+   *  이미 로그인해 있는데도. 그건 처음 화면으로 되돌아간 것과 같다.
+   *  ?auth=1 로 온 사람은 예외다: 계정을 바꾸러 온 사람에게서 로그인 칸을 뺏지 않는다. */
+  React.useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("auth") === "1") return;
+    let gone = false;
+    void refreshSession().then((uid) => { if (uid && !gone) cross(); }).catch(() => {});
+    return () => { gone = true; };
+  }, [cross]);
+
   /** 건너뛰기 — 인트로만 넘긴다. 다른 페이지로 내보내지 않고, 이 화면의 로그인 카드로 바로 간다.
    *  이미 들어와 있으면 그대로 통과. */
   const skip = React.useCallback(() => {
