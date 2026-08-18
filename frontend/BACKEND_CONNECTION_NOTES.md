@@ -49,8 +49,13 @@
 ⑥ 프론트 dispatcher 가 intent 별로 기능에 꽂고 reply 표시
 ```
 
-- **"AI가 자동으로 딱 맞춰준다"가 아니라**, 프론트가 먹을 모양(AiResult)을 먼저 정하고 **AI를 그 스키마에 가둔다(JSON 모드/구조화 출력).**
-- ⑥ dispatcher는 이미 존재 → `src/lib/store.ts`의 `sendMessage()` 안 `interpret()` 분기(schedule/todo/memo). 지금은 목업, 나중에 `parseMessage()`로 교체.
+- **"AI가 자동으로 딱 맞춰준다"가 아니라**, 프론트가 먹을 모양(AiResult)을 먼저 정하고 **AI를 그 스키마에 가둔다.**
+  다만 가두는 방식은 반쪽이다 — Gemini 에는 `responseMimeType: application/json` 만 주고
+  **스키마 자체는 보내지 않는다**(중첩 `$ref` 미지원). 모양은 프롬프트 산문으로 말하고,
+  받은 뒤 `ParsedItem` 으로 두 번 검증한다(`ai/router.py` → `backend/.../chat.py`).
+- ⑥ 분배는 `workspace/page.tsx` 의 `capture()` 안에서 한다 — `toParsed()` 로 모르는 필드를
+  버리고 각 항목을 제 뷰로 보낸다. 예전 `store.ts` 의 `interpret()`(정규식으로 갈래를 나누고
+  "우선순위를 추천해 뒀습니다" 라고 말하던 **가짜 AI**)은 걷어냈다.
 
 ---
 
@@ -60,49 +65,61 @@
 
 ```jsonc
 {
-  "reply": "내일 3시 교수님 미팅을 제안 일정으로 만들었어요.", // 자연어 응답(필수)
-  "intent": "schedule",   // schedule | todo | memo | meeting | chat (필수)
-  "confidence": 0.92,     // 0~1 (선택)
-  "entity": {             // 만들/수정할 실제 데이터 (chat이면 없음)
-    "op": "create",
-    "type": "schedule",
-    "data": { "title": "교수님 미팅", "start": "2026-07-28T15:00:00", "end": "..." }
-  }
+  "intent": "meeting",              // schedule | todo | memo | meeting | chat
+  "reply": "회의로 정리했어요.",      // 화면에 뜨는 한 줄
+  "items": [                        // 한 문장에서 여러 건이 나올 수 있다
+    { "category": "meeting", "title": "미팅",
+      "start": "2026-08-15T15:00:00+09:00", "participants": ["교수님"] }
+  ],
+  "ask": null                       // 시각이 없으면 items 대신 이 한 줄이 온다
 }
 ```
 
-- 어떤 AI 모델을 쓰든 이 모양은 안 변함 → **계약만 고정하면 프론트는 AI 몰라도 완성 가능.**
-- AI가 삐끗해도 대비: 스키마 강제(①) + 서버 검증/기본값(②) + 일정 `pending` 후 사용자 확인(③).
+- 계약이 `entity` 하나에서 **`items[]` 배열**로 바뀌었다 — "내일 3시 회의 잡고 자료도
+  준비해야 해" 한 줄이 회의와 할 일 둘을 만든다. `intent` 는 첫 항목의 갈래일 뿐이라
+  화면은 실제로 쓰지 않는다(각 항목이 제 `category` 를 갖는다).
+- **`reply` 는 AI 가 쓴 문장이 아니다.** 항목 수·갈래로 서버가 만든 한 줄이거나, `ask` 다.
+- **뽑았으면 묻지 않고, 물었으면 뽑지 않는다** — `items` 와 `ask` 는 동시에 서지 않는다.
+- AI가 삐끗해도 대비: 두 번의 Pydantic 검증 + 일정을 `pending`(제안)으로 앉히고 사람이 확정.
+  백엔드에 닿지 못하면 화면이 로컬 규칙으로 정리하되 **"AI 없이 정리했어요" 라고 밝힌다.**
 
 ---
 
-## 5. 지금 상태 & AI 미확정이어도 할 수 있는 것
+## 5. 지금 상태 — 다 됐다 (2026-08-14)
 
-막힌 곳은 **백엔드 가장 안쪽, 실제 LLM 호출 한 지점뿐.** 나머지는 지금 다 세팅 가능.
+이 문서는 "AI 모델 미확정" 시절에 쓰였다. 그 사이에 전부 끝났고, **간 길은 여기 적힌 것과
+조금 다르다.** 낡은 계획을 지우기보다 무엇이 달라졌는지 남긴다.
 
-- ✅ `src/lib/api.ts` (완료) — 백엔드 호출 transport (`health`, `chat`, `parseMessage`)
-- ✅ `.env.example` — `NEXT_PUBLIC_API_BASE` 자리 추가
-- ⬜ AiResult 계약 확정 (**최우선**)
-- ⬜ 백엔드에 **mock 파서**(키워드 규칙) 넣기 → AI 대역, 프론트 전체 기능 테스트 가능
-- ⬜ 캡처바에서 `interpret()` → `parseMessage()` 연결
-- ⬜ Render 배포 + Vercel 환경변수 + CORS
-
-**AI 확정되면 → 백엔드 mock을 real LLM 호출로 교체하는 것만.** 프론트·계약·배포 안 건드림.
+- ✅ AiResult 계약 확정 — 다만 `entity` 하나가 아니라 **`items[]` 배열**이 됐다.
+      한 문장에 여러 갈래가 들어오기 때문이다("회의 잡고 자료도 준비해야 해" → meeting + todo)
+- ✅ 실제 LLM 연결 — Gemini(폴백 Groq). **mock 파서는 만들지 않았다.** 계약이 먼저 굳어서
+      화면을 목업 없이 붙일 수 있었다
+- ✅ 캡처바 → `/api/chat` 직접 연결. `interpret()`(정규식 가짜 AI)은 걷어냈다
+- ✅ Render 배포 + Vercel 환경변수 + CORS
+- ➕ 계획에 없던 것: **되묻기(`ask`)** — 시각이 없으면 지어내지 않고 한 줄 물어본다
 
 ---
 
-## 6. api.ts 사용법
+## 6. api.ts — 지금은 주소 한 줄이다
 
 ```ts
-import { health, parseMessage } from "@/lib/api";
-
-await health();                     // {status:"ok"} → 프론트↔백엔드 연결 OK
-const r = await parseMessage("내일 3시 회의");  // AiResult 반환
-// r.reply → 채팅 표시,  r.intent/r.entity → dispatcher가 기능에 반영
+export const API_BASE = (process.env.NEXT_PUBLIC_API_BASE ?? "").replace(/\/$/, "");
 ```
 
-- 베이스 URL은 `NEXT_PUBLIC_API_BASE` 환경변수에서 읽음.
-- `/api/ai/parse`(계약 목표)는 백엔드 미구현 → 현재는 살아있는 `/api/chat`을 감싸 반환. 경로 생기면 seam 안쪽만 교체.
+한때 `health` · `chat` · `parseMessage` 를 감싼 클라이언트였다. 저장이 Supabase 직행으로
+옮겨가며 `/api/items` 경유 저장이 할 일을 잃었고, 남은 두 호출은 **요청 본문이 화면마다 달라**
+얇은 래퍼를 한 겹 두는 편이 오히려 읽기 어려웠다. 그래서 화면이 `fetch` 로 직접 부른다:
+
+```ts
+const res = await fetch(`${API_BASE}/api/chat`, {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ message, context: { now, tz, pending } }),
+});
+```
+
+목표 계약이던 `/api/ai/parse` 는 끝내 만들지 않았다 — `/api/chat` 이 그 일을 한다.
+다시 클라이언트 층이 필요해지면 그때 세운다. 쓰지 않는 층을 미리 두지 않는다.
 
 ---
 

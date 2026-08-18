@@ -5443,17 +5443,32 @@ html { font-size: 17px; }
 .rmg textarea:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent);
   outline-offset: 2px;
-  border-radius: var(--r-sm);
 }
+/* border-radius 를 여기서 주지 않는다 — 이 선택자(0,2,1)가 클래스 규칙(0,1,0)을 이겨서
+   초점이 닿는 순간 동그란 것이 각지게 변한다(투어의 점이 그랬다).
+   요즘 브라우저의 outline 은 그 요소의 border-radius 를 알아서 따라간다. */
 
 /* 누름 — 손끝에 닿았다는 것만 말한다(리플 X).
    목록의 한 줄이나 달력 칸처럼 넓은 표면은 줄어들면 오히려 어색하므로 비켜선다. */
 .rmg button:not(:disabled):active { transform: scale(0.97); }
-.rmg-ppl-head:active, .rmg-mc-cell:active, .rmg-tt-block:active, .rmg-tl-slot:active,
-.rmg-await-row:active, .rmg-doorway:active, .rmg-thr:active, .rmg-railbtn:active,
-.rmg-evwho-faces:active, .rmg-dial-keyrow:active { transform: none; }
-.rmg button { transition: transform 140ms cubic-bezier(0.22,1,0.36,1); }
-@media (prefers-reduced-motion: reduce) { .rmg button { transition: none; } .rmg button:active { transform: none; } }
+/* 비켜서는 것들. 위 선택자가 (0,3,1) 이라 클래스 하나(0,2,0)로는 못 이긴다 —
+   같은 모양으로 한 겹 더 쌓아 (0,4,0) 으로 맞춘다. 명시도를 눈대중하면 조용히 안 먹는다. */
+.rmg .rmg-ppl-head:not(:disabled):active,
+.rmg .rmg-mc-cell:not(:disabled):active,
+.rmg .rmg-tt-block:not(:disabled):active,
+.rmg .rmg-tl-slot:not(:disabled):active,
+.rmg .rmg-await-row:not(:disabled):active,
+.rmg .rmg-doorway:not(:disabled):active,
+.rmg .rmg-railbtn:not(:disabled):active,
+.rmg .rmg-evwho-faces:not(:disabled):active,
+.rmg .rmg-dial-keyrow:not(:disabled):active { transform: none; }
+
+/* 여기에 transition 을 걸지 않는다.
+   ".rmg button"(0,1,1)은 ".rmg-evback"·".rmg-ppl-act" 같은 클래스 규칙(0,1,0)을 이긴다.
+   transition 은 이어 붙지 않고 통째로 갈아치우므로, 한 줄 편하자고 여기 적으면
+   자기 transition 을 가진 버튼 46개의 색·배경 전환이 전부 죽는다. 눌림은 즉각 반응해도
+   어색하지 않고, 이미 transform 을 전환하는 것들(.rmg-await-row 등)은 자기 것으로 부드럽다. */
+@media (prefers-reduced-motion: reduce) { .rmg button:not(:disabled):active { transform: none; } }
 
 /* 잠긴 버튼은 어디서나 같은 얼굴을 한다 — 눌러도 되는지가 클래스마다 달라 보이면 안 된다. */
 .rmg button:disabled { opacity: 0.45; cursor: default; }
@@ -5480,7 +5495,8 @@ html { font-size: 17px; }
 .rmg-working-mark { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0;
   background: color-mix(in srgb, var(--accent) 85%, transparent);
   animation: rmg-working-pulse 1.5s ease-in-out infinite; }
-.rmg-working-t { font-size: 0.8rem; font-weight: 400; letter-spacing: -0.005em; color: var(--faint); }
+/* AI 가 일하고 있다는 것을 말하는 유일한 글자 — 이것도 잠깐만 뜨는 요소라 §18 이 못 봤다. */
+.rmg-working-t { font-size: 0.8rem; font-weight: 400; letter-spacing: -0.005em; color: var(--muted); }
 /* 말줄임은 글자로 찍지 않고 자라나게 둔다 — 세 점이 한 칸씩 켜지며 시간이 흐르는 것만 알린다. */
 .rmg-working-t::after { content: ""; animation: rmg-working-dots 1.6s steps(4, end) infinite; }
 @keyframes rmg-working-pulse { 0%,100% { opacity: 0.35; transform: scale(0.85); } 50% { opacity: 1; transform: scale(1); } }
@@ -5507,8 +5523,11 @@ html { font-size: 17px; }
 .rmg-flash.out { opacity: 0; transform: translateY(4px); }
 .rmg-flash-text { flex: 1; min-width: 0; font-size: 0.88rem; font-weight: 400; letter-spacing: -0.01em;
   color: color-mix(in srgb, var(--ink) 78%, transparent); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* 누를 수 있는 글자다 — --faint(라이트 2.35:1)로는 읽히지 않는다.
+   이 줄은 캡처 직후 6초만 떠서 §18 의 정적 대비 검사가 통째로 놓쳤다. 하필 "무엇이
+   어디로 갔는지" 를 말하는 자리라, 화면에서 가장 오래 쳐다보는 한 줄이다. */
 .rmg-flash-act { border: 0; background: none; font-family: inherit; font-size: 0.8rem; font-weight: 500;
-  color: var(--faint); padding: 4px 9px; border-radius: 8px; cursor: pointer; flex-shrink: 0;
+  color: var(--muted); padding: 4px 9px; border-radius: 8px; cursor: pointer; flex-shrink: 0;
   transition: color 0.2s, background 0.2s; }
 .rmg-flash-act:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
 /* 확정 — 이 줄에서 할 일이 하나뿐임을 말한다. 색으로 소리치지 않고 잉크 한 겹으로만. */
@@ -6221,7 +6240,9 @@ html { font-size: 17px; }
    펼쳐진 바에서는 그냥 감춘다(placeholder 가 이미 무엇을 하는 자리인지 말한다).
    접힌 알약에서는 낱말이 대신 선다 — 감추기만 하면 빈 알약이 떠 있게 된다.
    (달력의 '찾기' 는 키캡이 아니라 낱말이라 여기서 건드리지 않는다 — 감추면 그냥 사라진다.) */
-.rmg-ask-tap { display: none; font-size: 12px; font-weight: 500; letter-spacing: -0.01em; color: var(--faint); flex-shrink: 0; white-space: nowrap; }
+/* 터치 기기에서만 보이는 안내문이다 — 마우스 달린 데스크톱에서 돌린 §18 의 검사는
+   이 글자를 그린 적이 없다. 폰에서 캡처바가 무엇인지 말하는 유일한 낱말이다. */
+.rmg-ask-tap { display: none; font-size: 12px; font-weight: 500; letter-spacing: -0.01em; color: var(--muted); flex-shrink: 0; white-space: nowrap; }
 @media (hover: none) and (pointer: coarse) {
   .rmg-ask-kbd { display: none; }
   .rmg-ask-tap { display: inline; }
@@ -6776,7 +6797,7 @@ html { font-size: 17px; }
 .rmg-ppl-act:disabled { opacity: 0.45; cursor: default; }
 /* 어디서 들어왔는지 — 방만 덜렁 바뀌면 길을 잃는다. */
 /* 돌아가는 길 — 글씨는 작아도 손이 닿는 자리는 작지 않아야 한다(24px 미만이었다). */
-.rmg-evback { display: inline-flex; align-items: center; min-height: 26px; margin: 0 -6px 4px; padding: 0 6px; border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint); cursor: pointer; border-radius: var(--r-sm); transition: color 170ms ease-out, background 170ms ease-out; }
+.rmg-evback { display: inline-flex; align-items: center; min-height: 26px; margin: 0 -6px 4px; padding: 0 6px; border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--muted); cursor: pointer; border-radius: var(--r-sm); transition: color 170ms ease-out, background 170ms ease-out; }
 .rmg-evback:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
 .rmg-evback:hover { color: var(--ink); }
 /* 페이지 헤더는 flex column 이라 버튼이 한 줄을 다 차지한다 — 그러면 button 의 기본
@@ -6867,7 +6888,8 @@ html { font-size: 17px; }
   color: var(--faint); font-size: 1rem; cursor: pointer; border-radius: 6px; }
 .rmg-tl-nav:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
 /* 날을 넘기는 화살표도 손끝을 받아야 한다 — 글자 크기는 그대로, 닿는 자리만 넓힌다. */
-@media (hover: none) and (pointer: coarse) { .rmg-tl-nav { width: 36px; height: 36px; } }
+/* 손끝 크기(36 → 44)는 파일 끝의 '손끝' 블록이 한자리에서 맡는다 — 두 군데에서
+   같은 것을 말하면 나중에 한쪽만 고쳐진다. */
 .rmg-tl-note { margin: 0 0 2px; font-size: 0.7rem; font-weight: 300; color: var(--faint); line-height: 1.4; }
 
 /* 하루 — 눈금 위에 세 겹이 겹친다: 가능 농도 · 내 일정 · 제안 */
@@ -7088,5 +7110,77 @@ html { font-size: 17px; }
   .rmg-a1,.rmg-a2,.rmg-a3,.rmg-thr,.rmg-thr.leaving,.rmg-phil-1,.rmg-phil-2,.rmg-thr-cta,.aidoor-svg { animation: none; }
   .rmg-flow { transition: none; }
   .rmg-flow.flow-exit { opacity: 1; transform: none; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   손끝 — 커서에게 넉넉한 것이 손에게는 아니다
+
+   §19 가 캡처 바에서 찾은 것과 같은 자리들이다. 규칙은 그때 정한 것을 그대로 쓴다:
+   **보이는 크기는 건드리지 않고 닿는 과녁만 넓힌다**('::after'). 이 작은 손잡이들을
+   실제로 44 로 키우면 그것이 든 줄의 높이가 함께 자라 화면이 어그러진다.
+
+   'position: relative' 도 이 블록 안에서만 준다 — 데스크톱 규칙은 한 줄도 바뀌지 않는다.
+   '.rmg-evtl-fold' 는 이미 absolute 라 그대로 두면 된다(자기 자신이 컨테이닝 블록이다).
+
+   확인은 눈으로 해야 한다. 'elementFromPoint' 는 의사요소를 보고하지 않아 늘 실패로
+   나온다 — §19.3 에서 한 번 속았다.
+   ──────────────────────────────────────────────────────────────── */
+@media (hover: none) and (pointer: coarse) {
+  .rmg-mc-arrow, .rmg-note-x, .rmg-ppl-searchx, .rmg-pctx-x, .rmg-drawer-px,
+  .rmg-phead-morebtn, .rmg-mg-more, .rmg-tl-nav, .rmg-flash-act { position: relative; }
+
+  .rmg-mc-arrow::after,       /* 26 → 44 · 달을 넘기는 유일한 손잡이 */
+  .rmg-phead-morebtn::after   /* 26 → 44 */
+    { content: ""; position: absolute; inset: -9px; }
+
+  .rmg-note-x::after          /* 24 → 44 · 되묻기 닫기 */
+    { content: ""; position: absolute; inset: -10px; }
+
+  /* 일정판 접기 — 글리프 하나라 21×22 밖에 안 된다. -10 으로는 41×42 였다(재 봤다). */
+  .rmg-evtl-fold::after { content: ""; position: absolute; inset: -12px; }
+
+  .rmg-ppl-searchx::after,    /* 20 → 44 */
+  .rmg-pctx-x::after,         /* 20 → 44 */
+  .rmg-drawer-px::after       /* 20 → 44 · 참석자 빼기 */
+    { content: ""; position: absolute; inset: -12px; }
+
+  /* 메시지 '⋯' 는 16×18 이라 가장 모자랐다. 말풍선 쪽으로 번지지 않도록 위아래만 넉넉히. */
+  .rmg-mg-more::after { content: ""; position: absolute; inset: -13px -12px; }
+
+  /* 영수증의 '열기'·'확정' — 26px 이었다. 이 줄에서 실제로 하는 일이 여기 있다. */
+  .rmg-flash-act::after { content: ""; position: absolute; inset: -9px -4px; }
+
+  /* 36 까지 올려 뒀던 것을 마저 올린다(§19 에서 22 → 36).
+     '.rmg-cv-daynav .rmg-tl-nav' 는 28px 로 따로 잡혀 있어 명시도가 더 높다 —
+     같이 적지 않으면 캘린더 뷰의 날짜 화살표만 조용히 28 로 남는다. */
+  .rmg-tl-nav, .rmg-cv-daynav .rmg-tl-nav { width: 44px; height: 44px; }
+
+  /* 방 안 컴포저의 보내기는 30px 이라 기본 과녁(-6)으로는 42 였다. 2px 이 모자랐다. */
+  .rmg-drawer-compose .rmg-ask-send::after { inset: -7px; }
+
+  /* '최근 대화로' — 28px. 이미 absolute 라 relative 를 줄 필요가 없다.
+     숨어 있을 때는 pointer-events:none 이라 넓힌 과녁이 헛되이 탭을 삼키지 않는다. */
+  .rmg-tolast::after { content: ""; position: absolute; inset: -8px; border-radius: 50%; }
+
+  /* 손잡이가 호버로만 나타나면 터치에는 없는 것이다 — 폰에서는 보낸 말을 고치거나
+     지울 길이 아예 없었다. 사람 목록은 이미 같은 방식으로 열어 두었다(.rmg-ppl-rowact). */
+  .rmg-mg-act { opacity: 1; }
+}
+
+/* ────────────────────────────────────────────────────────────────
+   좁은 폭에서는 레일을 펴지 않는다
+
+   '.rail-open' 은 'railOpen || panel' 로 붙는다. 그래서 **패널(설정·캘린더)을 열면
+   폭과 상관없이 216px 이 강제됐다** — 360px 폰에서 캔버스가 144px 로 눌리고, 좌우
+   여백을 빼면 글이 설 자리가 80px 밖에 남지 않았다. 화면을 넓히려고 연 것이 화면을
+   좁힌 셈이다.
+
+   좁을 때는 기본 64px 로 되돌린다. 라벨도 함께 눌러야 한다 — 폭만 되돌리고 두면
+   64px 안에서 글자가 넘친다. (레일 라벨은 어차피 마우스 호버로만 열리므로,
+   터치에서 잃는 것은 없다.)
+   ──────────────────────────────────────────────────────────────── */
+@media (max-width: 700px) {
+  .rmg.rail-open { --rail-w: 64px; grid-template-columns: 64px minmax(0, 1fr); }
+  .rmg.rail-open .rmg-rail-word, .rmg.rail-open .rmg-raillabel { opacity: 0; max-width: 0; transform: translateX(-8px); }
 }
 `;

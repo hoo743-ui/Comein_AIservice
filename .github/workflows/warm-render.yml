@@ -1,0 +1,50 @@
+# Render 를 미리 깨워 둔다 — 기본은 꺼져 있다.
+#
+# 자고 있던 백엔드의 첫 응답은 22.5초다(실측 2026-08-14, docs/15 §4). 화면이 멈추지는
+# 않지만 — 일정·대화는 Supabase 직행이라 그대로 그려진다 — 캡처 바에 넣은 **첫 한 줄**이
+# 거기서 멈춘다. 그게 이 제품의 첫인상이다.
+#
+# ■ 그런데 왜 기본으로 켜 두지 않는가
+#
+# Render 무료는 계정당 월 750 인스턴스-시간이다. 10분 간격으로 24/7 깨워 두면 744시간 —
+# 거의 다 쓴다. 그러면 이 계정에 다른 서비스를 하나도 붙일 수 없다. 상시로 켜는 것은
+# 콜드스타트를 없애는 대가로 계정 전체를 저당 잡는 일이라, 기본값으로 둘 수 없다.
+#
+# ■ 켜는 법 (심사·데모 기간에만)
+#
+#   아래 schedule 세 줄의 주석을 풀고 push 한다. 09~22시(KST)만 데우므로 월 ~420시간이다.
+#   끝나면 다시 주석 처리한다. 급하면 Actions → warm-render → Run workflow 로 한 번만.
+#
+# ■ 실패해도 빨갛게 만들지 않는다
+#
+#   keepalive-supabase 와 반대다. 그쪽은 조용히 죽으면 7일 뒤 DB 가 정지되므로 실패를
+#   크게 남긴다. 이쪽이 한 번 실패해서 잃는 것은 '다음 첫 요청이 느리다' 뿐이라,
+#   빨간 X 를 쌓아 진짜 경고를 묻히게 하는 편이 더 나쁘다.
+name: warm-render
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   # UTC 기준. 00:00~13:00 UTC = 09:00~22:00 KST.
+  #   - cron: "*/10 0-13 * * *"
+
+jobs:
+  warm:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: /health 를 한 번 두드린다
+        env:
+          # 주소가 바뀌면 여기만 고친다. 시크릿이 아니다 — README 에 이미 공개돼 있다.
+          BACKEND: https://comein-aiservice.onrender.com
+        run: |
+          set -uo pipefail
+          code=$(curl -sS -m 90 -o /tmp/health.txt -w "%{http_code}" "${BACKEND}/health" || echo "000")
+          took=$(cat /tmp/health.txt 2>/dev/null | head -c 120)
+          echo "status=${code} body=${took}"
+          if [ "$code" = "200" ]; then
+            echo "깨어 있다."
+          else
+            # 실패를 job 실패로 만들지 않는다(위 주석 참고). 로그에는 남긴다.
+            echo "::warning::Render 가 ${code} 로 답했다. 다음 첫 요청이 느릴 수 있다."
+          fi

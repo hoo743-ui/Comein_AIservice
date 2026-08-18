@@ -1,11 +1,12 @@
 """Chat 엔드포인트 — 모든 기능의 입구.
 
 자연어 요청을 받아 AI Router(ai/)로 전달하고, 결과를 검증/보정해 AiResult로
-응답한다. ai.router.route()의 반환 형태는 아직 확정 전(AI팀 작업 중)이므로,
-여기서는 방어적으로 검증하고 실패 시 자연스러운 대화 응답으로 폴백한다.
-저장(POST /api/items)은 이 엔드포인트의 책임이 아니다 — 반환된 items를
-프론트/호출자가 확인 후 별도로 /api/items에 넘기는 흐름을 전제로 한다
-(docs/24_AI_PIPELINE_STATUS.md 참고).
+응답한다. 모델이 흔들려도 화면은 흔들리지 않아야 하므로, 여기서 한 번 더
+방어적으로 검증하고 실패 시 되묻기 또는 대화 응답으로 폴백한다.
+
+**저장은 이 엔드포인트를 지나지 않는다.** 화면이 items 를 받아 Supabase 에 직접 쓴다
+(`frontend/src/lib/store.ts` → `remote.ts`). 예전의 `POST /api/items` 경유 저장은
+사라졌다(docs/24 §16). 그래서 이 서버에는 상태가 없다 — DB 세션도 커넥션 풀도 없다.
 """
 from typing import Any
 
@@ -50,11 +51,25 @@ class ChatRequest(BaseModel):
     context: dict[str, Any] | None = None
 
 
+def _ro(word: str) -> str:
+    """'…로' 인지 '…으로' 인지 — 받침을 보고 고른다.
+
+    예전에는 `(으)로` 한 벌로 때웠다. 그런데 이 문장은 한 줄을 넣을 때마다 화면에 뜨는,
+    사용자가 **가장 자주 보는 한 마디**다. 거기에 괄호가 서 있으면 완성되지 않은 자리로 읽힌다.
+    받침이 없거나 ㄹ 이면 '로', 그 밖에는 '으로' (일정으로 · 할 일로 · 메모로 · 회의로).
+    """
+    last = word.strip()[-1:]
+    if not last or not ("가" <= last <= "힣"):
+        return f"{word}로"
+    jong = (ord(last) - 0xAC00) % 28
+    return f"{word}로" if jong in (0, 8) else f"{word}으로"
+
+
 def _default_reply(items: list[ParsedItem]) -> str:
     if not items:
         return "네, 알겠어요."
     if len(items) == 1:
-        return f"{_CATEGORY_LABELS[items[0].category]}(으)로 정리했어요."
+        return f"{_ro(_CATEGORY_LABELS[items[0].category])} 정리했어요."
     return f"{len(items)}건을 정리했어요."
 
 
@@ -93,6 +108,8 @@ async def chat(req: ChatRequest) -> AiResult:
     ask = None if items else _ask_of(raw)
 
     intent = items[0].category if items else "chat"
-    said = raw.get("reply") if isinstance(raw, dict) and raw.get("reply") else None
-    reply = said or ask or _default_reply(items)
+    # 예전에는 여기서 `raw.get("reply")` 를 먼저 봤다. 그런데 `ParseResponse`(ai/router.py)에는
+    # `reply` 필드가 없다 — 늘 None 이었고, 화면에 뜨는 말은 언제나 아래 둘 중 하나였다.
+    # "AI 가 자연어로 답한다" 고 읽히는 코드였지만 그런 적이 없다. 있는 대로 적는다.
+    reply = ask or _default_reply(items)
     return AiResult(intent=intent, reply=reply, items=items, ask=ask)

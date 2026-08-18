@@ -54,6 +54,57 @@ def _now_iso(context: dict[str, Any] | None) -> tuple[str, str]:
     return datetime.now(KST).isoformat(), "Korea Standard Time (UTC+09:00)"
 
 
+# 사람이 "새벽" 이라고 말하는 방식들. 이 중 하나라도 있으면 00~05시는 그가 뜻한 것이다.
+# ("밤 3시" 도 한국어에서는 새벽 세 시다. "0시"·"자정" 은 그 자체가 명시다.)
+_SMALL_HOUR_WORDS = (
+    "새벽", "오전", "아침", "밤", "자정", "0시", "00시", "심야",
+    "am", "a.m.", "midnight", "dawn", "early morning", "overnight",
+)
+
+
+def _said_small_hours(message: str) -> bool:
+    low = message.lower()
+    return any(w in low for w in _SMALL_HOUR_WORDS)
+
+
+def _shift_to_waking(iso: str) -> tuple[str, int]:
+    """00:00~05:59 로 나온 시각을 낮으로 옮긴다. (옮긴 값, 옮긴 시간) 을 돌려준다.
+
+    프롬프트에도 같은 규칙을 적어 두었지만, 프롬프트는 부탁이지 보장이 아니다 —
+    적어 둔 뒤에도 배포본에서 여섯 번에 한 번은 "내일 3시" 를 새벽 세 시로 읽었다.
+    캘린더에 새벽 세 시짜리 교수님 미팅이 앉으면, 그 화면 하나로 제품 설명이 끝난다.
+
+    그래서 여기서 한 번 더 잡는다. 화면이 AI 를 믿되 검증하는 것과 같은 태도다
+    (`toParsed` 가 모르는 필드를 버리듯이).
+    """
+    try:
+        dt = datetime.fromisoformat(iso.replace("Z", "+00:00"))
+    except ValueError:
+        return iso, 0
+    if 0 <= dt.hour <= 5:
+        return (dt + timedelta(hours=12)).isoformat(), 12
+    return iso, 0
+
+
+def _fix_small_hours(resp: ParseResponse, message: str) -> None:
+    """사용자가 새벽이라고 말하지 않았는데 새벽으로 잡힌 시각을 제자리로 돌린다."""
+    if _said_small_hours(message):
+        return
+    for item in resp.items:
+        if item.start:
+            item.start, moved = _shift_to_waking(item.start)
+            # 끝 시각은 시작이 움직였을 때만, 같은 만큼 움직인다 — 따로 판단하면
+            # 밤을 넘기는 일정(23:00~01:00)의 끝만 낮으로 튀어 앞뒤가 뒤집힌다.
+            if moved and item.end:
+                try:
+                    end = datetime.fromisoformat(item.end.replace("Z", "+00:00"))
+                    item.end = (end + timedelta(hours=moved)).isoformat()
+                except ValueError:
+                    pass
+        if item.due:
+            item.due, _ = _shift_to_waking(item.due)
+
+
 def _pending_block(context: dict[str, Any] | None) -> str:
     """직전에 우리가 되물었다면, 이번 메시지는 그 답이다.
 
@@ -97,6 +148,10 @@ IMPORTANT DATE/TIME RULES:
 - When the user says "글피" (two days after tomorrow), add 3 days.
 - When the user says "다음 주" (next week) or specific days (e.g. "다음 주 월요일"), calculate the exact date based on the current date.
 - ALWAYS return the parsed `start` and `end` times as a fully qualified ISO 8601 datetime string.
+- AM/PM: a bare hour with no marker means the WAKING-HOURS reading, not the small hours.
+  "3시" / "at 3" -> 15:00, "9시" -> 09:00, "7시 저녁" -> 19:00.
+  Only produce an hour between 00:00 and 05:59 when the user says so explicitly
+  ("새벽 3시", "3am", "오전 3시"). People do not schedule meetings at 3 in the morning.
 
 {follow_up}
 User Message: {message}
@@ -138,5 +193,8 @@ For user_id, use exactly: "{user_id}"
     
     # generate_structured 호출 시 완벽한 ParseResponse Pydantic 모델 반환 보장
     response_obj = await provider.generate_structured(prompt, ParseResponse)
-    
+
+    # 프롬프트가 부탁한 것을 여기서 한 번 더 확인한다 — 새벽으로 잡힌 시각.
+    _fix_small_hours(response_obj, message)
+
     return response_obj.model_dump(exclude_none=True)

@@ -162,7 +162,11 @@ const CSS = `
 /* 상단 — 최소한의 흔적 */
 .lnd-top { position: relative; z-index: 1; display: flex; align-items: center; justify-content: space-between; padding: 32px clamp(24px, 7vw, 72px); }
 .lnd-mark { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; color: var(--muted); }
-.lnd-theme { display: grid; place-items: center; width: 36px; height: 36px; margin: -8px; border: 0; background: none; color: var(--faint); border-radius: 10px; cursor: pointer; transition: color 0.3s, background 0.3s; }
+/* 아이콘만 있는 손잡이라 글자보다 기준이 높다(WCAG 1.4.11 — 비텍스트 3:1).
+   --faint 는 2.4:1 이었다. 크기도 36 이라 손끝(44)에 모자라서, 보이는 것은 그대로 두고
+   닿는 과녁만 ::after 로 넓힌다(캡처바 보내기 버튼과 같은 방식). */
+.lnd-theme { position: relative; display: grid; place-items: center; width: 36px; height: 36px; margin: -8px; border: 0; background: none; color: var(--muted); border-radius: 10px; cursor: pointer; transition: color 0.3s, background 0.3s; }
+.lnd-theme::after { content: ""; position: absolute; inset: -4px; }
 .lnd-theme:hover { color: var(--ink); }
 .lnd-theme:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 60%, transparent); outline-offset: 2px; }
 .lnd-theme-icon { width: 17px; height: 17px; stroke-width: 1.6; }

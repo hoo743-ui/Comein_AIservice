@@ -146,58 +146,60 @@ Comein의 로고는 살짝 열린 문이다.
 
 ```
 Comein_AIservice/
-├── frontend/        # Next.js (React, TypeScript, Tailwind) — 슬림 레일 + 단일 캔버스
-├── backend/         # FastAPI (REST API, DB, Auth, 외부 연동)
-├── ai/              # AI Router, Agents, Prompt, Memory, 평가
-├── docs/            # 프로젝트 설계 문서
-├── .gitignore
-├── CLAUDE.md        # (본 문서) 프로젝트 컨텍스트
-└── README.md        # 레포 소개 + Git 규칙
+├── frontend/             # Next.js — 슬림 레일 + 단일 캔버스. Supabase 에 직접 붙는다
+├── backend/              # FastAPI — 자연어 파싱 전용(무상태). 엔드포인트 3개
+├── ai/                   # router.py(프롬프트) + llm/(Gemini·Groq Provider 추상화)
+├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0014)
+├── docs/                 # 설계 문서 — 아래 9절 표에 있는 것만 있다
+├── scripts/              # 손으로 돌려보는 확인용 (테스트 스위트가 아니다)
+├── render.yaml           # 백엔드 배포 정의 (Render Blueprint)
+├── CLAUDE.md             # (본 문서) 프로젝트 컨텍스트
+└── README.md             # 레포 소개 + 셋업 + Git 규칙
 ```
 
 ---
 
 ## 4. 시스템 아키텍처
 
+> **길이 둘이다.** 저장·조회·인증은 화면이 Supabase 로 **직행**하고, 자연어 파싱만
+> FastAPI 를 거친다. 백엔드는 그래서 **상태가 없다** — DB 세션도 커넥션 풀도 없다.
+
 ```
-Client (Web / Mobile)
-        │
-        ▼
-API Gateway (REST API)  ← backend/
-        │
-        ▼
-┌─────────────────────────────────────┐
-│      AI Workspace Engine  ← ai/     │
-│                                     │
-│  AI Router → Intent Classifier      │
-│      │                              │
-│  ┌────────┬──────┬──────┬─────────┐ │
-│  │Schedule│ Memo │ Todo │ Meeting │ │
-│  │ Agent  │Agent │Agent │  Agent  │ │
-│  └────────┴──────┴──────┴─────────┘ │
-│      │                              │
-│  Context / Memory                   │
-│      │                              │
-│  LLM Service (Gemini / Groq / …)    │
-└─────────────────────────────────────┘
-        │
-        ▼
-┌──────────────────┐   ┌──────────────────────┐
-│    Data Layer    │   │   External Service   │
-│ PostgreSQL(Main) │   │ Email (Resend)       │
-│ Redis (Cache)    │   │ Calendar (Google)    │
-│ Vector DB(Chroma)│   │ Notification         │
-│ File Storage     │   │  (FCM / Web Push)    │
-└──────────────────┘   └──────────────────────┘
+                    Client (Next.js · Vercel)
+                     │                    │
+     ① 파싱만        │                    │  ② 저장·조회·인증·실시간
+                     ▼                    ▼
+        ┌────────────────────┐   ┌──────────────────────┐
+        │  FastAPI (Render)  │   │  Supabase (Postgres) │
+        │  ─ 무상태 ─        │   │  Auth · RLS · Realtime│
+        │  POST /api/chat    │   │  supabase/migrations/ │
+        │  POST /api/summary │   │    0001~0014          │
+        │  GET  /health      │   └──────────────────────┘
+        └────────┬───────────┘
+                 │  LLM 키는 서버에만 둔다
+                 ▼
+        ┌────────────────────────────┐
+        │  ai/  — router.py 프롬프트 1개 │
+        │  Gemini ──(실패 시)──▶ Groq  │
+        └────────────────────────────┘
 ```
+
+**왜 이렇게 갈랐나.** 공유 일정·대화는 RLS(행 단위 권한)와 Realtime 이 핵심인데, 백엔드를
+한 번 더 거치면 실시간이 끊긴다. 반대로 LLM 키는 브라우저에 둘 수 없다. 그래서 각자 잘하는
+쪽으로 보냈다 — 그 결과 **백엔드가 자고 있어도 일정과 대화는 그려진다.** 느려지는 것은
+캡처 바의 AI 파싱뿐이다(Render 무료 티어 콜드스타트).
 
 ### 주요 흐름
 
-1. 사용자가 Chat에서 자연어로 요청
-2. AI Router가 의도를 파악하여 적절한 Agent로 라우팅
-3. Agent가 정보를 추출/가공하여 DB에 저장 or 조회
-4. 결과를 자연어 + 캡처 결과(receipt)로 응답 — 무엇이 어느 뷰로 정리됐는지 조용히 표시
-5. 필요 시 외부 서비스(캘린더, 알림 등)와 연동
+1. 사용자가 캡처 바에 자연어 한 줄을 넣는다 (화면이 아는 `now`·`tz` 를 함께 보낸다)
+2. `POST /api/chat` → `ai/router.py` 가 한 프롬프트로 분류·추출을 함께 한다
+3. 시각처럼 **없으면 지어내야 하는 것**이 비면, 항목 대신 `ask` 한 줄을 돌려준다
+4. 화면이 항목을 각자의 뷰로 보내고 **직접 Supabase 에 쓴다** — 일정은 기본적으로
+   `pending`(제안)으로 앉고, 확정은 사람이 한다
+5. 무엇이 어디로 갔는지 캡처 결과(receipt) 한 줄로 조용히 표시한다
+
+> Redis(Upstash) · Chroma · Resend · FCM 은 초기 구상에 있었으나 **쓰지 않는다.**
+> 필요해지면 그때 ADR 로 정한다(`docs/21`).
 
 ---
 
@@ -207,21 +209,25 @@ API Gateway (REST API)  ← backend/
 
 | 영역 | 선택 | 비고 |
 |------|------|------|
-| Frontend | Next.js (React, TS, Tailwind CSS) | `frontend/` |
-| UI | **컴포넌트 로컬 `<style>` + CSS 토큰** · lucide-react(아이콘) · next-themes(테마) · zustand(상태) | 무거운 UI 프레임워크 비의존 — 절제가 곧 럭셔리. 아래 6절 참고 |
-| Backend | FastAPI (Python) | `backend/` |
-| LLM (생성/파싱) | **Gemini API 무료 티어** | JSON 모드 지원 |
-| LLM (분류) | **Groq API (Llama)** | 초고속, Intent 분류 전용 |
-| LLM (로컬 백업) | Ollama | 개발 시 쿼터 절약 |
-| Database | PostgreSQL — Supabase 무료 티어 | Auth·Storage 포함 |
-| Cache | Redis — Upstash 무료 티어 | 서버리스 |
-| Vector DB | Chroma (셀프호스팅) | 완전 무료 |
-| Infra | Vercel(FE) + Render/Railway(BE) | AWS는 Release 이후 |
-| Email | Resend 무료 티어 | 일 100건 |
-| Notification | FCM / Web Push API | 무료 |
-| Auth | Supabase Auth 또는 JWT | Refresh Token 포함 |
+> 아래는 **지금 실제로 쓰는 것**만 적는다. 구상만 하고 쓰지 않은 것은 표에 두지 않는다 —
+> 쓰지 않는 것보다 나쁜 건 그것이 다음 사람에게 거짓을 말한다는 점이다.
 
-**LLM 전략**: 가볍고 잦은 호출(Intent)은 Groq, 품질이 중요한 호출(파싱·요약)은 Gemini로 이원화하여 무료 쿼터 분산. 쿼터 초과 대비 **Provider 교체 가능한 LLM 추상화 레이어**를 `ai/`에 구현한다.
+| 영역 | 선택 | 비고 |
+|------|------|------|
+| Frontend | Next.js 15 (React 19, TS) | `frontend/` |
+| UI | **컴포넌트 로컬 `<style>` + CSS 토큰** · lucide-react(아이콘) · next-themes(테마) · zustand(상태) | Tailwind 는 리셋과 `font-sans` 만 쓴다. 아래 6절 참고 |
+| Backend | FastAPI (Python) — **무상태**, 파싱 전용 | `backend/` · 엔드포인트 3개뿐 |
+| LLM (파싱·요약) | **Gemini `gemini-flash-latest`** 무료 티어 | httpx 로 REST 직접 호출(SDK 미사용) |
+| LLM (폴백) | **Groq `llama-3.3-70b-versatile`** | Gemini 가 429·오류·파싱실패일 때만 |
+| DB · Auth · Realtime | **Supabase** 무료 티어 | 프론트가 직접 붙는다(RLS). 스키마는 `supabase/migrations/` |
+| Infra | Vercel(FE) + Render(BE) | 둘 다 무료 티어 — Render 는 15분 무요청 시 슬립 |
+
+**LLM 전략**: 원래는 분류=Groq / 생성=Gemini 로 쿼터를 나눌 생각이었다. 실제로는 분류를
+따로 부르지 않고(한 프롬프트가 함께 한다) **Gemini 단독 + Groq 폴백**으로 돈다. Provider
+교체 가능한 추상화(`ai/llm/base.py`)는 그대로 살아 있어, 바꾸려면 한 곳만 갈면 된다.
+
+**쓰지 않는 것**: Redis(Upstash) · Chroma · Ollama · Resend · FCM · Google Calendar 연동.
+초기 구상에는 있었으나 하나도 붙지 않았고, redis 의존성은 걷어냈다.
 
 ---
 
@@ -244,9 +250,13 @@ API Gateway (REST API)  ← backend/
 │  │   [  캡처 바 ───────────────────  ➤ ]   │
 │⚙ │                                        │
 └──┴───────────────────────────────────────┘
- 슬림 레일(상단): Today · Calendar · Tasks · Notes · Meetings · People
+ 슬림 레일(상단): Today · Calendar · People
  슬림 레일(하단): Settings · Exit(프로필)
 ```
+
+> 뷰는 셋이다. 한때 여섯(Tasks·Notes·Meetings 별도)을 그렸지만, 갈래마다 방을 하나씩 주면
+> **사용자가 분류를 의식하게 된다** — 이 문서 §0 이 하지 말라고 한 바로 그것이다.
+> 할 일·메모·회의는 각자의 탭이 아니라 Today 의 흐름과 일정 방 안에서 산다.
 
 - **중심은 대화가 아니라 워크플로우.** 캡처 바는 입력 방식 중 하나 — 말 한 줄이 일정/할 일/회의/메모로 분류되어 목적지 뷰로 배정된다.
 - 뷰 전환은 라우트 이동 없이 캔버스만 크로스페이드(이전 뷰 페이드아웃 → 새 뷰 라이즈), 레일·캡처 바 상시 고정 — "페이지 이동"이 아니라 "한 공간의 재구성".
@@ -263,7 +273,11 @@ API Gateway (REST API)  ← backend/
 
 ## 7. 데이터 모델 (주요 엔티티)
 
-> PK = 기본 키(행 고유 ID), FK = 외래 키(다른 테이블 참조). 상세 ERD·인덱스·제약조건은 `docs/09_DATABASE.md`에서 확정한다.
+> **아래는 설계 어휘이지 지금의 스키마가 아니다.** 실제로 도는 테이블·제약·RLS 정책은
+> `supabase/migrations/0001~0014` 에 있다 — 거기가 유일한 진실이다. 화면이 쓰는 공유 일정·
+> 참여자·대화방·연결 요청·핸들 같은 것들은 아래 표에 없고, 마이그레이션에는 있다.
+>
+> PK = 기본 키(행 고유 ID), FK = 외래 키(다른 테이블 참조).
 
 ### 엔티티 관계 요약
 
@@ -363,12 +377,29 @@ User ─┬─< Conversation ─< Message
 
 ## 8. AI Agent 설계
 
-**MVP 필수 Agent**: Intent, Parser, Schedule, Todo, Memo
-**확장 Agent**: Conflict, Meeting, Summary, Memory, Reminder, Recommendation, Travel, Weather, Notification, Learning, Decision
+> **지금 도는 것부터 적는다.** 아래 설계는 여러 Agent 를 상정했지만, 실제로 구현된 것은
+> **한 번의 호출**이다. `ai/agents/` 디렉터리는 존재하지 않는다.
 
-각 Agent는 다음을 정의한다: 역할 / 입력 / 출력 / Prompt / JSON Schema / Validation / Confidence / Retry / Error / API / Memory
+### 지금 실제로 도는 것
 
-상세 설계는 `docs/08_AI_AGENTS.md` 참고.
+```
+POST /api/chat  →  ai/router.py:route()
+                     프롬프트 1개 (분류 + 추출 + 되묻기를 한 번에)
+                     → Gemini (실패 시 Groq) → ParseResponse 검증
+                   backend/app/api/endpoints/chat.py 가 한 번 더 ParsedItem 으로 재검증
+                   → AiResult{intent, reply, items[], ask}
+```
+
+- **분리된 Intent/Parser/Schedule Agent 는 없다.** 한 프롬프트가 `items[]` 에 여러 갈래를
+  한꺼번에 담아 돌려준다("내일 3시 회의 잡고 자료도 준비해야 해" → meeting + todo).
+- **되묻기가 곧 Confidence 다.** 시각이 없으면 지어내지 않고 `ask` 한 줄을 돌려준다
+  (프롬프트의 `ASK BACK INSTEAD OF GUESSING`).
+- **Retry 는 없다.** Gemini → Groq 폴백 한 홉이 전부다(`ai/llm/factory.py`).
+- 계약의 기준자는 `backend/app/schemas/items.py` 의 `ParsedItem` 하나다 — AI 쪽과 백엔드가
+  같은 클래스를 쓴다(스키마를 두 벌 관리하지 않는다).
+
+여러 Agent 로 가르는 것은 이 한 프롬프트가 감당하지 못하게 될 때 한다. 지금은 아니다.
+현재 상태와 알려진 한계는 `docs/24_AI_PIPELINE_STATUS.md` §20.
 
 ---
 
@@ -376,31 +407,37 @@ User ─┬─< Conversation ─< Message
 
 | 파일 | 내용 | 오너 |
 |------|------|------|
-| 00_VISION.md | 철학, 브랜드 스토리("문" 메타포), 슬로건, 확장 방향 | 기획 |
-| 01_PRODUCT.md | PRD — 문제 정의, 시나리오, User Story, MVP 범위 | 기획 |
-| 02_SYSTEM.md | 전체 아키텍처, Data Flow, AI Router, 의존성 | 풀스택 |
-| 03_DEVELOPMENT_FLOW.md | Phase별 개발 순서, Docker 구성 | 풀스택 |
-| 04_GUI_UX.md | 슬림 레일 + 단일 캔버스, 6뷰, 캡처 바, UX 원칙 | 기획 |
+| 04_GUI_UX.md | 슬림 레일 + 단일 캔버스, 뷰 구성, 캡처 바, UX 원칙 | 기획 |
 | 05_FRONTEND.md | Next.js 구조(승격 라우트), 커스텀 스타일 규칙, Zustand | 풀스택 |
-| 06_BACKEND.md | FastAPI 구조, 패턴, JWT, LLM Provider 추상화 | 풀스택 |
-| 07_AI_SYSTEM.md | AI Router, Confidence, Retry, 쿼터 이원화 전략 | AI A |
-| 08_AI_AGENTS.md | Agent 15종 상세 설계 | AI A/B |
-| 09_DATABASE.md | ERD, Entity 12종, Migration | 풀스택 |
-| 10_API.md | Endpoint, **AI↔백엔드 계약 JSON Schema** | 풀스택 |
-| 11_MEMORY.md | Short/Long Memory, Embedding(Chroma), RAG | AI B |
-| 12_CALENDAR_ENGINE.md | CRUD, 충돌 감지, 반복 일정, Timezone | 풀스택 |
-| 13_PROMPT.md | Prompt Rule, Few Shot, JSON Output, Hallucination 방지 | AI A |
-| 14_SECURITY.md | JWT, OAuth, Prompt Injection 대응, 개인정보 | 풀스택 |
-| 15_DEPLOY.md | 데모: Vercel+Render+Supabase / Release: AWS | 풀스택 |
-| 16_TASK.md | 개발 체크리스트 | 기획 |
-| 17_ROADMAP.md | 데모 → MVP → Beta → Release | 기획 |
-| 18_CODING_STYLE.md | Python/React Style, Naming, Directory Rule | 풀스택 |
-| 19_TEST.md | Unit/Integration/API/AI Test(Agent 정답셋) | AI B + 기획 |
-| 20_WORKFLOW.md | 기능별 시퀀스 다이어그램 | 풀스택 |
+| 06_BACKEND.md | FastAPI 구조, 패턴, LLM Provider 추상화 | 풀스택 |
+| 10_API.md | Endpoint, **AI↔프론트 계약 JSON Schema** | 풀스택 |
+| 15_DEPLOY.md | Vercel(프론트) + Render(백엔드) + Supabase(DB) · 환경변수 · 콜드스타트 | 풀스택 |
+| 16_TASK.md | 미뤄 둔 것과 **왜 미뤘는지** | 기획 |
 | 21_ARCHITECTURE_DECISION_RECORD.md | 기술 선택 ADR (무료 스택 등) | 전원 |
 | 22_DESIGN_LANGUAGE.md | **시각 언어 규격** — 토큰·타이포·색·여백·모션 ("feel expensive") | 풀스택 |
-| 23_USER_JOURNEY.md | **화면 여정·IA** — Landing→Experience→Enter→Workspace, 전환 | 기획 |
+| 23_USER_JOURNEY.md | **화면 여정·IA** — Landing→Experience→Workspace, 전환 | 기획 |
 | 24_AI_PIPELINE_STATUS.md | **현재 상태 로그** — 입력→AI→저장까지 어디까지 됐는지 (바뀔 때마다 갱신) | 전원 |
+
+### 여기 없는 문서에 대해
+
+한때 이 표에는 25개가 있었다. 그중 15개는 **파일만 있고 안은 비어 있었다**(0바이트).
+오너까지 적힌 표가 없는 문서를 있다고 말하고 있었던 셈이라, 빈 파일과 그 줄을 함께 걷었다.
+그 문서들이 다루려던 내용은 대부분 **다른 곳에 실제로 있다** — 계획서가 아니라 코드와 로그에.
+
+| 없어진 문서 | 실제로 그 내용이 있는 곳 |
+|---|---|
+| 07_AI_SYSTEM · 08_AI_AGENTS | `ai/router.py`, `ai/llm/factory.py` (Provider 폴백) · `docs/24` §16·§20 |
+| 13_PROMPT | `ai/router.py` 의 프롬프트 본문 (되묻기 규칙 포함) |
+| 09_DATABASE | `supabase/migrations/0001~0014` — ERD 가 아니라 실제로 도는 스키마·RLS |
+| 19_TEST | `frontend/src/lib/conversation/conversation.test.ts`, `backend/tests/` · 실측 기록은 `docs/24` §15·§20 |
+| 14_SECURITY | `docs/15_DEPLOY.md`(키 보관 위치) + 마이그레이션의 RLS 정책 |
+| 00_VISION · 01_PRODUCT | 이 문서 §0·§1 |
+| 02_SYSTEM · 03_DEVELOPMENT_FLOW · 20_WORKFLOW | 이 문서 §4 + `docs/24` |
+| 11_MEMORY · 12_CALENDAR_ENGINE | 아직 없다. `ai/memory/` 는 자리만 있고, 충돌 계산은 `frontend/src/lib/conversation/availability.ts` 가 후보 시각 제안용으로만 한다 |
+| 17_ROADMAP · 18_CODING_STYLE | 아직 없다 |
+
+> 번호는 다시 쓰지 않는다. 빈 껍데기를 되살리는 것보다, 없는 것을 없다고 말해 두는 편이
+> 다음에 여는 사람에게 정직하다.
 
 ---
 
