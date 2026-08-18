@@ -399,7 +399,7 @@ POST /api/chat  →  ai/router.py:route()
   같은 클래스를 쓴다(스키마를 두 벌 관리하지 않는다).
 
 여러 Agent 로 가르는 것은 이 한 프롬프트가 감당하지 못하게 될 때 한다. 지금은 아니다.
-현재 상태와 알려진 한계는 `docs/24_AI_PIPELINE_STATUS.md` §20.
+현재 상태와 알려진 한계는 `docs/24_AI_PIPELINE_STATUS.md` — 맨 아래 절부터 읽는다.
 
 ---
 
@@ -407,20 +407,23 @@ POST /api/chat  →  ai/router.py:route()
 
 | 파일 | 내용 | 오너 |
 |------|------|------|
+| 02_SYSTEM.md | **전체 구조 · 데이터 흐름 두 갈래** — 캡처→저장, 두 사람이 시간을 정하는 길, 실시간, 이 구조의 약점 | 풀스택 |
 | 04_GUI_UX.md | 슬림 레일 + 단일 캔버스, 뷰 구성, 캡처 바, UX 원칙 | 기획 |
-| 05_FRONTEND.md | Next.js 구조(승격 라우트), 커스텀 스타일 규칙, Zustand | 풀스택 |
-| 06_BACKEND.md | FastAPI 구조, 패턴, LLM Provider 추상화 | 풀스택 |
+| 05_FRONTEND.md | Next.js 구조(workspace 모듈 20개), 스타일 규칙, Zustand, 서버와 맞추기 | 풀스택 |
+| 06_BACKEND.md | FastAPI 구조, 무상태 패턴, 흔들림에 대한 태도(재시도·폴백·타임아웃) | 풀스택 |
+| 09_DATABASE.md | **실제로 도는 스키마** — 표 14 · 함수 34 · RLS 31 · Realtime 11, 그리고 설계 어휘와의 차이 | 풀스택 |
 | 10_API.md | Endpoint, **AI↔프론트 계약 JSON Schema** | 풀스택 |
 | 15_DEPLOY.md | Vercel(프론트) + Render(백엔드) + Supabase(DB) · 환경변수 · 콜드스타트 | 풀스택 |
 | 16_TASK.md | 미뤄 둔 것과 **왜 미뤘는지** | 기획 |
 | 21_ARCHITECTURE_DECISION_RECORD.md | 기술 선택 ADR (무료 스택 등) | 전원 |
 | 22_DESIGN_LANGUAGE.md | **시각 언어 규격** — 토큰·타이포·색·여백·모션 ("feel expensive") | 풀스택 |
 | 23_USER_JOURNEY.md | **화면 여정·IA** — Landing→Experience→Workspace, 전환 | 기획 |
-| 24_AI_PIPELINE_STATUS.md | **현재 상태 로그** — 입력→AI→저장까지 어디까지 됐는지 (바뀔 때마다 갱신) | 전원 |
+| 24_AI_PIPELINE_STATUS.md | **상태 로그** — 무엇을 왜 그렇게 고쳤나. 덧붙여 쓴다(§24까지). 지금 상태는 맨 아래부터 | 전원 |
 
 ### 여기 없는 문서에 대해
 
 한때 이 표에는 25개가 있었다. 그중 15개는 **파일만 있고 안은 비어 있었다**(0바이트).
+(그 뒤 `02_SYSTEM` 과 `09_DATABASE` 는 실제로 채워 되살렸다 — 껍데기가 아니라 코드에서 읽어 적었다.)
 오너까지 적힌 표가 없는 문서를 있다고 말하고 있었던 셈이라, 빈 파일과 그 줄을 함께 걷었다.
 그 문서들이 다루려던 내용은 대부분 **다른 곳에 실제로 있다** — 계획서가 아니라 코드와 로그에.
 
@@ -428,12 +431,12 @@ POST /api/chat  →  ai/router.py:route()
 |---|---|
 | 07_AI_SYSTEM · 08_AI_AGENTS | `ai/router.py`, `ai/llm/factory.py` (Provider 폴백) · `docs/24` §16·§20 |
 | 13_PROMPT | `ai/router.py` 의 프롬프트 본문 (되묻기 규칙 포함) |
-| 09_DATABASE | `supabase/migrations/0001~0015` — ERD 가 아니라 실제로 도는 스키마·RLS |
 | 19_TEST | `frontend/src/lib/conversation/conversation.test.ts`, `backend/tests/` · 실측 기록은 `docs/24` §15·§20 |
 | 14_SECURITY | `docs/15_DEPLOY.md`(키 보관 위치) + 마이그레이션의 RLS 정책 |
 | 00_VISION · 01_PRODUCT | 이 문서 §0·§1 |
-| 02_SYSTEM · 03_DEVELOPMENT_FLOW · 20_WORKFLOW | 이 문서 §4 + `docs/24` |
-| 11_MEMORY · 12_CALENDAR_ENGINE | 아직 없다. `ai/memory/` 는 자리만 있고, 충돌 계산은 `frontend/src/lib/conversation/availability.ts` 가 후보 시각 제안용으로만 한다 |
+| 03_DEVELOPMENT_FLOW · 20_WORKFLOW | `docs/02_SYSTEM.md` §3·§4 (흐름 두 갈래) + `docs/24` |
+| 11_MEMORY | 쓰지 않는다. Embedding·RAG 를 붙이지 않았고, 대화의 기억은 `conversation_states` 한 표로 족했다(`docs/09` §5). `ai/memory/` 자리표는 걷었다 |
+| 12_CALENDAR_ENGINE | `supabase/migrations/0003·0005·0006·0012` 의 `suggest_slots` · `availability_for` · `day_availability` — 충돌 판정이 DB 안에 있다(`docs/09` §5) |
 | 17_ROADMAP · 18_CODING_STYLE | 아직 없다 |
 
 > 번호는 다시 쓰지 않는다. 빈 껍데기를 되살리는 것보다, 없는 것을 없다고 말해 두는 편이
