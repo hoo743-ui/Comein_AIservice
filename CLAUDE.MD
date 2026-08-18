@@ -149,7 +149,7 @@ Comein_AIservice/
 ├── frontend/             # Next.js — 슬림 레일 + 단일 캔버스. Supabase 에 직접 붙는다
 ├── backend/              # FastAPI — 자연어 파싱 전용(무상태). 엔드포인트 3개
 ├── ai/                   # router.py(프롬프트) + llm/(Gemini·Groq Provider 추상화)
-├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0014)
+├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0015)
 ├── docs/                 # 설계 문서 — 아래 9절 표에 있는 것만 있다
 ├── scripts/              # 손으로 돌려보는 확인용 (테스트 스위트가 아니다)
 ├── render.yaml           # 백엔드 배포 정의 (Render Blueprint)
@@ -173,7 +173,7 @@ Comein_AIservice/
         │  FastAPI (Render)  │   │  Supabase (Postgres) │
         │  ─ 무상태 ─        │   │  Auth · RLS · Realtime│
         │  POST /api/chat    │   │  supabase/migrations/ │
-        │  POST /api/summary │   │    0001~0014          │
+        │  POST /api/summary │   │    0001~0015          │
         │  GET  /health      │   └──────────────────────┘
         └────────┬───────────┘
                  │  LLM 키는 서버에만 둔다
@@ -274,7 +274,7 @@ Comein_AIservice/
 ## 7. 데이터 모델 (주요 엔티티)
 
 > **아래는 설계 어휘이지 지금의 스키마가 아니다.** 실제로 도는 테이블·제약·RLS 정책은
-> `supabase/migrations/0001~0014` 에 있다 — 거기가 유일한 진실이다. 화면이 쓰는 공유 일정·
+> `supabase/migrations/0001~0015` 에 있다 — 거기가 유일한 진실이다. 화면이 쓰는 공유 일정·
 > 참여자·대화방·연결 요청·핸들 같은 것들은 아래 표에 없고, 마이그레이션에는 있다.
 >
 > PK = 기본 키(행 고유 ID), FK = 외래 키(다른 테이블 참조).
@@ -428,7 +428,7 @@ POST /api/chat  →  ai/router.py:route()
 |---|---|
 | 07_AI_SYSTEM · 08_AI_AGENTS | `ai/router.py`, `ai/llm/factory.py` (Provider 폴백) · `docs/24` §16·§20 |
 | 13_PROMPT | `ai/router.py` 의 프롬프트 본문 (되묻기 규칙 포함) |
-| 09_DATABASE | `supabase/migrations/0001~0014` — ERD 가 아니라 실제로 도는 스키마·RLS |
+| 09_DATABASE | `supabase/migrations/0001~0015` — ERD 가 아니라 실제로 도는 스키마·RLS |
 | 19_TEST | `frontend/src/lib/conversation/conversation.test.ts`, `backend/tests/` · 실측 기록은 `docs/24` §15·§20 |
 | 14_SECURITY | `docs/15_DEPLOY.md`(키 보관 위치) + 마이그레이션의 RLS 정책 |
 | 00_VISION · 01_PRODUCT | 이 문서 §0·§1 |
