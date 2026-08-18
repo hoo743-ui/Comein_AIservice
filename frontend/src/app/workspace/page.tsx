@@ -13,6 +13,7 @@ import { MODE_CONFIG, USER_MODES, categoryLabel, classifyEvent, normalizeMode, u
 import { analyzeConversation, analyzeMessage, localIsoNow, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
 import { fmtTime, fmtDate } from "@/lib/format";
 import { pendingAnswers } from "@/lib/awaiting";
+import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
@@ -1217,9 +1218,24 @@ export default function Reimagine() {
 
   /** 여러 사람이 함께할 자리를 새로 만든다 — 일정이 생기면 그 일정의 방도 함께 생긴다.
    *  Comein 에서 '채팅방을 판다' 는 곧 '함께할 자리를 잡는다' 는 뜻이다. */
-  const createEventWith = React.useCallback((peerIds: string[], title: string, start: Date) => {
+  /** 자리를 하나 세운다. 이름을 주지 않으면 여기서 짓는다.
+   *
+   *  이름을 부르는 자리가 셋이었고(사람 패널의 '캘린더에 추가' 둘, 새 자리 폼 하나) 모두
+   *  "새 일정" 이라는 같은 낱말을 넘겼다. 같은 사람들과 두 번 모이면 목록에 똑같은 줄이
+   *  둘 서고, 어느 것이 무엇인지 열어 봐야 알았다. 이름은 한 곳에서만 짓는다 —
+   *  그리고 **이미 같은 사람들과 쓰고 있는 이름은 피한다**(lib/roomName). */
+  const createEventWith = React.useCallback((peerIds: string[], title: string | null, start: Date) => {
+    const named = (title ?? "").trim() || suggestEventTitle({
+      peerNames: peerIds.map((id) => contacts.find((c: any) => c.id === id)?.name).filter(Boolean) as string[],
+      start,
+      // 같은 사람들과 이미 있는 자리들 — 그 이름은 다시 쓰지 않는다.
+      existing: schedules
+        .filter((ev: any) => peerIds.every((pid) => eventParticipants.some((q) => q.eventId === ev.id && q.userId === pid)))
+        .map((ev: any) => ev.title),
+      lang,
+    });
     const id = addSchedule({
-      title,
+      title: named,
       start: start.toISOString(),
       end: new Date(+start + 3_600_000).toISOString(),
       status: "confirmed",
@@ -1229,7 +1245,7 @@ export default function Reimagine() {
     setOpenEventId(id);
     setChatFocus(true);
     ignite();
-  }, [addSchedule, addParticipant]);
+  }, [addSchedule, addParticipant, contacts, schedules, eventParticipants, lang]);
 
   // ── Invisible AI · 조용한 비서 — 데이터가 아니라 '사람다운 한 문장'으로. ──
   const h = now?.getHours() ?? 9;
@@ -3783,6 +3799,7 @@ function chatStamp(d: Date, en: boolean): string {
   if (days === 0) return fmtTime(d);
   if (days === 1) return en ? "Yesterday" : "어제";
   if (days < 7) return d.toLocaleDateString(en ? "en-US" : "ko-KR", { weekday: "short" });
+  if (d.getFullYear() !== now.getFullYear()) return `${d.getFullYear()}.${d.getMonth() + 1}.${d.getDate()}`;
   return `${d.getMonth() + 1}/${d.getDate()}`;
 }
 
@@ -3816,6 +3833,10 @@ function dayDivider(prev: Date | null, cur: Date, lang: Lang): string | null {
   if (dayKey(now) === dayKey(cur)) return lang === "en" ? "Today" : "오늘";
   const y = new Date(now); y.setDate(y.getDate() - 1);
   if (dayKey(y) === dayKey(cur)) return lang === "en" ? "Yesterday" : "어제";
+  // 해가 다르면 연도까지 — "8월 20일" 만으로는 그게 올해인지 작년인지 알 수 없다.
+  if (cur.getFullYear() !== now.getFullYear()) {
+    return lang === "en" ? `${fmtDate(cur)}, ${cur.getFullYear()}` : `${cur.getFullYear()}년 ${fmtDate(cur)}`;
+  }
   return fmtDate(cur);
 }
 
@@ -4151,7 +4172,7 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
   contacts: Contact[];
   lang: Lang;
   onClose: () => void;
-  onCreate: (peerIds: string[], title: string, start: Date) => void;
+  onCreate: (peerIds: string[], title: string | null, start: Date) => void;
 }) {
   const en = lang === "en";
   const [title, setTitle] = React.useState("");
@@ -4179,13 +4200,12 @@ function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
-    // 여기서도 이름은 나중 일이다. 비면 부른 사람들의 이름으로 부른다.
-    const names = picked.map((id) => contacts.find((c) => c.id === id)?.name).filter(Boolean).join(", ");
-    const t = title.trim() || (en ? `With ${names}` : `${names}님과의 자리`);
+    // 이름은 나중 일이다. 비워 두면 부모가 짓는다 — 같은 사람들과 이미 쓰는 이름을 피해서
+    // (여기서 지으면 그 사람들과 어떤 자리가 이미 있는지 이 폼은 알지 못한다).
     if (!picked.length || !date || !time) return;
     const [y, mo, da] = date.split("-").map(Number);
     const [hh, mi] = time.split(":").map(Number);
-    onCreate(picked, t, new Date(y, mo - 1, da, hh, mi, 0, 0));
+    onCreate(picked, title.trim() || null, new Date(y, mo - 1, da, hh, mi, 0, 0));
   };
 
   return (
@@ -4263,7 +4283,8 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
   onClose: () => void;
   onSend: (text: string) => void;
   onOpenEvent: (eventId: string) => void;
-  onCreateEvent: (title: string, start: Date) => void;
+  /** 이름을 모르면 null 을 넘긴다 — 짓는 일은 부모가 한곳에서 한다. */
+  onCreateEvent: (title: string | null, start: Date) => void;
   /** 내 말 고치기·지우기 */
   onEditMessage?: (id: string, text: string) => void;
   onDeleteMessage?: (id: string) => void;
@@ -4465,7 +4486,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
             <button
               type="button"
               className="rmg-pov-cta rmg-sum-cta"
-              onClick={() => onCreateEvent(en ? "New event" : "새 일정", new Date(outcomeSummary.start!))}
+              onClick={() => onCreateEvent(null, new Date(outcomeSummary.start!))}
             >
               {en ? "Add to calendar" : "캘린더에 추가"}
             </button>
@@ -4505,7 +4526,7 @@ function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, l
                     type="button"
                     className="rmg-pctx-act"
                     onClick={() => {
-                      onCreateEvent(en ? "New event" : "새 일정", new Date(suggestion.start));
+                      onCreateEvent(null, new Date(suggestion.start));
                       onAnswerSuggestion(suggestion.key, "accepted");
                     }}
                   >
@@ -7036,8 +7057,10 @@ html { font-size: 17px; }
 .rmg-mg-head { display: flex; align-items: baseline; gap: var(--sp-1); margin: 0; }
 .rmg-mg-who { font-size: 0.78rem; font-weight: 500; letter-spacing: -0.005em; color: var(--muted); }
 .rmg-mg.mine .rmg-mg-who { color: var(--ink); }
-/* 시각은 이름 옆에 한 번만 — 뭉치의 시작에만 적는다. */
-.rmg-mg-at { font-size: 0.68rem; color: var(--faint); font-variant-numeric: tabular-nums; }
+/* 시각은 이름 옆에 한 번만 — 뭉치의 시작에만 적는다.
+   0.68rem 에 --faint 는 '있다' 는 표시였을 뿐 읽으라고 둔 글자가 아니었다.
+   말이 언제 왔는지는 대화에서 자주 되짚는 것이라, 눈에 힘을 주지 않고도 읽혀야 한다. */
+.rmg-mg-at { font-size: 0.72rem; color: var(--muted); font-variant-numeric: tabular-nums; }
 .rmg-mg-line { margin: 0; font-size: 0.95rem; font-weight: 300; line-height: 1.6; color: var(--ink); overflow-wrap: anywhere; }
 /* 한 줄과 그 손잡이 — 손잡이는 줄 밖(오른쪽)에 서서 글을 밀지 않는다. */
 .rmg-mg-row { position: relative; display: flex; align-items: flex-start; gap: var(--sp-1); }
@@ -7074,9 +7097,17 @@ html { font-size: 17px; }
 .rmg-mg-editacts { display: flex; align-items: center; justify-content: flex-end; gap: var(--sp-1); }
 @media (prefers-reduced-motion: reduce) { .rmg-mg-act, .rmg-mg-menu { transition: none; animation: none; } }
 .rmg-mg-line.pending { opacity: 0.5; }
-/* 날짜가 바뀌는 자리 — 선을 긋지 않고 글자 하나로만 */
-.rmg-msg-day { margin: var(--sp-3) 0 var(--sp-1); font-size: 0.7rem; font-weight: 500; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--faint); text-align: center; }
+/* 날짜가 바뀌는 자리 — 선을 긋지 않고 글자 하나로만. 다만 읽히기는 해야 한다.
+   --faint 는 라이트에서 2.35:1 이라, 하루가 바뀌었다는 **유일한 표시**가 거의 보이지 않았다.
+   그리고 긴 하루를 스크롤할 때는 그 표시가 위로 사라져 지금 어느 날을 읽는지 알 수 없었다 —
+   그래서 붙어 있게(sticky) 두었다. 글자 뒤에 면을 한 겹 깔아 두는 이유는 그것뿐이다
+   (붙어 있는 글자가 아래 말과 겹쳐 읽히면 그게 더 나쁘다). */
+.rmg-msg-day { position: sticky; top: 0; z-index: 2; width: fit-content;
+  margin: var(--sp-3) auto var(--sp-1); padding: 3px 10px; border-radius: 999px;
+  font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em;
+  text-transform: uppercase; color: var(--muted); text-align: center;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+  backdrop-filter: blur(6px); }
 
 /* 컴포저 — 큰 둥근 상자가 아니라 얇은 선 하나. 쓰기 시작하면 그때만 아주 미세하게 떠오른다. */
 .rmg-drawer-compose { display: flex; align-items: center; gap: var(--sp-1); padding: 9px var(--sp-1) 9px var(--sp-2);
