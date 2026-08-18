@@ -8,10 +8,20 @@ import { existsSync } from "node:fs";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { dirname, resolve as resolvePath } from "node:path";
 
+/** tsconfig 의 `@/*` → `src/*`. 소스가 쓰는 별칭을 시험에서도 같은 뜻으로 읽는다. */
+const SRC = resolvePath(dirname(fileURLToPath(import.meta.url)), "..", "src");
+
 export function resolve(specifier, context, next) {
+  const alias = specifier.startsWith("@/") ? resolvePath(SRC, specifier.slice(2)) : null;
   const relative = specifier.startsWith("./") || specifier.startsWith("../");
-  const bare = relative && !/\.[cm]?[jt]sx?$/.test(specifier);
-  if (bare && context.parentURL?.startsWith("file:")) {
+  const bare = !/\.[cm]?[jt]sx?$/.test(specifier);
+
+  if (alias) {
+    for (const candidate of bare ? [`${alias}.ts`, `${alias}/index.ts`] : [alias]) {
+      if (existsSync(candidate)) return next(pathToFileURL(candidate).href, context);
+    }
+  }
+  if (relative && bare && context.parentURL?.startsWith("file:")) {
     const base = dirname(fileURLToPath(context.parentURL));
     for (const candidate of [`${specifier}.ts`, `${specifier}/index.ts`]) {
       const full = resolvePath(base, candidate);

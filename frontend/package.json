@@ -12,7 +12,7 @@
     "vercel-build": "next build",
     "start": "next start",
     "lint": "next lint",
-    "test": "node --import ./scripts/register-ts.mjs --test src/lib/conversation/*.test.ts"
+    "test": "node --import ./scripts/register-ts.mjs --test src/lib/*.test.ts src/lib/conversation/*.test.ts"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.112.2",
