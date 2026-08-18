@@ -23,7 +23,7 @@ import {
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   answerConnectionRequest, cancelConnectionRequest, changeMyHandle, dayAvailability, ensureDmRoomRemote,
   fetchHandleState,
-  fetchConnectionRequests, fetchOpenProposal, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
+  fetchConnectionRequests, fetchOpenProposal, fetchOpenProposalEvents, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
   confirmEvent, deleteEvent, renameEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
@@ -239,8 +239,11 @@ interface WorkspaceState {
   changeHandle: (next: string) => Promise<{ ok: boolean; message?: string }>;
   /** 받은 요청을 다시 읽어 온다. */
   loadRequests: () => Promise<void>;
-  /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다. */
+  /** 받은 요청에 답한다. 화면에서 먼저 걷고 서버가 뒤따른다(실패하면 되돌린다). */
   answerRequest: (id: ID, accept: boolean) => Promise<void>;
+  /** 요청에 답하다 막혔다면 그 이유. 조용한 실패는 사용자에게 '내가 잘못 눌렀나' 로만 남는다. */
+  requestError: string | null;
+  clearRequestError: () => void;
   /** 내가 쓴 말을 고친다. 화면에 먼저 반영하고 서버가 뒤따른다(실패하면 되돌린다). */
   editMessage: (id: ID, content: string) => Promise<void>;
   /** 내가 쓴 말을 지운다(soft delete — 서버에는 행이 남고 내용은 비워진다). */
@@ -301,6 +304,15 @@ interface WorkspaceState {
    *  null 이면 그런 일이 없었다는 뜻이다. */
   proposalConflict: { eventId: ID; busy: number } | null;
 
+  /** 답이 서버에서 막혔을 때 그 이유. 누르고 아무 일도 안 일어나는 것보다
+   *  왜 안 됐는지 한 줄 보이는 편이 늘 낫다. */
+  proposalError: { eventId: ID; message: string } | null;
+  clearProposalError: () => void;
+
+  /** 지금 답을 기다리는 제안을 모두 받아 둔다 — 일정을 열어 봐야 알 수 있으면
+   *  열지 않은 사람에게는 제안이 없는 것과 같다. */
+  loadOpenProposals: () => Promise<void>;
+
   /** 대화방 옆 하루 — 슬롯별 '몇 명이 되는가'. 키는 `eventId|YYYY-MM-DD`.
    *  누가 바쁜지는 담기지 않는다(집계만). 내 일정은 schedules 에서 그대로 읽어 그린다. */
   dayAvail: Record<string, { start: string; available: number; total: number }[]>;
@@ -320,6 +332,18 @@ interface WorkspaceState {
   updateSettings: (patch: Partial<Settings>) => void;
 }
 
+/** 낙관적으로 얹었던 내 말이 서버 id 를 받아 자리를 잡는다.
+ *
+ *  그 사이 스냅샷이나 Realtime 이 같은 말을 이미 실어 왔을 수 있다(같은 id 로).
+ *  그러면 임시 줄을 서버 id 로 고쳐 다는 대신 **걷어낸다** — 안 그러면 같은 id 가 둘이 되고,
+ *  그때부터 그 말은 지워도 하나만 지워지고 고쳐도 하나만 고쳐진다.
+ *  저장에 실패했으면(realId 없음) 임시 줄만 걷는다. 보내지지 않은 말이 보내진 척 남지 않게. */
+export const settleSent = (all: ChatMessage[], tempId: ID, realId: string | null, roomId: ID): ChatMessage[] => {
+  if (!realId) return all.filter((m) => m.id !== tempId);
+  if (all.some((m) => m.id === realId)) return all.filter((m) => m.id !== tempId);
+  return all.map((m) => (m.id === tempId ? { ...m, id: realId, roomId, pending: false } : m));
+};
+
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   schedules: seedSchedules,
   todos: seedTodos,
@@ -334,19 +358,26 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   remoteLive: false,
 
   hydrateRemote: (snap) =>
-    set({
+    set((st) => ({
       remoteLive: true,
       seedsRebased: true, // 서버 것을 쓰기 시작하면 시드 날짜를 옮길 이유가 없다
       schedules: snap.schedules,
       eventParticipants: snap.eventParticipants,
       chatRooms: snap.chatRooms,
-      chatMessages: snap.chatMessages,
-      // 데모용으로 깔아 둔 것들은 물러난다 — 로그인한 계정에 지어낸 데이터가
-      // 남아 있으면 그게 진짜인 줄 알게 된다.
-      // 사람만은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
+      // 아직 서버에 닿지 못한 내 말은 남긴다.
+      // 스냅샷은 자주 다시 온다(일정이 바뀔 때마다, 화면이 돌아올 때마다) — 그때마다
+      // 보내는 중인 말을 함께 쓸어 버리면 방금 친 문장이 눈앞에서 사라진다.
+      chatMessages: [
+        ...snap.chatMessages,
+        ...st.chatMessages.filter((m) => m.pending && !snap.chatMessages.some((x) => x.id === m.id)),
+      ],
+      // 사람은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
       contacts: snap.contacts ?? [],
-      todos: [],
-    }),
+      // 데모용으로 깔아 둔 할 일은 **처음 한 번만** 물러난다.
+      // 예전에는 스냅샷이 올 때마다 비웠다 — 일정 하나만 바뀌어도(그때 스냅샷을 다시 받는다)
+      // 사용자가 적어 둔 할 일이 통째로 사라졌다. 지울 것은 시드이지 사용자의 것이 아니다.
+      todos: st.remoteLive ? st.todos : [],
+    })),
 
   refreshPeople: async () => {
     if (!remoteReady()) return;
@@ -370,6 +401,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   connectionRequests: [],
+  requestError: null,
+  clearRequestError: () => set({ requestError: null }),
   outgoingRequests: [],
   myHandle: null,
   handleChangeableAt: null,
@@ -396,10 +429,16 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   answerRequest: async (id, accept) => {
     // 답한 줄은 화면에서 곧바로 걷는다 — 서버를 기다리는 동안 남아 있으면
     // 두 번 누르게 되고, 두 번째 호출은 'gone' 으로 조용히 흘러간다.
-    set((st) => ({ connectionRequests: st.connectionRequests.filter((r) => r.id !== id) }));
+    const before = get().connectionRequests.find((r) => r.id === id);
+    set((st) => ({ connectionRequests: st.connectionRequests.filter((r) => r.id !== id), requestError: null }));
     if (!remoteReady()) return;
     const ok = await answerConnectionRequest(id, accept);
-    if (ok && accept) await get().refreshPeople();
+    if (ok) { if (accept) await get().refreshPeople(); return; }
+    // 서버가 받지 않았으면 줄을 되돌린다.
+    // 예전에는 걷어낸 채로 끝이었다 — 이어지지도 않았는데 요청만 사라졌고, 화면은
+    // 아무 말도 하지 않았다. '동의를 눌러도 아무 반응이 없다' 와 같은 병이다.
+    if (before) set((st) => (st.connectionRequests.some((r) => r.id === id) ? st : { connectionRequests: [before, ...st.connectionRequests] }));
+    set({ requestError: "답을 보내지 못했어요. 잠시 뒤 다시 눌러 주세요." });
   },
 
   applyRemoteMessage: (m) =>
@@ -582,6 +621,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   // ── 일정 제안 ───────────────────────────────────────
   proposals: {},
   proposalConflict: null,
+  proposalError: null,
+  clearProposalError: () => set({ proposalError: null }),
   justConfirmed: null,
   clearJustConfirmed: () => set({ justConfirmed: null }),
 
@@ -613,6 +654,18 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((st) => ({ proposals: { ...st.proposals, [eventId]: p } }));
   },
 
+  loadOpenProposals: async () => {
+    if (!remoteReady()) return;
+    const ids = await fetchOpenProposalEvents();
+    // 닫힌 제안은 그 자리를 비운다 — 남겨 두면 이미 지난 물음이 화면에 서 있게 된다.
+    set((st) => {
+      const next: Record<ID, ScheduleProposal | null> = {};
+      for (const k of Object.keys(st.proposals)) if (ids.includes(k)) next[k] = st.proposals[k];
+      return { proposals: next };
+    });
+    await Promise.all(ids.map((id) => get().loadProposal(id)));
+  },
+
   proposeTime: async (eventId, preferred, durationMin = 60, title) => {
     if (!remoteReady()) return null;
     // 후보를 찾는 창은 그날 하루로 둔다 — 며칠씩 훑으면 '언제 바쁜지'를 넓게 되묻는 셈이 된다.
@@ -638,10 +691,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   answerProposal: async (eventId, proposalId, response) => {
-    if (!remoteReady()) return;
+    if (!remoteReady()) {
+      set({ proposalError: { eventId, message: "아직 서버에 연결되지 않았어요. 잠시 뒤 다시 눌러 주세요." } });
+      return;
+    }
+    set({ proposalError: null });
     const res = await respondToProposal(proposalId, response);
+    // 막혔으면 그렇다고 말한다. 눌렀는데 아무 일도 일어나지 않는 것이 가장 나쁜 답이다.
+    if (res.status === "error") {
+      set({ proposalError: { eventId, message: res.message ?? "답을 보내지 못했어요." } });
+      return;
+    }
     // 전원이 동의하면 서버가 그 자리에서 일정을 앉힌다 → 달력도 다시 받아 온다.
-    if (res?.status === "confirmed") {
+    if (res.status === "confirmed") {
       const snap = await fetchSnapshot();
       if (snap) get().hydrateRemote(snap);
       set((st) => ({ proposals: { ...st.proposals, [eventId]: null } }));
@@ -651,7 +713,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     // 전원이 동의했는데도 확정되지 않은 경우 — 그 사이 누가 그 시간에 다른 일정을 잡았다.
     // 조용히 넘어가지 않는다. 무슨 일이 있었는지는 사람이 알아야 다음을 정할 수 있다(§17).
     // 다만 겹친 사람이 무엇을 하는지는 여기서도 말하지 않는다 — 몇 명인지까지다(§11).
-    set({ proposalConflict: res?.status === "conflict" ? { eventId, busy: res.waiting } : null });
+    set({ proposalConflict: res.status === "conflict" ? { eventId, busy: res.waiting } : null });
     await get().loadProposal(eventId);
   },
 
@@ -685,11 +747,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       const rid = (await roomIdForEvent(eventId)) ?? roomId;
       const realId = await pushMessage(rid, text);
       // 서버가 준 id 로 갈아 단다 — Realtime 이 같은 걸 돌려줘도 중복으로 쌓이지 않는다.
-      set((st) => ({
-        chatMessages: realId
-          ? st.chatMessages.map((m) => (m.id === msg.id ? { ...m, id: realId, roomId: rid, pending: false } : m))
-          : st.chatMessages.filter((m) => m.id !== msg.id),
-      }));
+      set((st) => ({ chatMessages: settleSent(st.chatMessages, msg.id, realId, rid) }));
     })();
   },
 
@@ -722,9 +780,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         chatRooms: st.chatRooms.some((r) => r.id === rid)
           ? st.chatRooms.filter((r) => !(r.peerId === peerId && r.id !== rid))
           : st.chatRooms.map((r) => (r.peerId === peerId ? { ...r, id: rid } : r)),
-        chatMessages: realId
-          ? st.chatMessages.map((m) => (m.id === msg.id ? { ...m, id: realId, roomId: rid, pending: false } : m))
-          : st.chatMessages.filter((m) => m.id !== msg.id),
+        chatMessages: settleSent(st.chatMessages, msg.id, realId, rid),
       }));
       // 지역 id 로 앉아 있던 옛 말들도 함께 옮긴다 — 로그인 전에 나눈 말이 여기 있을 수 있다.
       set((st) => ({

@@ -543,15 +543,51 @@ export async function openProposal(eventId: ID, title: string | null, start: str
  *  status 가 "conflict" 로 돌아올 수 있다 — 전원이 동의했지만, 그 사이 누군가 그 시간에
  *  다른 일정을 잡은 경우다. 서버가 확정 직전에 다시 확인하기 때문에 알 수 있는 일이고,
  *  이때 waiting 은 '겹치는 사람 수' 다. 확정은 일어나지 않았다. */
-export async function respondToProposal(proposalId: ID, response: "accepted" | "declined" | "alternative", alt?: string) {
+export type ProposalAnswer = {
+  status: ProposalStatus | "conflict" | "error";
+  eventId: ID | null;
+  waiting: number;
+  /** 막혔다면 왜 막혔는지. 콘솔에만 적어 두면 사용자에게는 '아무 일도 안 일어남' 으로 보인다. */
+  message?: string;
+};
+
+export async function respondToProposal(
+  proposalId: ID, response: "accepted" | "declined" | "alternative", alt?: string,
+): Promise<ProposalAnswer> {
   const sb = getSupabase();
-  if (!sb || !(await ensureUid())) return null;
+  if (!sb || !(await ensureUid())) {
+    return { status: "error", eventId: null, waiting: 0, message: "아직 연결되지 않았어요. 잠시 뒤 다시 눌러 주세요." };
+  }
   const { data, error } = await sb.rpc("respond_to_proposal", { p: proposalId, resp: response, alt: alt ?? null });
-  if (error) { console.error("응답 실패:", error.message); return null; }
+  if (error) {
+    console.error("응답 실패:", error.message);
+    return { status: "error", eventId: null, waiting: 0, message: humanRpcError(error) };
+  }
   const row = Array.isArray(data) ? data[0] : data;
-  return row
-    ? { status: row.status as ProposalStatus | "conflict", eventId: row.event_id as string, waiting: row.waiting as number }
-    : null;
+  if (!row) return { status: "error", eventId: null, waiting: 0, message: "서버가 답을 주지 않았어요." };
+  return { status: row.status as ProposalStatus | "conflict", eventId: row.event_id as string, waiting: row.waiting as number };
+}
+
+/** 서버가 준 말을 사람이 읽을 수 있게. 원인을 지우지 않고, 다만 겁주지 않는다. */
+function humanRpcError(error: { message?: string; code?: string }): string {
+  const m = error?.message ?? "";
+  if (/ambiguous/i.test(m)) return "서버 함수가 예전 것이에요 — supabase/migrations 의 0007 을 적용해 주세요.";
+  if (/does not exist|Could not find the function/i.test(m)) return "서버에 이 기능이 아직 없어요 — supabase/migrations 를 적용해 주세요.";
+  if (/참여자가 아닙니다|42501|row-level security/i.test(m)) return "이 일정의 참여자가 아니라 답할 수 없어요.";
+  return m || "잠시 문제가 있었어요.";
+}
+
+/** 지금 답을 기다리는 제안이 걸린 일정들.
+ *  일정을 열어야만 제안을 읽으면, 열지 않은 사람에게는 제안이 없는 것과 같다. */
+export async function fetchOpenProposalEvents(): Promise<ID[]> {
+  const sb = getSupabase();
+  if (!sb || !myUidOf()) return [];
+  const { data, error } = await sb
+    .from("schedule_proposals")
+    .select("event_id")
+    .in("status", ["proposed", "pending"]);
+  if (error) return [];
+  return Array.from(new Set((data ?? []).map((r: any) => String(r.event_id))));
 }
 
 // ── 대화의 기억 · 제안 (0010) ───────────────────────────
@@ -764,17 +800,79 @@ export type RemoteHandlers = {
   /** 지워진 말 — 그 자리를 걷는다. */
   onMessageGone?: (id: ID) => void;
   onEventChange: () => void;
+  /** 방이 새로 생겼다 — 아직 내 손에 없는 방이면 목록부터 받아야 그 말이 보인다. */
+  onRoomChange?: () => void;
+  /** 그 일정의 제안이 열리거나 누군가 답했다. */
+  onProposalChange?: (eventId: ID | null) => void;
+  /** 소켓이 붙었는가. 끊긴 줄 모르고 조용히 있는 것이 이 화면의 가장 나쁜 상태다. */
+  onStatus?: (live: boolean, detail?: string) => void;
 };
 
-/** 일정·참여자·메시지 변화를 듣는다.
+/** 채널 이름은 매번 다르게 짓는다.
+ *  같은 이름을 두 번 쓰면 realtime-js 가 **이미 있는 채널 인스턴스를 그대로 돌려주고**
+ *  (RealtimeClient.channel — 있으면 새로 만들지 않는다), 그 위에서 subscribe() 를 다시 불러도
+ *  이미 join 된 채널이라 조용한 no-op 이 된다. 그 사이 앞선 정리(removeChannel)가 도착하면
+ *  방금 '구독했다' 고 믿은 채널이 그대로 떠나 버린다 —
+ *  **화면은 멀쩡한데 실시간만 죽은** 상태. 상대의 말이 새로고침해야 보이던 이유가 이것이었다. */
+const TOPIC_KEY = "__comein_topic_n__";
+const nextTopic = (tag: string) => {
+  const h = globalThis as unknown as { [TOPIC_KEY]?: number };
+  h[TOPIC_KEY] = (h[TOPIC_KEY] ?? 0) + 1;
+  return `comein-${tag}-${myUidOf() ?? "anon"}-${h[TOPIC_KEY]}`;
+};
+
+/** 끊기면 스스로 다시 붙는 채널 하나.
+ *  소켓은 노트북이 잠들거나 와이파이가 바뀌기만 해도 끊긴다. 그때 아무것도 하지 않으면
+ *  앱은 '조용한 화면' 이 된다 — 오지 않는 말을 기다리는. */
+function keepChannel(
+  tag: string,
+  bind: (ch: RealtimeChannel) => RealtimeChannel,
+  onStatus?: (live: boolean, detail?: string) => void,
+): () => void {
+  const sb = getSupabase();
+  if (!sb) return () => {};
+  let ch: RealtimeChannel | null = null;
+  let closed = false;
+  let attempt = 0;
+  let retry: ReturnType<typeof setTimeout> | null = null;
+
+  const open = () => {
+    if (closed) return;
+    const c = bind(sb.channel(nextTopic(tag))).subscribe((status, err) => {
+      if (closed) return;
+      if (status === "SUBSCRIBED") { attempt = 0; onStatus?.(true); return; }
+      if (status === "CHANNEL_ERROR" || status === "TIMED_OUT" || status === "CLOSED") {
+        onStatus?.(false, err?.message ?? status);
+        // 1s → 2s → 4s … 최대 30s. 서버가 힘들 때 더 세게 두드리지 않는다.
+        const wait = Math.min(30_000, 1_000 * 2 ** attempt++);
+        void sb.removeChannel(c);
+        if (retry) clearTimeout(retry);
+        retry = setTimeout(open, wait);
+      }
+    });
+    ch = c;
+  };
+  open();
+
+  return () => {
+    closed = true;
+    if (retry) clearTimeout(retry);
+    if (ch) void sb.removeChannel(ch);
+  };
+}
+
+/** 일정·참여자·메시지·제안의 변화를 듣는다.
  *  메시지는 낱개로 반영하고(대화는 흐름이라 통째로 갈아끼우면 튄다),
- *  일정·참여자는 관계가 얽혀 있어 스냅샷을 다시 받는 편이 안전하다. */
+ *  일정·참여자는 관계가 얽혀 있어 스냅샷을 다시 받는 편이 안전하다.
+ *
+ *  채널을 둘로 나눈 이유: 제안(0003)은 나중에 올린 마이그레이션이다. 아직 안 올린 프로젝트에서
+ *  그 표를 함께 구독하면 채널 하나가 통째로 오류가 되어 **대화까지 같이 죽는다.**
+ *  덜 중요한 것이 더 중요한 것을 끌고 내려가지 않게 갈라 둔다. */
 export function subscribeRemote(handlers: RemoteHandlers): (() => void) | null {
   const sb = getSupabase();
   if (!sb || !myUidOf()) return null;
 
-  const ch: RealtimeChannel = sb
-    .channel("comein-workspace")
+  const stopCore = keepChannel("core", (ch) => ch
     .on("postgres_changes", { event: "INSERT", schema: "public", table: "chat_messages" }, (payload) => {
       handlers.onMessage(toMessage(payload.new));
     })
@@ -786,10 +884,57 @@ export function subscribeRemote(handlers: RemoteHandlers): (() => void) | null {
       else handlers.onMessage(toMessage(m));
     })
     .on("postgres_changes", { event: "*", schema: "public", table: "events" }, () => handlers.onEventChange())
-    .on("postgres_changes", { event: "*", schema: "public", table: "event_participants" }, () => handlers.onEventChange())
-    .subscribe();
+    .on("postgres_changes", { event: "*", schema: "public", table: "event_participants" }, () => handlers.onEventChange()),
+    (live, detail) => {
+      handlers.onStatus?.(live, detail);
+      // 끊겨 있던 동안 놓친 것은 어떤 소켓으로도 오지 않는다 — 붙자마자 한 번 맞춘다.
+      if (live) handlers.onEventChange();
+    },
+  );
 
-  return () => { void sb.removeChannel(ch); };
+  // 방이 생기는 순간 — 첫 1:1 대화는 방부터 생기고 말이 뒤따른다.
+  // (0015 이전 프로젝트라면 이 표가 publication 에 없어 조용히 아무것도 오지 않는다.
+  //  그때를 대비해 화면 쪽에서도 '모르는 방의 말' 을 보면 목록을 다시 받는다.)
+  const stopRooms = keepChannel("rooms", (ch) => ch
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_room_members" }, () => handlers.onRoomChange?.())
+    .on("postgres_changes", { event: "*", schema: "public", table: "chat_rooms" }, () => handlers.onRoomChange?.()));
+
+  // 제안과 그 답 — '동의하시겠어요' 는 상대 화면에도 스스로 서야 한다(0003 §5).
+  const stopProps = keepChannel("proposals", (ch) => ch
+    .on("postgres_changes", { event: "*", schema: "public", table: "schedule_proposals" }, (payload) => {
+      const row: any = payload.new ?? payload.old;
+      handlers.onProposalChange?.(row?.event_id ?? null);
+    })
+    .on("postgres_changes", { event: "*", schema: "public", table: "schedule_proposal_participants" }, () => {
+      handlers.onProposalChange?.(null);
+    }));
+
+  // 화면이 돌아오거나 네트워크가 살아나면 소켓 상태와 무관하게 한 번 맞춘다.
+  // 다만 창을 옮겨 다닐 때마다 서버를 부르지는 않는다 — 15초 안의 재확인은 흘려보낸다.
+  let lastWake = 0;
+  const wake = () => {
+    if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
+    const t = Date.now();
+    if (t - lastWake < 15_000) return;
+    lastWake = t;
+    handlers.onEventChange();
+    handlers.onRoomChange?.();
+    handlers.onProposalChange?.(null);
+  };
+  if (typeof window !== "undefined") {
+    document.addEventListener("visibilitychange", wake);
+    window.addEventListener("online", wake);
+    window.addEventListener("focus", wake);
+  }
+
+  return () => {
+    if (typeof window !== "undefined") {
+      document.removeEventListener("visibilitychange", wake);
+      window.removeEventListener("online", wake);
+      window.removeEventListener("focus", wake);
+    }
+    stopCore(); stopRooms(); stopProps();
+  };
 }
 
 export const remoteReady = () => isSupabaseConfigured && !!myUidOf();
