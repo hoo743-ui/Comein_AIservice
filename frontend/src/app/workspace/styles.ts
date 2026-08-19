@@ -1660,6 +1660,11 @@ html { font-size: 17px; }
 .rmg-sum-cta { margin-top: var(--sp-1); }
 /* 갈래 이름표 — 시각 줄 끝에 조용히. 색을 쓰지 않는다(색은 원이 쓰고 있다). */
 .rmg-drawer-cat { margin-left: var(--sp-1); padding: 2px 8px; border: 1px solid var(--hair); border-radius: 999px;
+/* 중요도 — 갈래 이름표와 같은 모양을 쓴다. 새 배지를 만들지 않는다(배지가 둘이 되면
+   그 순간 일정 머리가 표가 된다). 색이 아니라 **잉크의 농도**로 무게를 말한다 —
+   보라는 AI 의 언어이므로 여기 쓰지 않는다(§0). */
+.rmg-drawer-cat.pr-high { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 30%, var(--hair)); }
+.rmg-drawer-cat.pr-low { color: var(--faint); border-style: dashed; }
   font-size: 0.7rem; font-weight: 500; color: var(--faint); white-space: nowrap; }
 /* 접힌 한 줄 — 라벨 · 요약 · 갈매기. 카드도 테두리도 없다. */
 .rmg-evdisc { display: flex; align-items: baseline; gap: var(--sp-2); width: 100%; padding: 6px 8px; margin: 0 -8px;

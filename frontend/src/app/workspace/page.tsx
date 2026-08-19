@@ -11,6 +11,7 @@ import { analyzeConversation, analyzeMessage, localIsoNow, track } from "@/lib/c
 import { fmtTime, fmtDate } from "@/lib/format";
 import { CSS } from "./styles";
 import { pendingAnswers } from "@/lib/awaiting";
+import { clashAsk, findClash } from "@/lib/clash";
 import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
@@ -467,6 +468,8 @@ export default function Reimagine() {
       const asProposal = !settings.autoConfirm;
       const madeIds: string[] = [];
       const unknownNames: string[] = [];
+      /** 이미 있는 자리와 부딪힌 것 — 세우기는 세우되, 그 사실은 말해 준다. */
+      const clashes: string[] = [];
       for (const p of parsed) {
         if (p.kind !== "일정" || !p.date) continue;
         const eventId = addSchedule({
@@ -477,8 +480,23 @@ export default function Reimagine() {
           end: (p.end ?? new Date(+p.date + 3_600_000)).toISOString(),
           location: p.note || undefined,
           status: asProposal ? "pending" : "confirmed",
+          priority: p.priority,
         });
         madeIds.push(eventId);
+
+        // 이미 있는 자리와 부딪혔는가. **세우는 것을 막지는 않는다** — 사람은 겹치는 자리를
+        // 일부러 잡기도 한다. 다만 무게가 기울면 그건 알려 줄 값이 있는 사실이다.
+        // 근거(중요도)가 없으면 조용히 지나간다 — 판단은 lib/clash 한 곳에 있다.
+        const bump = clashAsk(findClash({
+          incoming: {
+            id: eventId,
+            start: p.date.toISOString(),
+            end: (p.end ?? new Date(+p.date + 3_600_000)).toISOString(),
+            priority: p.priority,
+          },
+          existing: useWorkspace.getState().schedules,
+        }), lang === "en");
+        if (bump) clashes.push(bump);
         for (const name of p.participants ?? []) {
           // 이름은 사람이 부르는 방식이라 정확히 안 맞는다 — 부분 일치까지 받아준다.
           const key = name.replace(/\s|님/g, "").toLowerCase();
@@ -493,6 +511,13 @@ export default function Reimagine() {
 
       // 스침은 일정을 세운 뒤에 띄운다 — 무엇을 확정할지 알아야 손잡이를 달 수 있다.
       showFlash(rows, said || undefined, madeIds, asProposal);
+
+      // 부딪힌 것이 있으면 그 한 줄을 세운다. AI 의 되묻기가 이미 서 있으면 그쪽이 먼저다 —
+      // 그건 답을 기다리는 물음이고, 이건 알려 주는 말이다. 한 자리에 둘이 서지 않는다.
+      if (clashes.length && !asked) {
+        setAsk({ text: clashes[0] });
+        pendingAsk.current = null;   // 답을 기다리는 물음이 아니다. 다음 한 줄이 답으로 붙으면 안 된다.
+      }
 
       // 모르는 이름이 있으면 조용히 되묻는다 — 멋대로 새 사람을 만들지 않는다.
       if (unknownNames.length) {

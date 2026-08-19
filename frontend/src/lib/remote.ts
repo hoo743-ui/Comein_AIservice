@@ -198,6 +198,7 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
       ownerId: toLocalUser(e.owner_id),
       status: e.status,
       groupId: e.group_id ?? undefined,
+      priority: e.priority ?? undefined,
     })),
     eventParticipants: (pa.data ?? []).map((p: any): EventParticipant => ({
       eventId: p.event_id,
@@ -256,6 +257,7 @@ export async function pushEvent(s: Schedule): Promise<string | null> {
         // 그룹의 자리면 여기서 단다 — 서버 트리거가 멤버 전원을 참여자로 앉힌다(0017).
         // 남의 그룹 id 는 events_insert 가 막는다.
         group_id: s.groupId ?? null,
+        priority: s.priority ?? null,
       }),
     });
     return rows?.[0]?.id ?? null;

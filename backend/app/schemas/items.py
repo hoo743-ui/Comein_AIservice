@@ -39,6 +39,12 @@ class ParsedItem(BaseModel):
 
     # todo
     due: str | None = None  # ISO datetime
+
+    # 공통 — 얼마나 중요한가.
+    # 예전에는 todo 전용이었다. 그런데 겹쳐서 곤란한 것은 할 일이 아니라 **일정**이다
+    # (할 일은 겹칠 수가 없다 — 시간 위에 있지 않으므로). 사람이 "중요한" 이라고 말했을
+    # 때 그 말이 가장 필요한 자리에서 버려지고 있었다.
+    # 비어 있는 것과 'mid' 는 다르다: 비었으면 아무도 말하지 않은 것이다(0018).
     priority: Priority | None = None
 
     @model_validator(mode="after")

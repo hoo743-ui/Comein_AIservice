@@ -438,6 +438,14 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
             {/* 같은 일정이 Context 에 따라 다른 이름으로 불린다 — 수업이거나, 회의이거나, 약속이거나.
                 읽어 내지 못했으면 아무 말도 하지 않는다(빈 이름표를 붙이지 않는다). */}
             {categoryName && <span className="rmg-drawer-cat">{categoryName}</span>}
+            {/* 중요도는 **말한 것만** 보여 준다. 비어 있는 것은 '보통' 이 아니라 '아무도
+                말하지 않음' 이고(0018), 말하지 않은 것에 이름표를 붙이면 그때부터 모든
+                일정이 등급을 갖게 된다 — 이 화면이 하려던 일과 반대다. */}
+            {event.priority && event.priority !== "mid" && (
+              <span className={`rmg-drawer-cat pr-${event.priority}`}>
+                {event.priority === "high" ? (en ? "Important" : "중요") : (en ? "Light" : "가벼움")}
+              </span>
+            )}
           </p>
         </div>
         <button type="button" className="rmg-panel-close" onClick={onClose} aria-label={en ? "Close" : "닫기"}>

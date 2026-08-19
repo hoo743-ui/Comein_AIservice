@@ -171,6 +171,15 @@ DURATION:
 - If the user says how long it runs or when it ends ("2시부터 5시까지", "3시에 한 시간"),
   put that in `end`. If they do not say, leave `end` null — do not guess a length.
 
+HOW IMPORTANT (`priority`, any category):
+- Only when the user actually signals it. "중요한", "꼭", "절대", "놓치면 안 되는",
+  "important", "must" -> "high". "급하지 않은", "여유되면", "whenever" -> "low".
+  "보통", "normal" -> "mid".
+- **Otherwise leave it null.** Null means nobody said. That is different from "mid", which
+  means they said it is ordinary. Do not rate things on your own — an invented importance
+  becomes a reason to interrupt someone later, and it will be the wrong reason.
+- Do not infer from the kind of event. A 시험 is not automatically high; a 점심 is not low.
+
 PEOPLE (meeting only):
 - If the message names other people to meet with, put their names in `participants`
   as a list of strings, e.g. "이하늘, 김민수랑 내일 2시 회의" -> participants: ["이하늘", "김민수"].

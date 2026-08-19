@@ -99,7 +99,10 @@ checked(seq, migration, looked_for, present) as (
     (17, '0017 groups', '표 groups · group_members, events.group_id, 함수 sync_group_calendar',
          (select count(*) from tbls where table_name in ('groups','group_members')) = 2
          and exists (select 1 from cols where table_name = 'events' and column_name = 'group_id')
-         and exists (select 1 from fns where name = 'sync_group_calendar'))
+         and exists (select 1 from fns where name = 'sync_group_calendar')),
+
+    (18, '0018 event_priority', 'events.priority 칸',
+         exists (select 1 from cols where table_name = 'events' and column_name = 'priority'))
 )
 select
   seq,
