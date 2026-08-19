@@ -31,6 +31,8 @@ export type RemoteSnapshot = {
   chatRooms: ChatRoom[];
   chatMessages: ChatMessage[];
   contacts: Contact[];
+  /** 내가 붙인 이름들. 이미 contacts 에 반영돼 있지만, 고칠 때 원본이 필요하다. */
+  personLabels: Record<ID, string>;
   groups: Group[];
   groupMembers: GroupMember[];
 };
@@ -184,10 +186,17 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
   if (ms.error) throw ms.error;
 
   // 사람은 실패해도 나머지를 막지 않는다 — 아직 0004 를 올리지 않았을 수 있다.
-  const contacts = await fetchPeople().catch(() => []);
+  // 내가 부르는 이름도 같다(0019 를 안 올렸으면 비어 온다) — 그러면 원래 이름이 그대로 쓰인다.
+  const [contacts, labels] = await Promise.all([
+    fetchPeople().catch(() => []),
+    fetchPersonLabels().catch(() => ({} as Record<ID, string>)),
+  ]);
+  const named = contacts.map((c) =>
+    labels[c.id] ? { ...c, name: labels[c.id], realName: c.name } : c);
 
   return {
-    contacts,
+    contacts: named,
+    personLabels: labels,
     schedules: (ev.data ?? []).map((e: any): Schedule => ({
       id: e.id,
       title: e.title,
@@ -618,9 +627,61 @@ export async function fetchConnectionRequests(): Promise<ConnectionRequest[]> {
   }));
 }
 
-// 연결 해제(disconnect_from)와 확정 후 개인 일정 충돌(my_conflicts_with)은
-// DB 함수만 세워 두고 화면을 붙이지 않았다 — 쓰지 않는 래퍼는 두지 않는다.
-// 필요해지면 sb.rpc("disconnect_from" | "my_conflicts_with") 로 다시 감싸면 된다.
+// 확정 후 개인 일정 충돌(my_conflicts_with)은 DB 함수만 세워 두고 화면을 붙이지 않았다 —
+// 쓰지 않는 래퍼는 두지 않는다. 필요해지면 sb.rpc("my_conflicts_with") 로 감싸면 된다.
+
+/** 이어진 것을 끊는다. 양쪽 줄이 함께 사라진다(0004 disconnect_from). */
+export async function disconnectFrom(peerId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { error } = await sb.rpc("disconnect_from", { peer: peerId });
+  if (error) { console.error("연결 끊기 실패:", error.message); return false; }
+  return true;
+}
+
+// ── 내가 부르는 이름 (0019) ────────────────────────────
+// 나만 읽는다. 상대는 자기에게 무슨 이름이 붙었는지 알 수 없다 — RLS 가 그렇게 막는다.
+
+export async function fetchPersonLabels(): Promise<Record<ID, string>> {
+  const me = myUidOf();
+  if (!getSupabase() || !me) return {};
+  try {
+    const rows = await rest(`person_labels?select=person_id,label&owner_id=eq.${me}`);
+    const out: Record<ID, string> = {};
+    for (const r of rows ?? []) out[toLocalUser(r.person_id)] = r.label;
+    return out;
+  } catch (e: any) {
+    // 표가 아직 없는 설치가 있다(0019 를 안 올림). 그건 오류가 아니라 **알려진 상태**다 —
+    // 이름이 없을 뿐 화면은 그대로 돈다. 스냅샷은 자주 다시 오므로, 여기서 소리치면
+    // 개발 화면이 같은 말로 가득 차고 그러면 **진짜 오류가 그 속에 묻힌다.**
+    const msg = String(e?.message ?? "");
+    if (!/person_labels/.test(msg)) console.error("부르는 이름 조회 실패:", msg);
+    return {};
+  }
+}
+
+/** 붙이거나 고친다. 빈 이름은 '지우기' 로 읽는다 — 다 지우고 확인을 누르는 게 자연스럽다. */
+export async function setPersonLabel(personId: ID, label: string): Promise<boolean> {
+  const sb = getSupabase();
+  const me = myUidOf();
+  if (!sb || !(await ensureUid()) || !me) return false;
+  const name = label.trim();
+  if (!name) return clearPersonLabel(personId);
+  const { error } = await sb
+    .from("person_labels")
+    .upsert({ owner_id: me, person_id: personId, label: name }, { onConflict: "owner_id,person_id" });
+  if (error) { console.error("부르는 이름 저장 실패:", error.message); return false; }
+  return true;
+}
+
+export async function clearPersonLabel(personId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  const me = myUidOf();
+  if (!sb || !(await ensureUid()) || !me) return false;
+  const { error } = await sb.from("person_labels").delete().eq("owner_id", me).eq("person_id", personId);
+  if (error) { console.error("부르는 이름 지우기 실패:", error.message); return false; }
+  return true;
+}
 
 // ── 일정 제안 ──────────────────────────────────────────
 // 충돌 판정은 전부 서버 안에서 끝난다. 여기로 넘어오는 건 결론뿐이다 —

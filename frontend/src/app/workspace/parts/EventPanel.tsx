@@ -23,7 +23,7 @@ import {
   type ChatMessage, type Contact, type EventParticipant,
   type ParticipantStatus, type Schedule, type ScheduleProposal,
 } from "@/lib/types";
-import { JumpToLatest, MessageGroups, SummaryBlock, type ChatSummary } from "./Chat";
+import { ClearedLine, JumpToLatest, MessageGroups, SlashList, SummaryBlock, useSlash, type ChatSummary, type SlashCmd } from "./Chat";
 import { useCoarsePointer, useStickToBottom } from "../hooks";
 import type { Lang } from "../i18n";
 
@@ -298,7 +298,9 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
   );
 }
 
-export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, onDelete, peerLink, summaryError }: {
+const NO_CMDS: SlashCmd[] = [];
+
+export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, onDelete, peerLink, cmds, cleared, summaryError }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -338,6 +340,10 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   onDelete?: () => void;
   /** 둘만의 자리일 때, 그 사람과의 **다른** 대화로 건너가는 길. 없으면 그리지 않는다. */
   peerLink?: { name: string; onOpen: () => void } | null;
+  /** 빗금으로 부를 수 있는 것들(ChatThread 와 같은 규칙). */
+  cmds?: SlashCmd[];
+  /** 접어 둔 이전 대화 — 개수와 되돌리는 길. */
+  cleared?: { count: number; onUndo: () => void };
 }) {
   const en = lang === "en";
   const [adding, setAdding] = React.useState(false);
@@ -390,8 +396,11 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   );
 
   React.useEffect(() => { if (focusChat) inputRef.current?.focus(); }, [focusChat]);
+  const menu = useSlash(draft, setDraft, cmds ?? NO_CMDS);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    if (menu.consume()) return;                 // 빗금이 먼저다 — ChatThread 와 같은 규칙
     const text = draft.trim();
     if (!text) return;
     setDraft("");
@@ -694,8 +703,15 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
 
         <div className="rmg-msgwrap">
           <div className="rmg-drawer-msgs" ref={listRef}>
+            {cleared && <ClearedLine count={cleared.count} lang={lang} onUndo={cleared.onUndo} />}
+            {/* 접고 나면 '아직 대화가 없어요' 는 거짓말이다 — 말은 바로 위에 접혀 있다.
+               빈 칸이 왜 비었는지를 그 자리에서 말해야 사용자가 자기가 지운 줄 알지 않는다. */}
             {messages.length === 0 ? (
-              <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
+              <p className="rmg-drawer-empty">
+                {cleared?.count
+                  ? (en ? "Starting fresh from here." : "여기서부터 새로 시작해요.")
+                  : (en ? "No messages yet." : "아직 대화가 없어요.")}
+              </p>
             ) : (
               <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
             )}
@@ -703,12 +719,14 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
           </div>
           <JumpToLatest show={!atBottom} lang={lang} onClick={() => toBottom()} />
         </div>
+        <SlashList menu={menu} lang={lang} />
         <form className="rmg-drawer-compose" onSubmit={submit}>
           <input
             ref={inputRef}
             className="rmg-drawer-input"
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => { menu.onKeyDown(e); }}
             placeholder={en ? "Write to everyone on this event…" : "이 일정의 사람들에게…"}
             aria-label={en ? "Message" : "메시지"}
           />

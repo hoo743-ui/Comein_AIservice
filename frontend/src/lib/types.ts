@@ -168,6 +168,9 @@ export interface Contact {
   incomingRequestId?: ID;
   /** 함께 있는 일정 수 */
   sharedEvents?: number;
+  /** 그 사람이 스스로 정한 이름. `name` 에 내가 붙인 이름이 앉으면 원래 이름이 여기로 물러난다.
+   *  없으면 내가 붙인 이름이 없다는 뜻이다 — `name` 이 곧 그 사람의 이름이다(0019). */
+  realName?: string;
   /** 자유 태그. 관계를 규칙으로 읽을 때의 실마리이자, 나중에 검색이 붙을 자리. */
   tags?: string[];
 }

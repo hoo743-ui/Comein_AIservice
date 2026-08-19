@@ -25,6 +25,7 @@ import {
   answerConnectionRequest, cancelConnectionRequest, changeMyHandle, dayAvailability, ensureDmRoomRemote,
   fetchHandleState,
   fetchConnectionRequests, fetchOpenProposal, fetchOpenProposalEvents, fetchOutgoingRequests, fetchPeople, fetchSnapshot,
+  disconnectFrom, setPersonLabel,
   confirmEvent, deleteEvent, renameEvent,
   openProposal, pullParticipant, pushEvent, pushMessage, pushParticipant, pushParticipantStatus,
   remoteReady, requestConnection, respondToProposal, roomIdForEvent, searchPeople, suggestSlots,
@@ -179,6 +180,13 @@ interface WorkspaceState {
   places: Place[];
   timetable: ClassEntry[];
   contacts: Contact[];
+  /** 내가 그 사람을 부르는 이름(0019). contacts.name 에 이미 반영돼 있고,
+   *  여기 있는 것은 '내가 붙인 것' 만 — 고칠 때 원본을 알아야 한다. */
+  personLabels: Record<ID, string>;
+  /** 붙이거나 고친다. 비우면 지운다. 서버가 막으면 통째로 되돌린다. */
+  renamePerson: (personId: ID, label: string) => void;
+  /** 이어진 것을 끊는다. 같은 일정에서 만난 사람은 목록에 남는다(my_people 이 그렇게 준다). */
+  unlinkPerson: (personId: ID) => void;
   eventParticipants: EventParticipant[];
   /** 같은 사람들이 다시 모인다 — 일정보다 오래 사는 묶음(0017). */
   groups: Group[];
@@ -207,6 +215,7 @@ interface WorkspaceState {
     chatRooms: ChatRoom[];
     chatMessages: ChatMessage[];
     contacts?: Contact[];
+    personLabels?: Record<ID, string>;
     groups?: Group[];
     groupMembers?: GroupMember[];
   }) => void;
@@ -360,6 +369,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   places: seedPlaces,
   timetable: seedTimetable,
   contacts: seedContacts,
+  personLabels: {},
   eventParticipants: seedParticipants,
   // 그룹은 지어내지 않는다. 사람과 같은 이유다 — 지어낸 묶음은 로그인한 뒤에도 남아
   // 진짜인 척한다(seedContacts 위 주석 참고).
@@ -391,6 +401,7 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       ],
       // 사람은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
       contacts: snap.contacts ?? [],
+      personLabels: snap.personLabels ?? {},
       // 그룹도 같다. 0017 을 아직 안 올린 서버에서는 비어 온다 — 그때 화면은
       // 그룹 갈래를 '아직 없음' 으로 그리면 되고, 다른 것은 그대로 돈다.
       groups: snap.groups ?? [],
@@ -400,7 +411,50 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   refreshPeople: async () => {
     if (!remoteReady()) return;
     const people = await fetchPeople();
-    set({ contacts: people });
+    // 서버가 주는 것은 그 사람이 정한 이름이다. 내가 붙인 이름을 여기서 다시 얹지 않으면,
+    // 목록을 새로 고칠 때마다 별명이 한 번씩 벗겨졌다가 다음 스냅샷에 돌아온다.
+    const labels = get().personLabels;
+    set({ contacts: people.map((c) => (labels[c.id] ? { ...c, name: labels[c.id], realName: c.name } : c)) });
+  },
+
+  renamePerson: (personId, label) => {
+    const name = label.trim();
+    const before = { contacts: get().contacts, personLabels: get().personLabels };
+    const target = before.contacts.find((c) => c.id === personId);
+    if (!target) return;
+    // 원래 이름은 한 번만 물러난다 — 두 번 붙이면 별명이 원래 이름 자리로 굳는다.
+    const real = target.realName ?? target.name;
+    const labels = { ...before.personLabels };
+    if (name) labels[personId] = name; else delete labels[personId];
+    set({
+      personLabels: labels,
+      contacts: before.contacts.map((c) =>
+        c.id !== personId ? c : name ? { ...c, name, realName: real } : { ...c, name: real, realName: undefined }),
+      writeError: null,
+    });
+    if (!remoteReady()) return;
+    void setPersonLabel(personId, name).then((ok) => {
+      if (ok) return;
+      // 못 앉았으면 되돌린다. 내 화면에서만 이름이 바뀐 채로 두면 다른 기기에서 딴사람이 된다.
+      set({ ...before, writeError: "부르는 이름을 저장하지 못했어요." });
+    });
+  },
+
+  unlinkPerson: (personId) => {
+    const before = get().contacts;
+    const target = before.find((c) => c.id === personId);
+    if (!target) return;
+    // 이어짐만 끊는다. 같은 일정에서 만난 사람은 my_people() 이 계속 돌려주므로
+    // 목록에서 지우지 않는다 — 지우면 다음 스냅샷에 되살아나 '안 지워진다' 로 읽힌다.
+    set({
+      contacts: before.map((c) => (c.id === personId ? { ...c, connected: false } : c)),
+      writeError: null,
+    });
+    if (!remoteReady()) return;
+    void disconnectFrom(personId).then((ok) => {
+      if (ok) { void get().refreshPeople(); return; }
+      set({ contacts: before, writeError: "연결을 끊지 못했어요." });
+    });
   },
 
   findPeople: async (q) => (remoteReady() ? searchPeople(q) : []),

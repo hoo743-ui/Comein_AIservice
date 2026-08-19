@@ -12,6 +12,7 @@ import { fmtTime, fmtDate } from "@/lib/format";
 import { CSS } from "./styles";
 import { pendingAnswers } from "@/lib/awaiting";
 import { clashAsk, findClash } from "@/lib/clash";
+import { loadMarks, markCleared, splitByMark, unmark, type ClearMarks } from "@/lib/clearmark";
 import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
@@ -34,6 +35,7 @@ import { CalSearch, MonthCalendar } from "./parts/MonthCalendar";
 import { CalendarView } from "./parts/DayViews";
 import type { ChatSummary } from "./parts/Chat";
 import { EventPanel, RoomTimeline } from "./parts/EventPanel";
+import type { SlashCmd } from "./parts/Chat";
 import { NewRoomPanel, PeopleView, PersonPanel } from "./parts/People";
 import { GroupPanel, NewGroupPanel } from "./parts/Groups";
 import { GuideTour, type TourStep } from "./parts/Guide";
@@ -78,6 +80,8 @@ export default function Reimagine() {
   const { resolvedTheme, setTheme } = useTheme();
   const schedules = useWorkspace((s) => s.schedules);
   const contacts = useWorkspace((s) => s.contacts);
+  const renamePerson = useWorkspace((s) => s.renamePerson);
+  const unlinkPerson = useWorkspace((s) => s.unlinkPerson);
   const addSchedule = useWorkspace((s) => s.addSchedule);
   // AI 가 놓아 둔 제안을 사람이 확정하거나 없던 일로 되돌린다.
   const confirmSchedule = useWorkspace((s) => s.confirmSchedule);
@@ -144,10 +148,21 @@ export default function Reimagine() {
   // 화면이 쥔 값은 '열었을 때의 id' 다. 저장이 끝나면 서버가 준 id 로 바뀌므로 한 번 옮겨 읽는다
   // — 이 대응이 없으면 자리를 만든 직후 방이 통째로 사라진다(열어 둔 id 가 어느 일정과도 안 맞아서).
   const [rawOpenEventId, setOpenEventId] = React.useState<string | null>(null); // 일정 상세 + 대화
+  /** 화면을 옮기면서 함께 데려갈 일정. 위의 '탭을 옮기면 비운다' 효과가 한 번만 받아 쓴다. */
+  const carryEvent = React.useRef<string | null>(null);
   const openEventId = useWorkspace((s) => s.resolveEventId)(rawOpenEventId);
   const [chatFocus, setChatFocus] = React.useState(false); // '대화'로 들어왔으면 입력에 바로 커서를 둔다
   // 사람 밑에서 펼쳐 둔 자리. 그 자리의 방에 다녀와도 접히지 않게 여기서 쥔다.
   const [personEvent, setPersonEvent] = React.useState<string | null>(null);
+  // 여기서부터 새로 — 방마다 접어 둔 자리. 지우는 것이 아니라 접는 것이라 이 기기에만 남는다.
+  const [cleared, setCleared] = React.useState<ClearMarks>({});
+  React.useEffect(() => { setCleared(loadMarks()); }, []);   // 서버 렌더와 어긋나지 않게 마운트 뒤에
+  const clearRoom = React.useCallback((roomId: string) => {
+    setCleared((m) => markCleared(m, roomId));
+  }, []);
+  const unclearRoom = React.useCallback((roomId: string) => {
+    setCleared((m) => unmark(m, roomId));
+  }, []);
   // 사람 패널의 세 자리 — 처음 고른 사람은 '요약'으로 맞이한다.
   // 곧바로 대화창을 펴면 이 화면이 메신저가 되고, 그와 나 사이의 일정·메모·자취는 갈 곳을 잃는다.
 
@@ -298,7 +313,7 @@ export default function Reimagine() {
   // 왼쪽 캘린더 — 실제 일정 + AI가 넣은 일정
   const calItems = React.useMemo(() => {
     const b = now ?? new Date(2026, 6, 8);
-    const arr: { date: Date; title: string; time: string }[] = schedules.map((s) => ({ date: new Date(s.start), title: s.title, time: fmtTime(s.start) }));
+    const arr: { id: string; date: Date; title: string; time: string }[] = schedules.map((s) => ({ id: s.id, date: new Date(s.start), title: s.title, time: fmtTime(s.start) }));
     // 영수증은 '방금 한 일'을 한 줄 스치게 하는 용도일 뿐, 캘린더에 얹지 않는다.
     // 시각이 있는 항목은 이미 진짜 일정(addSchedule)으로 서 있어서 얹으면 같은 게 두 번 보인다.
     return arr;
@@ -705,8 +720,14 @@ export default function Reimagine() {
 
   // 탭을 옮기면 오른쪽 칸은 그 화면의 것만 남는다.
   // (캘린더에서 연 일정이 '오늘'·'사람' 화면까지 따라다니면 지금 어디를 보는지 흐려진다.)
+  //
+  // 다만 **일부러 데리고 간 것**은 예외다 — '오늘'의 일정 한 줄을 눌러 캘린더로 건너갈 때처럼.
+  // 그때는 화면을 옮기는 것 자체가 그 일정을 보러 가는 일이라, 여기서 비우면 사용자는
+  // 누른 것이 사라진 것을 본다. 뜻은 ref 로 건네고, 이 효과가 한 번만 받아 쓴다.
   React.useEffect(() => {
-    setOpenEventId(null);
+    const keep = carryEvent.current;
+    carryEvent.current = null;
+    setOpenEventId(keep);
     setChatFocus(false);
     setNewRoom(false);
     setNewGroup(false);
@@ -938,19 +959,29 @@ export default function Reimagine() {
     [chatRooms],
   );
 
-  const personMsgs = React.useMemo(() => {
-    if (!personId) return [];
-    const rid = roomIdOfPeer(personId);
+  const personRoomId = personId ? roomIdOfPeer(personId) : null;
+  /** 이 방의 모든 말 — 접기 전.
+   *
+   *  **AI 가 읽는 것은 늘 이쪽이다.** 접기는 내 화면을 정리하는 일이지 이 방의 기억을
+   *  지우는 일이 아니다. 방은 상대와 함께 쓰는 것이라, 내 쪽 보기 설정이 AI 의 판단을
+   *  바꾸면 같은 방에서 두 사람이 서로 다른 AI 를 쓰게 된다 — 한쪽에는 시간 후보가
+   *  뜨고 한쪽에는 안 뜨는데, 왜 그런지는 아무도 모른다. */
+  const personAllMsgs = React.useMemo(() => {
+    if (!personRoomId) return [];
     return chatMessages
-      .filter((m) => m.roomId === rid)
+      .filter((m) => m.roomId === personRoomId)
       .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-  }, [chatMessages, personId, roomIdOfPeer]);
+  }, [chatMessages, personRoomId]);
+  const personSplit = React.useMemo(
+    () => splitByMark(personAllMsgs, personRoomId ? cleared[personRoomId] : undefined),
+    [personAllMsgs, cleared, personRoomId],
+  );
+  const personMsgs = personSplit.shown;
   const personEvents = personId ? sharedEventsWith(personId) : [];
 
   // ── 대화의 기억 ──
   // 분석은 화면이 아니라 엔진(lib/conversation)이 하고, 그 결과를 여기서 서버에 앉힌다.
   // 화면 컴포넌트 안에서 API 를 부르지 않는다(§39) — 데이터가 있는 자리에서 저장한다.
-  const personRoomId = personId ? roomIdOfPeer(personId) : null;
   /** 서버에 앉힐 수 있는 방인가. `dm_…` 는 로그인 전 스토어가 붙인 임시 이름이라 아니다. */
   const roomIsRemote = !!personRoomId && /^[0-9a-f-]{36}$/i.test(personRoomId);
   const [dismissed, setDismissed] = React.useState<string[]>([]);
@@ -969,7 +1000,7 @@ export default function Reimagine() {
       end: new Date(s.end ?? +new Date(s.start) + 3_600_000).toISOString(),
     }));
     return analyzeConversation({
-      messages: personMsgs.map((m) => ({ id: m.id, text: m.content })),
+      messages: personAllMsgs.map((m) => ({ id: m.id, text: m.content })),
       // 아직 아는 달력은 내 것뿐이다. 상대의 가용 여부는 서버가 채운다 —
       // 그때까지도 '모른다' 를 '한가하다' 로 바꿔 읽지 않는다.
       participants: [busy],
@@ -978,7 +1009,7 @@ export default function Reimagine() {
       shown: dismissed,
       en: lang === "en",
     });
-  }, [personId, personMsgs, personEvents, dismissed, lang, pairFree]);
+  }, [personId, personAllMsgs, personEvents, dismissed, lang, pairFree]);
 
   // 조율이 열렸을 때만 서버에 묻는다 — 잡담에 달력을 열지 않는다(§34).
   // 하루 창 하나만 본다: 여러 날을 훑으면 남의 하루가 재구성된다(§11, 서버도 거절한다).
@@ -1107,16 +1138,38 @@ export default function Reimagine() {
     return { dm, groups };
   }, [contacts, chatRooms, chatMessages, schedules, participantsOf, unread]);
 
+  /** 이 방에서 빗금으로 부를 수 있는 것들.
+   *  여기 있는 것은 **모두 다른 곳에도 손잡이가 있다** — 빗금은 지름길이지 유일한 문이 아니다. */
+  const cmdsFor = React.useCallback(
+    (roomId: string | null, extra: SlashCmd[] = []): SlashCmd[] => {
+      if (!roomId) return extra;
+      return [
+        {
+          name: "clear",
+          hint: lang === "en" ? "Fold everything above — nothing is deleted" : "여기까지 접기 — 지우지 않아요",
+          run: () => clearRoom(roomId),
+        },
+        ...extra,
+      ];
+    },
+    [lang, clearRoom],
+  );
+
   const openEventData = openEventId ? schedules.find((s) => s.id === openEventId) ?? null : null;
   const openEventParts = openEventId ? eventParticipants.filter((p) => p.eventId === openEventId) : [];
   // 메시지는 스토어의 chatMessages 를 직접 읽어 파생시킨다 — 화면이 따로 사본을 갖지 않는다.
-  const openEventMsgs = React.useMemo(() => {
-    if (!openEventId) return [];
-    const rid = roomIdOfEvent(openEventId);
+  const openRoomId = openEventId ? roomIdOfEvent(openEventId) : null;
+  const openEventAllMsgs = React.useMemo(() => {
+    if (!openRoomId) return [];
     return chatMessages
-      .filter((m) => m.roomId === rid)
+      .filter((m) => m.roomId === openRoomId)
       .sort((a, b) => +new Date(a.createdAt) - +new Date(b.createdAt));
-  }, [chatMessages, openEventId, roomIdOfEvent]);
+  }, [chatMessages, openRoomId]);
+  const openEventSplit = React.useMemo(
+    () => splitByMark(openEventAllMsgs, openRoomId ? cleared[openRoomId] : undefined),
+    [openEventAllMsgs, cleared, openRoomId],
+  );
+  const openEventMsgs = openEventSplit.shown;
 
   // 타임테이블에서 직접 적어 넣은 한 줄 — 캡처바를 거치지 않는 유일한 입력이라 AI 표식을 달지 않는다.
   const addScheduleAt = React.useCallback((title: string, start: Date) => {
@@ -1466,6 +1519,14 @@ export default function Reimagine() {
           // 주최자에게만 보인다(EventPanel 이 iAmOwner 로 가린다). 지우면 방과 말이
           // 함께 사라지고, 서버가 거절하면 스토어가 통째로 되돌린다.
           onDelete={() => { removeSchedule(openEventData.id); closeEvent(); }}
+          cmds={cmdsFor(openRoomId, [{
+            name: "summary",
+            hint: lang === "en" ? "Read the thread and lay it out" : "이 대화를 정리해요",
+            run: () => { void summarizeEvent(openEventData.id); },
+          }])}
+          cleared={openEventSplit.hidden.length && openRoomId
+            ? { count: openEventSplit.hidden.length, onUndo: () => unclearRoom(openRoomId) }
+            : undefined}
           onSend={(text) => sendEventMessageAndMaybePropose(openEventData.id, text)}
           onEditMessage={(id, text) => void editMessage(id, text)}
           onDeleteMessage={(id) => void deleteMessage(id)}
@@ -1614,6 +1675,12 @@ export default function Reimagine() {
           openEventId={personEvent}
           onPickEvent={setPersonEvent}
           onRespond={(id, st) => setParticipantStatus(id, ME_ID, st)}
+          onRenamePerson={renamePerson}
+          onUnlinkPerson={unlinkPerson}
+          cmds={cmdsFor(personRoomId)}
+          cleared={personSplit.hidden.length && personRoomId
+            ? { count: personSplit.hidden.length, onUndo: () => unclearRoom(personRoomId) }
+            : undefined}
           msgCountOf={(id) => { const rid = roomIdOfEvent(id); return rid ? chatMessages.filter((m) => m.roomId === rid).length : 0; }}
           onCreateEvent={(title, start) => createEventWith([person.id], title, start)}
           outcome={personOutcome}
@@ -1862,10 +1929,19 @@ export default function Reimagine() {
                         {/* 날짜를 다시 적지 않는다 — 바로 위 달력에서 그 날이 이미 짚여 있다.
                             같은 말을 두 번 하면 그만큼 목록이 아래로 밀린다. */}
                         <ul className="rmg-calday-list">
+                          {/* 눌러서 그 일정으로 간다. 예전에는 읽을 수만 있어서, 보고 나서
+                              레일의 캘린더를 누르고 그 날을 다시 찾아 들어가야 했다 —
+                              이미 눈앞에 있는 것을 찾으러 가는 걸음이었다. */}
                           {dayItems.map((it, idx) => (
-                            <li key={idx} className="rmg-calday-row">
-                              <span className="rmg-calday-time">{it.time}</span>
-                              <span className="rmg-calday-title">{it.title}</span>
+                            <li key={idx}>
+                              <button
+                                type="button"
+                                className="rmg-calday-row"
+                                onClick={() => { carryEvent.current = it.id; setCalDay(it.date); setPanel(null); setView("calendar"); }}
+                              >
+                                <span className="rmg-calday-time">{it.time}</span>
+                                <span className="rmg-calday-title">{it.title}</span>
+                              </button>
                             </li>
                           ))}
                           {dayItems.length === 0 && <li className="rmg-calday-empty">{t.dayNoEvent}</li>}
@@ -1950,6 +2026,8 @@ export default function Reimagine() {
                   openGroupId={openGroupId}
                   onOpenGroup={(id: string) => selectGroup(id)}
                   onNewGroup={() => { selectGroup(null); setNewGroup(true); }}
+                  onRenamePerson={renamePerson}
+                  onUnlinkPerson={unlinkPerson}
                   onSearchDay={() => setCalSearchOpen(true)}
                   focusDay={calFocus}
                 />
@@ -2162,6 +2240,8 @@ function Feature(props: {
   openGroupId: string | null;
   onOpenGroup: (groupId: string) => void;
   onNewGroup: () => void;
+  onRenamePerson: (personId: string, label: string) => void;
+  onUnlinkPerson: (personId: string) => void;
   /** 말로 날짜를 찾는 자리를 연다 · 그렇게 찾은 날이 있는 달로 달력을 옮긴다. */
   onSearchDay?: () => void;
   focusDay?: Date | null;

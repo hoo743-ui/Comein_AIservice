@@ -230,7 +230,95 @@ export function JumpToLatest({ show, lang, onClick }: { show: boolean; lang: Lan
 
 /** 대화 한 타래 — 1:1 방과 일정 방이 똑같은 모양을 쓴다.
  *  방이 달라도 '말이 쌓이는 방식'까지 달라지면 두 개의 다른 앱처럼 보인다. */
-export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend, onEditMessage, onDeleteMessage, context }: {
+/**
+ * 빗금 한 줄 — 손이 자판을 떠나지 않고 쓰는 길.
+ *
+ * 왜 두는가 — 여기 있는 것들은 **모두 다른 곳에도 손잡이가 있다.** 빗금은 유일한 문이
+ * 아니라 지름길이다. 유일한 문이면 그건 외워야 하는 것이 되고, 외워야 하는 인터페이스는
+ * §0 이 하지 말라고 한 '소프트웨어를 조작하는' 쪽이다.
+ *
+ * 왜 몇 개뿐인가 — 목록이 길어지면 그 자체가 또 하나의 화면이 된다. 말을 쓰다 말고
+ * 읽어야 하는 목록은 대화를 끊는다. 대화 중에 정말로 하고 싶은 것만 남긴다.
+ */
+const EMPTY_CMDS: SlashCmd[] = [];
+
+export type SlashCmd = {
+  /** 빗금 뒤에 치는 말. 소문자·한 낱말. */
+  name: string;
+  /** 무엇을 하는지 한 줄. 이름만으로 알 수 있으면 짧게. */
+  hint: string;
+  run: () => void;
+};
+
+export function useSlash(draft: string, setDraft: (v: string) => void, cmds: SlashCmd[]) {
+  // 빗금은 **맨 앞에서만** 뜻을 갖는다. "3/4 쯤" 을 쓰다가 목록이 열리면 그게 방해다.
+  const typing = draft.startsWith("/");
+  const q = typing ? draft.slice(1).toLowerCase() : "";
+  const matches = React.useMemo(
+    () => (typing ? cmds.filter((c) => c.name.startsWith(q)) : []),
+    [typing, q, cmds],
+  );
+  const [i, setI] = React.useState(0);
+  React.useEffect(() => { setI(0); }, [draft]);
+  const open = typing && matches.length > 0;
+  const run = (c: SlashCmd) => { setDraft(""); c.run(); };
+
+  /** 자판을 가로챈다. true 를 돌려주면 입력칸은 그 키를 못 본다. */
+  const onKeyDown = (e: React.KeyboardEvent): boolean => {
+    if (!open) return false;
+    if (e.key === "ArrowDown") { e.preventDefault(); setI((v) => (v + 1) % matches.length); return true; }
+    if (e.key === "ArrowUp") { e.preventDefault(); setI((v) => (v - 1 + matches.length) % matches.length); return true; }
+    if (e.key === "Tab") { e.preventDefault(); setDraft(`/${matches[i]?.name ?? matches[0].name}`); return true; }
+    if (e.key === "Escape") { e.preventDefault(); setDraft(""); return true; }
+    return false;
+  };
+
+  /** 보내기 전에 부른다. 빗금이면 실행하고 true — 말로 보내지 않는다. */
+  const consume = (): boolean => {
+    if (!open) return false;                    // 빗금이지만 아는 말이 아니면 그냥 말이다
+    run(matches[i] ?? matches[0]);
+    return true;
+  };
+
+  return { open, matches, index: i, setIndex: setI, run, onKeyDown, consume };
+}
+
+/** 입력칸 바로 위에 뜨는 목록. 화면을 덮지 않는다 — 대화가 계속 보여야 한다. */
+export function SlashList({ menu, lang }: { menu: ReturnType<typeof useSlash>; lang: Lang }) {
+  if (!menu.open) return null;
+  return (
+    <div className="rmg-slash" role="listbox" aria-label={lang === "en" ? "Commands" : "명령"}>
+      {menu.matches.map((c, n) => (
+        <button
+          key={c.name}
+          type="button"
+          role="option"
+          aria-selected={n === menu.index}
+          className={`rmg-slash-row ${n === menu.index ? "on" : ""}`}
+          // 눌러서 고를 수도 있어야 한다 — 자판만 되는 목록은 마우스를 쓰는 사람에게 막혀 있다.
+          onMouseEnter={() => menu.setIndex(n)}
+          onMouseDown={(e) => { e.preventDefault(); menu.run(c); }}   // blur 보다 먼저 잡는다
+        >
+          <span className="rmg-slash-name">/{c.name}</span>
+          <span className="rmg-slash-hint">{c.hint}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** 접힌 말이 있다는 한 줄. 지운 것이 아니라 접은 것이므로 되돌리는 길을 함께 둔다. */
+export function ClearedLine({ count, lang, onUndo }: { count: number; lang: Lang; onUndo: () => void }) {
+  if (count <= 0) return null;
+  const en = lang === "en";
+  return (
+    <button type="button" className="rmg-cleared" onClick={onUndo}>
+      {en ? `${count} earlier messages · show` : `이전 대화 ${count}개 · 다시 보기`}
+    </button>
+  );
+}
+
+export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang, onSend, onEditMessage, onDeleteMessage, context, cmds, cleared }: {
   messages: ChatMessage[];
   nameOf: (userId: string) => string;
   myName: string;
@@ -243,6 +331,10 @@ export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang,
   onDeleteMessage?: (id: string) => void;
   /** 말과 입력칸 사이에 끼는 얇은 한 줄 — 대화에서 건져 올린 것(시간 따위)을 권하는 자리. */
   context?: React.ReactNode;
+  /** 빗금으로 부를 수 있는 것들. 없으면 빗금은 그냥 글자다. */
+  cmds?: SlashCmd[];
+  /** 접어 둔 이전 대화 — 개수와 되돌리는 길. */
+  cleared?: { count: number; onUndo: () => void };
 }) {
   const en = lang === "en";
   const [draft, setDraft] = React.useState("");
@@ -252,8 +344,12 @@ export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang,
 
   React.useEffect(() => { if (focus) inputRef.current?.focus(); }, [focus]);
 
+  const menu = useSlash(draft, setDraft, cmds ?? EMPTY_CMDS);
+
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
+    // 빗금이 먼저다 — 아는 말이면 실행하고 끝난다. 모르는 말이면 그냥 말로 보낸다.
+    if (menu.consume()) return;
     const text = draft.trim();
     if (!text) return;
     setDraft("");
@@ -264,8 +360,15 @@ export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang,
     <>
       <div className="rmg-msgwrap">
         <div className="rmg-drawer-msgs" ref={listRef}>
+          {cleared && <ClearedLine count={cleared.count} lang={lang} onUndo={cleared.onUndo} />}
+          {/* 접고 나면 '아직 대화가 없어요' 는 거짓말이다 — 말은 바로 위에 접혀 있다.
+             빈 칸이 왜 비었는지를 그 자리에서 말해야 사용자가 자기가 지운 줄 알지 않는다. */}
           {messages.length === 0 ? (
-            <p className="rmg-drawer-empty">{en ? "No messages yet." : "아직 대화가 없어요."}</p>
+            <p className="rmg-drawer-empty">
+              {cleared?.count
+                ? (en ? "Starting fresh from here." : "여기서부터 새로 시작해요.")
+                : (en ? "No messages yet." : "아직 대화가 없어요.")}
+            </p>
           ) : (
             <MessageGroups messages={messages} nameOf={nameOf} myName={myName} lang={lang} onEdit={onEditMessage} onDelete={onDeleteMessage} />
           )}
@@ -274,12 +377,14 @@ export function ChatThread({ messages, nameOf, myName, placeholder, focus, lang,
         <JumpToLatest show={!atBottom} lang={lang} onClick={() => toBottom()} />
       </div>
       {context}
+      <SlashList menu={menu} lang={lang} />
       <form className="rmg-drawer-compose" onSubmit={submit}>
         <input
           ref={inputRef}
           className="rmg-drawer-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { menu.onKeyDown(e); }}
           placeholder={placeholder}
           aria-label={en ? "Message" : "메시지"}
         />

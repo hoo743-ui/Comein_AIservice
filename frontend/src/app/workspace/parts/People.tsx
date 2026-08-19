@@ -17,17 +17,147 @@ import * as React from "react";
 import { CalendarDays, MoreHorizontal, Search, Users, X } from "lucide-react";
 
 import { suggestionLine, summarize, type AnalysisOutcome } from "@/lib/conversation";
+import { copyText } from "@/lib/clipboard";
 import { fmtDate, fmtTime } from "@/lib/format";
 import {
   ME_ID,
   type ChatMessage, type ConnectionRequest, type Contact,
   type EventParticipant, type Schedule,
 } from "@/lib/types";
-import { ChatThread } from "./Chat";
+import { ChatThread, type SlashCmd } from "./Chat";
 import { GroupLane } from "./Groups";
 import { chatStamp } from "../chatTime";
 import { eventStamp } from "../datetime";
 import { L, type Lang } from "../i18n";
+
+/**
+ * 사람 하나를 두고 열리는 작은 메뉴 — 오른쪽 클릭으로 부른다.
+ *
+ * 왜 오른쪽 클릭인가 — 여기 있는 것들은 자주 쓰는 것이 아니다. 이름을 붙이는 것도, 끊는
+ * 것도 한 사람당 몇 번 안 한다. 그런 것을 줄 위에 늘 세워 두면 목록이 손잡이 밭이 된다.
+ * 필요할 때만 나타나고, 쓰지 않으면 없는 것과 같아야 한다(§6 — 인터페이스는 사라진다).
+ *
+ * 그래서 여기 있는 것은 **다른 곳에 없는 것들**이다. '대화 열기' 같은 건 두지 않는다 —
+ * 줄을 그냥 누르면 되는 일을 메뉴에 또 적으면, 읽는 사람은 둘이 다른 일인 줄 안다.
+ */
+export function PersonMenu({ person, at, lang, onClose, onRename, onUnlink }: {
+  person: Contact;
+  /** 눌린 자리(뷰포트 좌표). 메뉴는 여기서 열린다. */
+  at: { x: number; y: number };
+  lang: Lang;
+  onClose: () => void;
+  onRename: (label: string) => void;
+  onUnlink?: () => void;
+}) {
+  const en = lang === "en";
+  const box = React.useRef<HTMLDivElement>(null);
+  const [naming, setNaming] = React.useState(false);
+  const [draft, setDraft] = React.useState(person.realName ? person.name : "");
+  const [copied, setCopied] = React.useState<boolean | null>(null);
+  const [asking, setAsking] = React.useState(false);
+
+  // 바깥을 누르거나 Esc 를 누르면 닫힌다. 스크롤에도 닫는다 — 메뉴는 뷰포트에 고정돼 있어서
+  // 목록이 움직이면 엉뚱한 줄 위에 떠 있게 된다(그러면 어느 사람의 메뉴인지 거짓말이 된다).
+  React.useEffect(() => {
+    const away = (e: MouseEvent) => { if (!box.current?.contains(e.target as Node)) onClose(); };
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("mousedown", away);
+    document.addEventListener("keydown", key);
+    window.addEventListener("scroll", onClose, true);
+    return () => {
+      document.removeEventListener("mousedown", away);
+      document.removeEventListener("keydown", key);
+      window.removeEventListener("scroll", onClose, true);
+    };
+  }, [onClose]);
+
+  // 화면 밖으로 나가지 않게 — 오른쪽·아래 끝에서 누르면 메뉴가 잘려 나간다.
+  const [pos, setPos] = React.useState(at);
+  React.useLayoutEffect(() => {
+    const el = box.current;
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    setPos({
+      x: Math.min(at.x, window.innerWidth - r.width - 8),
+      y: Math.min(at.y, window.innerHeight - r.height - 8),
+    });
+  }, [at.x, at.y]);
+
+  const copy = async () => {
+    if (!person.handle) return;
+    const ok = await copyText("@" + person.handle);
+    setCopied(ok);
+    // 됐으면 잠깐 보여 주고 닫는다. 안 됐으면 남는다 — 안 된 것을 알려야 다른 길을 찾는다.
+    if (ok) window.setTimeout(onClose, 700);
+  };
+
+  return (
+    <div ref={box} className="rmg-pmenu" role="menu" style={{ left: pos.x, top: pos.y }}>
+      {/* 붙이는 이름 — 나만 본다. 그 말을 적어 두지 않으면 상대에게 보일까 봐 아무도 안 쓴다. */}
+      {naming ? (
+        <form
+          className="rmg-pmenu-name"
+          onSubmit={(e) => { e.preventDefault(); onRename(draft); onClose(); }}
+        >
+          <input
+            className="rmg-pmenu-in"
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            placeholder={person.realName ?? person.name}
+            aria-label={en ? "What you call them" : "부르는 이름"}
+            maxLength={40}
+            autoFocus
+          />
+          <p className="rmg-pmenu-note">
+            {en ? "Only you see this. Empty to clear." : "나만 보여요. 비우면 지워집니다."}
+          </p>
+        </form>
+      ) : (
+        <button type="button" role="menuitem" className="rmg-pmenu-row" onClick={() => setNaming(true)}>
+          {person.realName
+            ? (en ? "Change what you call them" : "부르는 이름 고치기")
+            : (en ? "Call them something" : "부르는 이름 붙이기")}
+        </button>
+      )}
+
+      {person.handle && (
+        <button type="button" role="menuitem" className="rmg-pmenu-row" onClick={() => void copy()}>
+          {copied === true
+            ? (en ? "Copied" : "복사됨")
+            : copied === false
+              ? (en ? "Couldn't copy — @" + person.handle : `복사가 막혀 있어요 — @${person.handle}`)
+              : (en ? `Copy @${person.handle}` : `@${person.handle} 복사`)}
+        </button>
+      )}
+
+      {/* 끊기 — 되돌릴 수는 있지만(다시 청하면 된다) 상대에게 청을 다시 보내야 하는 일이라 묻는다. */}
+      {onUnlink && person.connected && (
+        asking ? (
+          <div className="rmg-pmenu-ask">
+            <span className="rmg-pmenu-askq">{en ? "Unlink?" : "끊을까요?"}</span>
+            <button type="button" className="rmg-ppl-make" onClick={() => setAsking(false)}>
+              {en ? "Cancel" : "취소"}
+            </button>
+            <button type="button" className="rmg-mg-del" onClick={() => { onUnlink(); onClose(); }}>
+              {en ? "Unlink" : "끊기"}
+            </button>
+          </div>
+        ) : (
+          <button type="button" role="menuitem" className="rmg-pmenu-row" onClick={() => setAsking(true)}>
+            {en ? "Unlink" : "연결 끊기"}
+          </button>
+        )
+      )}
+
+      {/* 함께한 자리는 남는다는 말 — 끊으면 다 사라지는 줄 알고 못 끊는 사람이 있다. */}
+      {onUnlink && person.connected && (
+        <p className="rmg-pmenu-note">
+          {en ? "Shared events stay." : "함께한 일정은 그대로 남아요."}
+        </p>
+      )}
+    </div>
+  );
+}
 
 export function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
   contacts: Contact[];
@@ -233,7 +363,7 @@ function EventStrip({ event, parts, peerName, msgCount, lang, onRespond, onOpen,
   );
 }
 
-export function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion, openEventId, onPickEvent, onRespond, msgCountOf }: {
+export function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion, openEventId, onPickEvent, onRespond, msgCountOf, cmds, cleared, onRenamePerson, onUnlinkPerson }: {
   person: Contact;
   messages: ChatMessage[];
   sharedEvents: Schedule[];
@@ -252,6 +382,12 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
   onRespond: (eventId: string, status: "accepted" | "declined") => void;
   /** 그 자리의 방에 쌓인 말의 수. 0 이면 건너갈 이유를 만들지 않는다. */
   msgCountOf: (eventId: string) => number;
+  /** 빗금으로 부를 수 있는 것들 · 접어 둔 이전 대화 — 그대로 타래로 내려보낸다. */
+  cmds?: SlashCmd[];
+  cleared?: { count: number; onUndo: () => void };
+  /** 부르는 이름 · 연결 끊기 — 오른쪽 클릭 메뉴가 쓴다. */
+  onRenamePerson?: (personId: string, label: string) => void;
+  onUnlinkPerson?: (personId: string) => void;
   /** 이름을 모르면 null 을 넘긴다 — 짓는 일은 부모가 한곳에서 한다. */
   onCreateEvent: (title: string | null, start: Date) => void;
   /** 내 말 고치기·지우기 */
@@ -338,6 +474,8 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
       .sort((a, b) => +new Date(b.start) - +new Date(a.start));
     return [...next, ...past];
   }, [sharedEvents]);
+  /** 프로필 위에서 연 메뉴 — 목록과 같은 것을 여기서도 쓴다. */
+  const [menu2, setMenu2] = React.useState<{ x: number; y: number } | null>(null);
   /** 펼쳐 둔 자리. 그 사이 지워졌으면(다른 기기에서) 조용히 접힌다. */
   const picked = openEventId ? sharedEvents.find((e) => e.id === openEventId) ?? null : null;
   const recent = (() => {
@@ -360,7 +498,11 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
 
       {/* 머리 — 얼굴 · 이름 · 핸들, 그리고 아주 작은 더보기.
           닫기 버튼은 두지 않는다: 목록에서 그 사람을 한 번 더 누르면 닫힌다. */}
-      <div className="rmg-phead">
+      <div
+        className="rmg-phead"
+        // 목록에서와 같은 몸짓 — 프로필 위에서 오른쪽 클릭.
+        onContextMenu={(e) => { e.preventDefault(); setMenu2({ x: e.clientX, y: e.clientY }); }}
+      >
         <span className="rmg-phead-av" aria-hidden>{person.name?.slice(0, 1) ?? "·"}</span>
         <span className="rmg-phead-id">
           <span className="rmg-phead-name">{person.name}</span>
@@ -382,6 +524,19 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
               <button type="button" role="menuitem" onClick={() => { setMenu(false); setCreating(true); }}>
                 {en ? "New event together" : "함께 일정 만들기"}
               </button>
+              {/* 오른쪽 클릭을 모르는 사람에게도 같은 곳으로 가는 길을 하나 둔다.
+                  숨은 몸짓만으로 닿는 기능은, 그것을 아는 사람에게만 있는 기능이다. */}
+              {onRenamePerson && (
+                <button
+                  type="button"
+                  role="menuitem"
+                  onClick={(e) => { setMenu(false); setMenu2({ x: e.clientX, y: e.clientY }); }}
+                >
+                  {person.realName
+                    ? (en ? "Change what you call them" : "부르는 이름 고치기")
+                    : (en ? "Call them something" : "부르는 이름 붙이기")}
+                </button>
+              )}
               <button type="button" role="menuitem" onClick={() => { setMenu(false); onClose(); }}>
                 {en ? "Clear selection" : "선택 해제"}
               </button>
@@ -510,6 +665,8 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
             onSend={onSend}
             onEditMessage={onEditMessage}
             onDeleteMessage={onDeleteMessage}
+            cmds={cmds}
+            cleared={cleared}
             context={
               suggestion && (
                 // 대화가 일정으로 건너가는 자리 — 얇은 한 줄. 권할 뿐 가로막지 않는다.
@@ -550,6 +707,17 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
             }
           />
         </div>
+
+      {menu2 && onRenamePerson && (
+        <PersonMenu
+          person={person}
+          at={menu2}
+          lang={lang}
+          onClose={() => setMenu2(null)}
+          onRename={(label) => onRenamePerson(person.id, label)}
+          onUnlink={onUnlinkPerson ? () => onUnlinkPerson(person.id) : undefined}
+        />
+      )}
     </aside>
   );
 }
@@ -557,7 +725,7 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent, teams, memberCountOf, openGroupId, onOpenGroup, onNewGroup }: any) {
+export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent, teams, memberCountOf, openGroupId, onOpenGroup, onNewGroup, onRenamePerson, onUnlinkPerson }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   // 앞의 @ 는 이름의 일부가 아니라 '핸들을 부르는 방식' 이다. 여기서 벗겨야
@@ -599,6 +767,9 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
   const [askErr, setAskErr] = React.useState<string | null>(null);
   /** 지금 답하고 있는 요청 · 무르고 있는 사람. 같은 것을 두 번 누르면 서버에 두 번 간다. */
   const [answering, setAnswering] = React.useState<string | null>(null);
+
+  /** 오른쪽 클릭으로 연 메뉴 — 누구를, 어디서. */
+  const [menu, setMenu] = React.useState<{ person: Contact; x: number; y: number } | null>(null);
 
   React.useEffect(() => {
     if (!onFind || q.length < 2) { setFound([]); setFinding(false); return; }
@@ -830,7 +1001,12 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
             const nu = unreadOf ? unreadOf(c.id) : 0;
             const last = dm.get(c.id)?.last;
             return (
-              <li key={c.id} className={`rmg-ppl ${on ? "on" : ""}`}>
+              <li
+                key={c.id}
+                className={`rmg-ppl ${on ? "on" : ""}`}
+                // 오른쪽 클릭 — 자주 쓰지 않는 것들은 여기 숨어 있다가 필요할 때만 나온다.
+                onContextMenu={(e) => { e.preventDefault(); setMenu({ person: c, x: e.clientX, y: e.clientY }); }}
+              >
                 <button type="button" className="rmg-ppl-head" aria-current={on} onClick={() => onSelectPerson(on ? null : c.id)}>
                   <span className="rmg-ppl-av">{c.name?.slice(0, 1) ?? "·"}</span>
                   <span className="rmg-ppl-txt">
@@ -913,6 +1089,17 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
             ))}
           </ul>
         </div>
+      )}
+
+      {menu && (
+        <PersonMenu
+          person={menu.person}
+          at={{ x: menu.x, y: menu.y }}
+          lang={lang}
+          onClose={() => setMenu(null)}
+          onRename={(label) => onRenamePerson?.(menu.person.id, label)}
+          onUnlink={onUnlinkPerson ? () => onUnlinkPerson(menu.person.id) : undefined}
+        />
       )}
     </div>
   );

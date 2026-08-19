@@ -612,7 +612,15 @@ html { font-size: 17px; }
 .rmg-calday { margin-top: 22px; padding-top: 18px; border-top: 1px solid var(--hair); }
 
 .rmg-calday-list { list-style: none; margin: 0; padding: 0; }
-.rmg-calday-row { display: flex; align-items: baseline; gap: 10px; padding: 8px 0; }
+/* 이제 누를 수 있는 줄이다. 다만 버튼처럼 보이지 않는다 — 이 칸은 읽는 자리이고,
+   테두리와 배경을 두르면 왼쪽이 손잡이 목록이 된다. 손이 닿을 때만 그렇다고 말한다. */
+.rmg-calday-row { display: flex; width: 100%; align-items: baseline; gap: 10px; padding: 8px 0;
+  border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
+  border-radius: 6px; transition: background 150ms ease-out; }
+.rmg-calday-row:hover { background: color-mix(in srgb, var(--ink) 5%, transparent); }
+.rmg-calday-row:hover .rmg-calday-time { color: var(--ink); }
+.rmg-calday-row:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { .rmg-calday-row { transition: none; } }
 /* 시간 — 디지털 시계 느낌 제거. 본문과 동일한 sans + 비례숫자(proportional) + secondary 색으로 하나의 시스템처럼. */
 .rmg-calday-time { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-size: 0.82rem; font-weight: 450; letter-spacing: -0.01em; line-height: 1.4; color: var(--muted); min-width: 3.6em; }
 .rmg-calday-title { font-size: 0.86rem; font-weight: 300; color: var(--ink); line-height: 1.4; }
@@ -1873,6 +1881,59 @@ html { font-size: 17px; }
 /* 낱말은 선 위에 앉되 배경을 깔아 선이 글자를 지나가지 않게 — 스크롤로 겹쳐도 읽힌다. */
 .rmg-msg-day > span { flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
   background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }
+
+/* 사람 위에서 오른쪽 클릭했을 때 뜨는 작은 메뉴.
+   뷰포트에 고정한다(position: fixed) — 목록 안에 두면 그 줄의 overflow 에 잘린다.
+   그래서 스크롤이 나면 컴포넌트가 스스로 닫는다: 고정된 메뉴가 움직인 목록 위에 남으면
+   어느 사람의 메뉴인지가 거짓말이 된다. */
+.rmg-pmenu { position: fixed; z-index: 60; min-width: 208px; max-width: 280px;
+  display: flex; flex-direction: column;
+  border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 10%, transparent);
+  animation: rmg-prop-in 150ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) { .rmg-pmenu { animation: none; } }
+.rmg-pmenu-row { border: 0; background: none; font: inherit; font-size: 0.84rem; color: var(--ink);
+  text-align: left; padding: 9px var(--sp-2); cursor: pointer; transition: background 140ms ease-out; }
+.rmg-pmenu-row:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-pmenu-row + .rmg-pmenu-row { border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
+.rmg-pmenu-name { display: flex; flex-direction: column; gap: 4px; padding: 9px var(--sp-2); }
+.rmg-pmenu-in { border: 1px solid var(--hair); border-radius: 8px; background: color-mix(in srgb, var(--paper) 70%, transparent);
+  font: inherit; font-size: 0.86rem; color: var(--ink); padding: 5px 8px; outline: none; }
+.rmg-pmenu-in:focus { border-color: color-mix(in srgb, var(--ink) 24%, var(--hair)); }
+/* '나만 보여요' — 이 한 줄이 없으면 아무도 이름을 안 붙인다(상대에게 보일까 봐). */
+.rmg-pmenu-note { margin: 0; padding: 0 var(--sp-2) 8px; font-size: 0.72rem; color: var(--faint); line-height: 1.45; }
+.rmg-pmenu-row + .rmg-pmenu-note { padding-top: 6px; }
+.rmg-pmenu-ask { display: flex; align-items: center; gap: var(--sp-1); flex-wrap: wrap;
+  padding: 8px var(--sp-2); border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
+.rmg-pmenu-askq { font-size: 0.78rem; color: var(--muted); }
+
+/* 빗금 목록 — 입력칸 바로 위. 화면을 덮지 않는다: 대화가 계속 보여야
+   무엇에 대고 명령하는지가 안 흐려진다. 그래서 팝업이 아니라 한 칸이다. */
+.rmg-slash { display: flex; flex-direction: column; margin-bottom: 6px;
+  border: 1px solid var(--hair); border-radius: var(--r); overflow: hidden;
+  background: color-mix(in srgb, var(--surface) 92%, transparent);
+  animation: rmg-prop-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) { .rmg-slash { animation: none; } }
+.rmg-slash-row { display: flex; align-items: baseline; gap: var(--sp-2); text-align: left;
+  border: 0; background: none; font: inherit; padding: 7px var(--sp-2); cursor: pointer;
+  transition: background 140ms ease-out; }
+.rmg-slash-row + .rmg-slash-row { border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
+/* 고른 줄은 배경으로 말한다 — 보라는 AI 의 언어라 여기 쓰지 않는다(§0). */
+.rmg-slash-row.on { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-slash-name { flex-shrink: 0; font-size: 0.84rem; font-weight: 500; color: var(--ink);
+  font-variant-numeric: tabular-nums; }
+.rmg-slash-hint { min-width: 0; font-size: 0.78rem; color: var(--muted);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 접어 둔 이전 대화 — 말 목록의 맨 위. 지운 것이 아니므로 되돌리는 길이 곧 이 줄이다.
+   점선인 이유: 이 화면에서 점선은 '아직 정해지지 않은 것' 이고, 접기는 언제든 풀 수 있다. */
+.rmg-cleared { align-self: center; border: 1px dashed var(--hair); background: none; font: inherit;
+  font-size: 0.76rem; color: var(--faint); padding: 4px 12px; border-radius: 999px; cursor: pointer;
+  transition: color 160ms ease-out, border-color 160ms ease-out; }
+.rmg-cleared:hover { color: var(--muted); border-color: color-mix(in srgb, var(--ink) 20%, var(--hair)); }
+@media (prefers-reduced-motion: reduce) { .rmg-cleared { transition: none; } }
 
 /* 컴포저 — 큰 둥근 상자가 아니라 얇은 선 하나. 쓰기 시작하면 그때만 아주 미세하게 떠오른다. */
 .rmg-drawer-compose { display: flex; align-items: center; gap: var(--sp-1); padding: 9px var(--sp-1) 9px var(--sp-2);
