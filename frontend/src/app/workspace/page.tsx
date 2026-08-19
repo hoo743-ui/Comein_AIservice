@@ -61,6 +61,14 @@ const hasEntered = () => {
 
 const conditionOf = (code: number) => WCODE[code] ?? "흐림";
 
+/** 받침이 있는가 — 을/를, 이/가 를 고르는 데 쓴다.
+ *  한글이 아닌 글자(영문 이름 등)로 끝나면 받침이 없는 것으로 본다. */
+const hasJong = (word: string) => {
+  const last = word.trim().slice(-1);
+  if (!last || last < "가" || last > "힣") return false;
+  return (last.charCodeAt(0) - 0xac00) % 28 !== 0;
+};
+
 
 
 
@@ -467,8 +475,15 @@ export default function Reimagine() {
       // 모르는 이름이 있으면 조용히 되묻는다 — 멋대로 새 사람을 만들지 않는다.
       if (unknownNames.length) {
         const who = unknownNames.join(", ");
+        // 이미 존칭이 붙은 이름에는 또 붙이지 않는다. AI 는 역할 낱말을 이름으로 그대로
+        // 뽑아 오므로("교수님"·"팀장님"), 규칙대로 붙이면 "교수님님을 처음 언급했어요" 가 된다.
+        // 이 줄은 사용자가 회의를 잡을 때마다 보는 자리라, 어색한 채로 둘 수 없다.
+        // 조사도 함께 고른다 — 존칭을 뗀 자리에서 '교수을' 이 되면 고치나 마나다.
+        // (백엔드가 '일정으로/할 일로' 를 고르는 것과 같은 판단이다 — chat.py 의 _ro.)
+        const named = /(님|씨)$/.test(who.trim()) ? who.trim() : `${who.trim()}님`;
+        const withParticle = `${named}${hasJong(named) ? "을" : "를"}`;
         setAsk({
-          text: lang === "en" ? `First mention of ${who}.` : `${who}님을 처음 언급했어요.`,
+          text: lang === "en" ? `First mention of ${who}.` : `${withParticle} 처음 언급했어요.`,
           q: lang === "en" ? "Add them to People?" : "사람으로 등록해 둘까요?",
           cta: lang === "en" ? "Find them" : "찾아서 추가",
           dest: "people",

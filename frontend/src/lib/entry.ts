@@ -45,9 +45,19 @@ export function entryVerdict(s: EntrySignals): EntryVerdict {
   // '처음 온 사람' 으로 잘못 읽으면 이미 들어와 있던 사람을 인트로로 내보낸다.
   if (s.entered || s.remembered) return "hold";
 
+  // 연결 정보가 아예 없으면 이 앱은 **혼자 도는 로컬 앱**이다. 그때 인트로로 보내면
+  // 막다른 길이 된다 — 그 화면에서 앞으로 가는 길은 로그인뿐인데, 로그인할 서버가 없다.
+  // (실제로 그랬다: 키 없이 clone 해서 띄우면 "Supabase 설정이 없습니다." 앞에서 끝났다.
+  //  supabase.ts 와 .env.example 은 그럴 때 '조용히 혼자 돈다' 고 적어 두었는데, 문턱이
+  //  그 약속을 지키지 않고 있었다.)
+  //
+  // 그래서 아무 데로도 밀지 않고 hold 한다 — 워크스페이스의 문턱(들어가기)이 그 자리에
+  // 서고, 누르면 들어간다. 저장이 없을 뿐 앱은 그대로다.
+  if (!s.configured) return "hold";
+
   // 연결이 있는 앱이라면, 로그인 여부를 알기 전에는 아무 쪽으로도 밀지 않는다.
-  if (s.configured && !s.ready) return "hold";
-  if (s.configured && s.signedIn) return "enter";
+  if (!s.ready) return "hold";
+  if (s.signedIn) return "enter";
 
   return "intro";
 }

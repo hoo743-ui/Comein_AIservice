@@ -47,8 +47,11 @@ describe("문턱 판정", () => {
     assert.equal(at({ leaving: true, ready: true, signedIn: false }), "hold");
   });
 
-  it("연결이 없는 로컬 앱이면 기다리지 않고 곧바로 정한다", () => {
-    assert.equal(at({ configured: false, ready: false }), "intro");
+  it("연결이 없는 로컬 앱은 인트로로 보내지 않는다 — 그쪽은 막다른 길이다", () => {
+    // 인트로에서 앞으로 가는 길은 로그인뿐인데, 로그인할 서버가 없다.
+    // 키 없이 clone 해서 띄우면 "Supabase 설정이 없습니다." 앞에서 끝났다 —
+    // 그 자리에서 워크스페이스를 한 번도 볼 수 없었다.
+    assert.equal(at({ configured: false, ready: false }), "hold");
     assert.equal(at({ configured: false, remembered: true }), "hold");
   });
 });
