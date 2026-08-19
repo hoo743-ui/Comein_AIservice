@@ -157,7 +157,7 @@ Comein_AIservice/
 ├── frontend/             # Next.js — 슬림 레일 + 단일 캔버스. Supabase 에 직접 붙는다
 ├── backend/              # FastAPI — 자연어 파싱 전용(무상태). 엔드포인트 3개
 ├── ai/                   # router.py(프롬프트) + llm/(Gemini·Groq Provider 추상화)
-├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0015)
+├── supabase/migrations/  # 실제로 도는 DB 스키마와 RLS (0001~0016)
 ├── docs/                 # 설계 문서 — 아래 9절 표에 있는 것만 있다
 ├── scripts/              # 손으로 돌려보는 확인용 (테스트 스위트가 아니다)
 ├── render.yaml           # 백엔드 배포 정의 (Render Blueprint)
@@ -181,7 +181,7 @@ Comein_AIservice/
         │  FastAPI (Render)  │   │  Supabase (Postgres) │
         │  ─ 무상태 ─        │   │  Auth · RLS · Realtime│
         │  POST /api/chat    │   │  supabase/migrations/ │
-        │  POST /api/summary │   │    0001~0015          │
+        │  POST /api/summary │   │    0001~0016          │
         │  GET  /health      │   └──────────────────────┘
         └────────┬───────────┘
                  │  LLM 키는 서버에만 둔다
@@ -283,7 +283,7 @@ Comein_AIservice/
 ## 7. 데이터 모델 (주요 엔티티)
 
 > **아래는 설계 어휘이지 지금의 스키마가 아니다.** 실제로 도는 테이블·제약·RLS 정책은
-> `supabase/migrations/0001~0015` 에 있다 — 거기가 유일한 진실이다. 화면이 쓰는 공유 일정·
+> `supabase/migrations/0001~0016` 에 있다 — 거기가 유일한 진실이다. 화면이 쓰는 공유 일정·
 > 참여자·대화방·연결 요청·핸들 같은 것들은 아래 표에 없고, 마이그레이션에는 있다.
 >
 > 특히 아래의 **Todo·Memo·Meeting 표는 세워진 적이 없다.** 되살릴 생각으로 남겨 둔 것이
@@ -424,7 +424,7 @@ POST /api/chat  →  ai/router.py:route()
 | 04_GUI_UX.md | 슬림 레일 + 단일 캔버스, 뷰 구성, 캡처 바, UX 원칙 | 기획 |
 | 05_FRONTEND.md | Next.js 구조(workspace 모듈 20개), 스타일 규칙, Zustand, 서버와 맞추기 | 풀스택 |
 | 06_BACKEND.md | FastAPI 구조, 무상태 패턴, 흔들림에 대한 태도(재시도·폴백·타임아웃) | 풀스택 |
-| 09_DATABASE.md | **실제로 도는 스키마** — 표 14 · 함수 34 · RLS 31 · Realtime 11, 그리고 설계 어휘와의 차이 | 풀스택 |
+| 09_DATABASE.md | **실제로 도는 스키마** — 표 14 · 함수 35 · RLS 31 · Realtime 11, 그리고 설계 어휘와의 차이 | 풀스택 |
 | 10_API.md | Endpoint, **AI↔프론트 계약 JSON Schema** | 풀스택 |
 | 15_DEPLOY.md | Vercel(프론트) + Render(백엔드) + Supabase(DB) · 환경변수 · 콜드스타트 | 풀스택 |
 | 16_TASK.md | 미뤄 둔 것과 **왜 미뤘는지** | 기획 |

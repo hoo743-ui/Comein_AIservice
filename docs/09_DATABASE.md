@@ -1,7 +1,7 @@
 # 09. Database — 실제로 도는 스키마
 
 > **진실은 이 문서가 아니라 [`supabase/migrations/`](../supabase/migrations) 다.**
-> 0001~0015 를 순서대로 올리면 지금 도는 DB 가 된다. 이 문서는 그 15개 파일을 처음 읽는 사람이
+> 0001~0016 을 순서대로 올리면 지금 도는 DB 가 된다. 이 문서는 그 16개 파일을 처음 읽는 사람이
 > **무엇이 어디 있는지** 알 수 있게 짚어 주는 안내지, 별도의 설계도가 아니다.
 > 어긋나면 마이그레이션이 맞고 이 문서가 틀렸다.
 >
@@ -89,7 +89,7 @@ messages_insert with check (sender_id = auth.uid() and public.is_room_member(roo
 insert/update 정책이 없다 — 아래 함수들만이 제안을 만들고 바꾼다. 아무나 직접 `status` 를
 `confirmed` 로 적을 수 있으면 '전원 동의' 는 약속이 아니게 된다.
 
-## 5. 창구 — 표를 직접 만지지 않고 부르는 함수 34개
+## 5. 창구 — 표를 직접 만지지 않고 부르는 함수 35개
 
 권한 판정과 약속이 여기 있다. 화면은 표가 아니라 이 함수들을 부른다.
 
@@ -168,6 +168,7 @@ connections · connection_requests · conversation_states · ai_suggestions
 | 0013 | 연결 요청 — 즉시 잇지 않는다 |
 | 0014 | handle 변경(30일) |
 | **0015** | **`chat_rooms` · `chat_room_members` Realtime** — 첫 1:1 대화가 제때 뜨게 |
+| **0016** | **1:1 방은 정확히 두 사람** — dm_key 를 '포함' 이 아니라 '일치' 로 본다(`is_dm_peer`) |
 
 적용: Supabase 대시보드 → SQL Editor 에 순서대로 붙여넣고 Run. **여러 번 실행해도 안전하다**
 (`if not exists` · `create or replace` · `exception when duplicate_object`).

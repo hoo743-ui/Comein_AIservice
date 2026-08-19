@@ -781,8 +781,11 @@ export default function Reimagine() {
       return;
     }
     clear();
+    // 이름을 안 적어 둔 사람도 대화록에는 이름으로 서야 한다 — 화면이 쓰는 것과 같은 폴백.
     const nameOf = (uid: string) =>
-      uid === ME_ID ? (st.settings.name || "나") : (st.contacts.find((c) => c.id === uid)?.name ?? "누군가");
+      uid === ME_ID
+        ? (st.settings.name || (lang0 === "en" ? "Me" : "나"))
+        : (st.contacts.find((c) => c.id === uid)?.name ?? (lang0 === "en" ? "Someone" : "누군가"));
     // 뒤쪽 40 개만 넘긴다 — 오래된 말까지 다 보내면 요약이 지금 이야기를 놓친다.
     const transcript = msgs.slice(-40).map((m) => `${nameOf(m.senderId)}: ${m.content}`).join("\n");
 

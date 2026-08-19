@@ -339,7 +339,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   eventParticipants: seedParticipants,
   chatRooms: seedRooms,
   chatMessages: seedChatMessages,
-  settings: { name: "나", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: 1 },
+  // 이름의 기본값은 **빈 칸**이다. 예전에는 "나" 로 박혀 있었는데, 그러면 화면 쪽의
+  // 언어별 폴백(`settings.name || (en ? "Me" : "나")`)이 영영 발동하지 않는다 —
+  // 영어로 바꿔도 요약 대화록에 "나: …" 가 그대로 찍혔다.
+  // 설정 화면의 입력칸은 placeholder 로 '이름/Name' 을 보여 주므로 빈 칸이라도 허전하지 않다.
+  settings: { name: "", language: "ko", mode: "student", weekStart: "mon", notifications: true, autoConfirm: false, textScale: 1 },
   seedsRebased: false,
   remoteLive: false,
 
