@@ -1,0 +1,83 @@
+# 밀기 전에 한 번 세워 본다.
+#
+# 이 자리가 없어서 c72ecd8 이 열흘 가까이 무너진 채로 서 있었다. 그 커밋은 만든 사람의
+# 로컬에서는 빌드됐다 — 다만 컴포넌트 아홉 파일이 .gitignore 에 삼켜져 저장소에는
+# 들어가지 않았고, 저장소만 보는 눈이 하나도 없었다(docs/24 §25).
+#
+# 그래서 여기서 하는 일은 "테스트를 돌린다" 보다 앞선다: **저장소에 들어간 것만으로
+# 서는가**를 묻는다. clone → install → build 가 그 질문의 다른 이름이다.
+#
+# 두 갈래를 따로 세운다. 프론트가 무너져도 백엔드 결과는 보이고, 그 반대도 마찬가지다 —
+# 하나가 다른 하나를 가리면 어디가 아픈지 알아내는 데 한 바퀴가 더 든다.
+
+name: ci
+
+on:
+  push:
+    branches: [main, develop, "feature/**"]
+  pull_request:
+  workflow_dispatch:
+
+# 같은 브랜치에 연달아 밀면 앞의 것은 접는다. 마지막 것만 맞으면 된다.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: frontend — tsc · test · build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: frontend/.nvmrc
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # ci 는 package-lock.json 그대로 설치한다(install 과 달리 lock 을 고쳐 쓰지 않는다).
+      - run: npm ci
+
+      # 타입부터. 여기서 걸리는 것은 대개 '있다고 믿었는데 없는 것' 이다 —
+      # 이번 사고가 정확히 그 모양이었다(TS2307 Cannot find module './parts/…').
+      - name: tsc
+        run: npx tsc --noEmit -p tsconfig.json
+
+      - name: test
+        run: npm test
+
+      # 마지막은 진짜 빌드. tsc 가 통과해도 빌드가 무너지는 자리가 따로 있다
+      # (서버 컴포넌트 경계·정적 생성). 배포가 하는 일을 여기서 먼저 해 본다.
+      #
+      # 환경변수는 일부러 주지 않는다. 키가 없으면 앱은 조용히 혼자 도는 것이 설계이고
+      # (isSupabaseConfigured=false), 그 상태로도 빌드가 서야 한다.
+      - name: build
+        run: npm run build
+
+  backend:
+    name: backend — pytest
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # render.yaml 의 PYTHON_VERSION 과 같은 자리를 본다. 두 곳이 갈리면
+          # "내 컴퓨터에선 됐는데" 가 배포에서 다시 나온다.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements-dev.txt
+
+      - run: pip install -r requirements-dev.txt
+        working-directory: backend
+
+      # backend/ 에서 돌린다 — pytest.ini 와 app/ 가 거기 있다.
+      # 시험은 LLM 을 부르지 않는다(Provider 를 목업으로 갈아 끼운다). 키가 필요 없다.
+      - run: pytest -q
+        working-directory: backend
