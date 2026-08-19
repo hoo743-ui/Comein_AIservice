@@ -1591,7 +1591,10 @@ html { font-size: 17px; }
   grid-template-rows: minmax(0, 1fr); gap: 0; }
 .rmg-evsplit[data-split="true"][data-tlopen="false"] { grid-template-columns: minmax(0, 1fr) auto; }
 .rmg-evsplit[data-split="true"] .rmg-drawer-chat { min-width: 0; padding-right: var(--sp-2); }
-.rmg-evtl { position: relative; min-width: 0; padding-left: var(--sp-4); display: flex; flex-direction: column; }
+/* 자리가 모자라면 이 칸이 통째로 스크롤한다 — 안의 격자를 0 에 수렴하게 눌러 버리는
+   것보다 낫다. 눌린 격자는 있으나 마나이고, 사람은 그걸 '깨졌다' 로 읽는다. */
+.rmg-evtl { position: relative; min-width: 0; min-height: 0; padding-left: var(--sp-4);
+  display: flex; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; }
 
 /* 사이의 선 — 평소엔 선, 손이 닿으면 손잡이. */
 .rmg-evgrip { position: relative; cursor: col-resize; touch-action: none; }
@@ -1612,6 +1615,13 @@ html { font-size: 17px; }
 /* 대화 ‖ 하루가 나란히 설 수 있는지는 화면이 아니라 이 칸의 폭이 정한다.
    캘린더에서 일정을 열면 이 칸은 420px 로 고정된다 — 화면이 아무리 넓어도
    그 안에서 하루(최소 340px)를 옆에 세우면 대화에 30px 밖에 남지 않았다. */
+/* 나란히 설 때는 이 칸의 머리를 접는다.
+   '함께하는 일정 · 캡스톤 회의 · 8월 12일 14:00 · 참여자 2명' — 이 네 줄은 바로 위
+   패널 머리가 이미 하고 있는 말이다. 그 자리에서는 90px 을 같은 말에 쓰고, 그만큼
+   하루가 눌린다. 위아래로 쌓일 때는 머리가 멀어지므로 그때만 남긴다. */
+@container evaside (min-width: 761px) {
+  .rmg-tl-ctx { display: none; }
+}
 @container evaside (max-width: 760px) {
   .rmg-evsplit[data-split="true"] { grid-template-columns: minmax(0, 1fr); }
   .rmg-evgrip { display: none; }
@@ -1645,9 +1655,17 @@ html { font-size: 17px; }
 .rmg-tl-ctxt { margin: 0; font-size: 1rem; font-weight: 400; letter-spacing: -0.01em; color: var(--ink); }
 .rmg-tl-ctxm { margin: 3px 0 0; font-size: 0.8rem; font-weight: 300; color: var(--muted); font-variant-numeric: tabular-nums; }
 
-/* 칸이 넓어진 만큼 하루도 길게 — 62vh 로 눌러 두면 넓힌 의미가 없다. */
-.rmg-tl { display: flex; flex-direction: column; gap: var(--sp-1); max-height: min(72vh, 760px); }
-.rmg-tl-scroll { overflow-y: auto; overscroll-behavior: contain; }
+/* 칸이 넓어진 만큼 하루도 길게 — 62vh 로 눌러 두면 넓힌 의미가 없다.
+   다만 **제 칸 안에서** 길어야 한다. max-height 만으로는 부족했다: 옆 칸(대화)이 정해 준
+   높이보다 이 칸이 커지면 넘친 만큼이 패널 밖으로 흘러 나가고, 그 밖에 있던 것이
+   범례와 '빈 칸은 모두 가능' 안내였다 — 화면을 읽는 열쇠가 화면 밖에 있었던 셈이다.
+   flex 로 제 칸을 채우고, 남는 것은 아래 스크롤 상자가 흡수한다(§27.2 와 같은 종류). */
+.rmg-tl { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: var(--sp-1); max-height: min(72vh, 760px); }
+/* 위쪽 여백은 첫 눈금(07)을 위한 자리다 — 시각 글자가 선 위에 반쯤 걸터앉는데(top: -6px)
+   맨 위에는 걸터앉을 위가 없어 잘려 나갔다. §26.4 에서 큰 시간표에 한 것과 같은 이유. */
+/* 하루는 적어도 이만큼은 보여야 한다 — 다섯 시간치. 그 아래로 눌리면 시간표가 아니라
+   띠가 되고, 시간표가 아닌 시간표는 화면에 있을 이유가 없다. */
+.rmg-tl-scroll { flex: 1; min-height: 150px; overflow-y: auto; overscroll-behavior: contain; padding-top: 7px; }
 .rmg-tl-scroll::-webkit-scrollbar { width: 6px; }
 .rmg-tl-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 14%, transparent); border-radius: 3px; }
 .rmg-tl-head { display: flex; align-items: center; gap: var(--sp-1); }
@@ -1664,23 +1682,42 @@ html { font-size: 17px; }
 .rmg-tl-grid { position: relative; margin-left: 26px; border-top: 1px solid var(--hair); }
 .rmg-tl-hour { position: absolute; left: 0; right: 0; border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
 .rmg-tl-hour:first-child { border-top: 0; }
-.rmg-tl-hourl { position: absolute; left: -26px; top: -6px; font-size: 0.62rem; color: var(--faint);
+/* 시각은 읽으라고 있는 글자다 — --faint 로는 아래 면 위에서 사라진다. */
+.rmg-tl-hourl { position: absolute; left: -26px; top: -6px; font-size: 0.66rem; color: var(--muted);
   font-variant-numeric: tabular-nums; }
 .rmg-tl-slots { position: absolute; inset: 0; }
-/* 가능한 사람이 많을수록 진하다. 색을 쓰지 않는다 — 농도만으로 읽힌다. */
+
+/* 칠하는 것을 뒤집었다 — 예전에는 **가능한 사람 수**만큼 진하게 칠했다.
+   그런데 가장 흔한 경우가 '모두 가능' 이라, 좋은 소식이 하루 전체를 회색으로 덮었다.
+   덮인 화면에서는 시각 눈금도 내 일정도 읽히지 않았고, 무엇보다 그 회색이 '막혀 있다'
+   로 읽혔다 — 뜻과 정반대다.
+
+   이제 **모자란 쪽**을 칠한다: 못 오는 사람이 있을 때만 그만큼 흐려진다.
+   다 되는 시간은 비어 있고, 사람이 찾는 것이 바로 그 빈 자리다.
+   (드러나는 정보는 같다 — 못 오는 n 명 = 전체 − 가능한 n 명. 남의 일정 내용은 여전히 안 온다.) */
 .rmg-tl-slot { position: absolute; left: 0; right: 0; border: 0; padding: 0; cursor: pointer;
-  background: color-mix(in srgb, var(--ink) calc(var(--fill, 0) * 11%), transparent);
+  background: color-mix(in srgb, var(--ink) calc(var(--busy, 0) * 14%), transparent);
   transition: background 140ms ease-out, box-shadow 140ms ease-out; }
-.rmg-tl-slot:hover { background: color-mix(in srgb, var(--ink) calc(var(--fill, 0) * 11% + 5%), transparent); }
-.rmg-tl-slot.on { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 60%, transparent); }
-.rmg-tl-slot:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; }
+.rmg-tl-slot:hover { background: color-mix(in srgb, var(--ink) calc(var(--busy, 0) * 14% + 6%), transparent); }
+/* 고른 칸 — 예전에는 15px 짜리 칸에 1px 안쪽 테두리 하나였다. 아무도 못 봤다.
+   면으로 칠하고 왼쪽에 굵은 표식을 세운다. z-index 로 일정 블록 위에 올린다 —
+   고른 자리가 무언가에 가려지면 '눌리지 않았다' 로 읽힌다. */
+.rmg-tl-slot.on { z-index: 3;
+  background: color-mix(in srgb, var(--accent) 26%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 80%, transparent),
+              inset 4px 0 0 0 var(--accent); }
+.rmg-tl-slot:focus-visible { z-index: 3; outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: -2px; }
 
 /* 내 일정 — 잉크 면. 제목까지 보인다(내 것이므로).
    칸이 넓어졌으니 블록도 제 폭을 쓴다(예전엔 오른쪽 34% 를 비워 두느라 제목이 잘렸다). */
 .rmg-tl-ev { position: absolute; left: 2px; right: 12%; border-radius: var(--r-sm); overflow: hidden;
   background: color-mix(in srgb, var(--ink) 78%, transparent); color: var(--bg);
   padding: 2px 7px; pointer-events: none; }
-.rmg-tl-ev.self { background: color-mix(in srgb, var(--ink) 32%, transparent); color: var(--ink); }
+/* 이 방의 일정 자신 — 예전에는 잉크 32% 면 위에 잉크 글자였다(어두운 데 어두운 글자).
+   '내 다른 일정' 과 구별은 되어야 하지만, 구별하느라 안 읽히면 아무 소용이 없다.
+   그래서 면을 비우고 테두리로 말한다: 여기가 지금 이야기하는 그 자리다. */
+.rmg-tl-ev.self { background: color-mix(in srgb, var(--ink) 8%, transparent); color: var(--ink);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 34%, transparent); }
 .rmg-tl-evt { font-size: 0.62rem; line-height: 1.25; display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* AI 제안 — 보라. 이 화면에서 보라는 오직 AI 가 한 일의 언어다. */
@@ -1696,7 +1733,20 @@ html { font-size: 17px; }
 .rmg-tl-key { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
 .rmg-tl-key:not(:first-child) { margin-left: 6px; }
 .rmg-tl-key.ev { background: color-mix(in srgb, var(--ink) 78%, transparent); }
-.rmg-tl-key.av { background: color-mix(in srgb, var(--ink) 11%, transparent); }
+.rmg-tl-key.av { background: color-mix(in srgb, var(--ink) 14%, transparent); }
+/* 빈 칸이 곧 답이라는 것 — 다섯 마디로 가르친다. 이 줄이 없으면 뒤집은 뜻이 안 읽힌다. */
+.rmg-tl-open { margin: 4px 0 0; font-size: 0.68rem; color: var(--faint); }
+
+/* 다 되는 시각 — '다른 시간' 을 눌렀을 때 사람이 정말로 알고 싶은 것. */
+.rmg-tl-free { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; padding-top: var(--sp-1); }
+.rmg-tl-freek { font-size: 0.7rem; color: var(--faint); flex-shrink: 0; }
+.rmg-tl-freeb { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 60%, transparent);
+  font: inherit; font-size: 0.76rem; font-variant-numeric: tabular-nums; color: var(--ink);
+  padding: 3px 10px; border-radius: 999px; cursor: pointer;
+  transition: border-color 160ms ease-out, background 160ms ease-out; }
+.rmg-tl-freeb:hover { border-color: color-mix(in srgb, var(--ink) 26%, var(--hair));
+  background: color-mix(in srgb, var(--surface) 95%, transparent); }
+.rmg-tl-freeb:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
 .rmg-tl-key.pr { background: color-mix(in srgb, var(--accent) 30%, transparent);
   border: 1px solid color-mix(in srgb, var(--accent) 62%, transparent); }
 

@@ -114,6 +114,29 @@ async def summarize(req: SummaryRequest) -> SummaryResponse:
     korean = req.lang != "en"
     where = f'"{req.title}"' if req.title else "이 일정" if korean else "this event"
 
+    # 기준 시각 — 있으면 상대적인 말을 날짜로 옮기게 하고, 없으면 아예 옮기지 말라고 이른다.
+    # 지어낸 날짜 하나가 요약 전체를 못 믿을 글로 만든다.
+    if req.now and korean:
+        when = (
+            f"\n지금은 {req.now} 입니다. 대화 속의 '내일'·'다음 주 화요일' 같은 말은 "
+            "이 시각을 기준으로 **실제 날짜로 옮겨** 적습니다(예: 8월 20일 (목) 15시).\n"
+        )
+    elif req.now:
+        when = (
+            f"\nThe current time is {req.now}. Resolve relative wording in the thread "
+            '("tomorrow", "next Tuesday") into actual dates.\n'
+        )
+    elif korean:
+        when = (
+            "\n대화 속의 '내일'·'그때' 같은 상대적인 말은 **그대로 옮기지 않습니다** — "
+            "언제 읽을지 모르는 글이라 뜻이 달라집니다. 정해진 날짜가 대화에 없으면 미정으로 둡니다.\n"
+        )
+    else:
+        when = (
+            '\nDo not carry relative wording ("tomorrow", "then") into the summary — '
+            "it will be read later. If no absolute date was said, leave it pending.\n"
+        )
+
     prompt = (
         (
             f"다음은 {where} 에 대한 대화입니다. 뒤늦게 들어온 사람이 흐름을 잡을 수 있도록 "

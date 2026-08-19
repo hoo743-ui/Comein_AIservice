@@ -190,6 +190,40 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
   const parts = participants.length;
   const going = participants.filter((p) => p.status === "accepted").length;
 
+  /** 다 되는 시각 몇 개.
+   *
+   *  왜 늘 보여 주는가 — 제안 카드의 '다른 시간' 은 거절만 할 뿐 **언제가 되는지는 말하지
+   *  않았다.** 거절하고 나면 사람은 다시 처음부터 시간을 찾아야 했다. 그런데 그 답은 이미
+   *  이 화면 안에 있다(avail). 물어보기 전에 답을 옆에 두는 편이 낫다.
+   *
+   *  이어지는 빈 구간만 센다 — 30분씩 흩어진 틈은 모여서 만날 수 있는 시간이 아니다. */
+  const freeStarts = React.useMemo(() => {
+    if (!avail.length) return [] as Date[];
+    // 다 되는 30분 칸들.
+    const free = new Set<number>();
+    for (const r of avail) if (r.total > 0 && r.available === r.total) free.add(+new Date(r.start));
+    /** 그 시각부터 한 시간이 통째로 비는가 — 30분씩 흩어진 틈은 모여서 만날 시간이 아니다. */
+    const ok = (t: number) => free.has(t) && free.has(t + 30 * 60_000);
+
+    // 사람이 실제로 약속을 잡는 시각부터 본다. 예전에는 빈 구간의 **시작**을 내놓았는데,
+    // 하루가 통째로 비면 그게 늘 "07:00" 이었다 — 맞는 말이지만 아무도 7시에 만나지 않는다.
+    const anchors = [10, 11, 14, 15, 16, 17, 19];
+    const out: number[] = [];
+    for (const h of anchors) {
+      const at = new Date(day); at.setHours(h, 0, 0, 0);
+      if (ok(+at)) out.push(+at);
+    }
+    // 그 시각들이 다 막혀 있으면, 그때는 빈 구간이 열리는 자리를 그대로 내놓는다.
+    if (!out.length) {
+      for (const t of [...free].sort((x, y) => x - y)) {
+        if (ok(t) && !free.has(t - 30 * 60_000)) out.push(t);   // 구간이 시작하는 지점만
+      }
+    }
+    // 이미 지난 시각은 권하지 않는다. 셋이면 족하다 — 목록이 길어지면 그것도 고르는 일이 된다.
+    const now = Date.now();
+    return out.filter((t) => t > now).slice(0, 3).map((t) => new Date(t));
+  }, [avail, day]);
+
   return (
     <div className="rmg-tl">
       {/* 이 칸이 무엇의 시간인지 먼저 말한다 — 달력이 홀로 떠 있으면 부가 기능처럼 읽힌다. */}
@@ -229,14 +263,16 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
           {Array.from({ length: slots }, (_, i) => {
             const at = new Date(dayStart); at.setMinutes(at.getMinutes() + i * SLOT_MIN);
             const a = availAt.get(at.getTime());
-            const ratio = a && a.total > 0 ? a.available / a.total : null;
+            // 칠하는 것은 **모자란 쪽**이다. 다 되는 시간은 비어 있고, 사람이 찾는 것이 그 빈 자리다.
+            // (모르는 구간은 0 — '모른다' 를 '바쁘다' 로 바꿔 읽지 않는다.)
+            const busy = a && a.total > 0 ? (a.total - a.available) / a.total : 0;
             const on = picked && +picked === +at;
             return (
               <button
                 key={i}
                 type="button"
                 className={`rmg-tl-slot ${on ? "on" : ""}`}
-                style={{ top: i * slotH, height: slotH, ["--fill" as string]: ratio == null ? "0" : String(ratio) }}
+                style={{ top: i * slotH, height: slotH, ["--busy" as string]: String(busy) }}
                 onClick={() => setPicked(on ? null : at)}
                 title={
                   a
@@ -289,10 +325,35 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
         </div>
       )}
 
+      {/* 다 되는 시각 — 누르면 그 자리가 후보가 되고, 바로 위 줄에서 제안이 열린다.
+          '다른 시간' 을 누른 사람이 다음에 할 일이 여기 한 번의 누름으로 끝난다. */}
+      {freeStarts.length > 0 && (
+        <div className="rmg-tl-free">
+          <span className="rmg-tl-freek">{en ? "All free" : "다 되는 시각"}</span>
+          {freeStarts.map((d) => (
+            <button
+              key={+d}
+              type="button"
+              className="rmg-tl-freeb"
+              onClick={() => setPicked(d)}
+              title={en ? "Pick this time" : "이 시간을 고릅니다"}
+            >
+              {fmtTime(d)}
+            </button>
+          ))}
+        </div>
+      )}
+
       <p className="rmg-tl-legend">
         <span className="rmg-tl-key ev" /> {en ? "Yours" : "내 일정"}
-        <span className="rmg-tl-key av" /> {en ? "Free" : "가능"} {total > 0 ? `· ${total}${en ? "" : "명"}` : ""}
+        <span className="rmg-tl-key av" /> {en ? "Someone busy" : "누군가 바쁨"}
         <span className="rmg-tl-key pr" /> {en ? "Proposed" : "제안"}
+      </p>
+      {/* 뒤집은 뜻을 다섯 마디로 가르친다 — 이 줄이 없으면 빈 칸이 '아무것도 없음' 으로 읽힌다. */}
+      <p className="rmg-tl-open">
+        {en
+          ? `Blank means everyone is free${total > 0 ? ` (${total})` : ""}.`
+          : `빈 칸은 ${total > 0 ? `${total}명 ` : ""}모두 가능한 시간이에요.`}
       </p>
     </div>
   );
@@ -441,6 +502,19 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
     : `참여자 ${participants.length}명, 참석 ${accepted} — 관리`;
   const categoryName = categoryLabel(classifyEvent(event, mode), mode, en);
 
+  /** 제안 카드 — 어디에 세울지는 아래에서 정한다(하루가 옆에 있으면 그 칸으로 간다). */
+  const proposalCard = proposal && onAnswerProposal ? (
+    <ProposalCard
+      proposal={proposal}
+      participants={participants}
+      nameOf={nameOf}
+      lang={lang}
+      busy={!!proposalBusy}
+      error={proposalError ?? null}
+      onAnswer={onAnswerProposal}
+    />
+  ) : null;
+
   return (
     <aside className="rmg-evpanel" role="region" aria-label={event.title}>
       <div className="rmg-drawer-head">
@@ -498,18 +572,12 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
         </div>
       )}
 
-      {/* AI 가 시간을 내놓았으면 대화보다 먼저 — 지금 답을 기다리는 건 이것이다. */}
-      {proposal && onAnswerProposal && (
-        <ProposalCard
-          proposal={proposal}
-          participants={participants}
-          nameOf={nameOf}
-          lang={lang}
-          busy={!!proposalBusy}
-          error={proposalError ?? null}
-          onAnswer={onAnswerProposal}
-        />
-      )}
+      {/* AI 가 시간을 내놓았으면 대화보다 먼저 — 지금 답을 기다리는 건 이것이다.
+          다만 하루가 옆에 서 있으면 **그 칸 안으로** 옮겨 간다(아래 rmg-evtl).
+          여기 두면 카드가 패널 높이를 먼저 가져가고, 대화와 하루가 그만큼씩 눌린다 —
+          실제로 하루가 45px 까지 짓눌려 '캘린더가 안 보인다' 가 됐다.
+          그리고 제안은 **시간에 대한 말**이라, 그 시간이 그려진 자리 옆에 서는 것이 맞다. */}
+      {!timeline && proposalCard}
 
       {/* 내 참석 여부 — 여럿이 모이는 자리는 '초대됐다'로 끝나면 안 되고 답이 돌아와야 한다.
           이미 답했으면 조용히 상태만 두고, 마음이 바뀌면 다시 누를 수 있게 남겨둔다. */}
@@ -761,6 +829,9 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
                 onClick={() => setTlOpen(false)}
                 aria-label={en ? "Hide schedule" : "일정 접기"}
               >›</button>
+              {/* 제안은 그 시간이 그려진 자리 바로 위에 선다 — 카드가 말하는 '8월 18일 15시' 가
+                  아래 격자에서 어디인지 눈으로 이어진다. 대화는 이제 밀려나지 않는다. */}
+              {proposalCard}
               {timeline}
             </div>
           </>

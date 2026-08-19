@@ -128,12 +128,56 @@ FOLLOW-UP:
 """
 
 
+def _thread_block(context: dict[str, Any] | None) -> str:
+    """이 말이 대화 한복판에서 나온 것이라면, 그 앞뒤를 함께 보여 준다.
+
+    왜 필요한가 — 예전에는 방에서도 캡처 바와 **똑같이** 한 줄만 보냈다. 그런데 두 자리는
+    말의 성질이 다르다:
+
+      캡처 바 : "다음 주 화요일 3시에 교수님 미팅" — 혼자 서는 완결된 부탁
+      대화    : "그럼 4시"                        — 앞말이 없으면 아무것도 아닌 말
+
+    앞말 없이 "그럼 4시" 를 받으면 모델은 오늘 4시로 읽는다. 대화에서는 그게 대개 틀리다.
+
+    그리고 성질이 다른 만큼 **해야 할 일도 다르다.** 캡처 바는 부탁을 받는 자리라 모르면
+    되묻는 것이 맞지만, 대화는 두 사람 사이라 우리가 끼어들어 묻는 것이 방해가 된다.
+    같은 프롬프트를 쓰되 이 블록이 그 차이를 말한다.
+    """
+    thread = (context or {}).get("thread")
+    if not isinstance(thread, list):
+        return ""
+    lines = [str(t).strip() for t in thread if isinstance(t, str) and str(t).strip()]
+    if not lines:
+        return ""
+    joined = "\n".join(f"  {ln}" for ln in lines[-8:])   # 여덟 마디면 '그때' 가 무엇인지 족하다
+    return f"""
+IN A CONVERSATION:
+- The message below is ONE line of an ongoing conversation between people.
+  Here is what was said just before it (oldest first):
+{joined}
+- Resolve short or relative wording against that thread. "그럼 4시" means the day they have
+  been talking about, not today by default. If the thread never settled on a day, do not
+  pick one.
+- **Produce an item ONLY when they are actually settling on a time.** In a conversation most
+  lines are not requests:
+    · a refusal or a constraint  ("그때는 안 돼", "3시에 수업 있어")
+    · a question                 ("언제가 좋아?")
+    · small talk
+  For those return an EMPTY `items` array. A stated constraint is not a schedule — it is the
+  reason a schedule cannot be at that hour. Turning it into one hands the person back the very
+  time they just ruled out.
+- **`ask` must be null here.** This is a conversation between people; a question from us lands
+  in the middle of it. If something is missing, they will work it out themselves.
+"""
+
+
 async def route(message: str, user_id: str = "default-user", context: dict[str, Any] | None = None) -> dict:
     """자연어 메시지를 파싱하여 ParseResponse 규격의 딕셔너리로 반환한다."""
     provider = get_provider(Task.GENERATE)
 
     now, where = _now_iso(context)
     follow_up = _pending_block(context)
+    thread = _thread_block(context)
 
     prompt = f"""
 You are an intelligent workspace assistant. Extract information from the user's message and categorize it into actionable items.
@@ -153,7 +197,7 @@ IMPORTANT DATE/TIME RULES:
   Only produce an hour between 00:00 and 05:59 when the user says so explicitly
   ("새벽 3시", "3am", "오전 3시"). People do not schedule meetings at 3 in the morning.
 
-{follow_up}
+{follow_up}{thread}
 User Message: {message}
 
 Extract all relevant schedules, meetings, and todos from the user message.

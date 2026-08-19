@@ -803,15 +803,40 @@ export default function Reimagine() {
     // 판단은 이미 lib/conversation 이 갖고 있다(§9). 화면이 규칙을 새로 지어내지 않고
     // 그것에 묻는다: 시간을 정하자는 뜻(제안·가용·언제 볼까)일 때만 AI 에게 넘긴다.
     const read = analyzeMessage(text, new Date());
-    const wantsTime = read.intent === "proposal" || read.intent === "availability" || read.intent === "scheduling_request";
+    // 규칙이 **스스로 애매하다고 말한 경우**(needsModel)도 넘긴다. 예전에는 그 갈래가
+    // intent:"chatter" 로 떨어져 아무 데도 가지 않았다 — 규칙이 모른다고 한 바로 그 자리에서
+    // 모델에게 묻지 않고 있었던 셈이다. 이제 안전한 이유는 아래에서 대화 맥락(thread)을
+    // 함께 보내기 때문이다: 프롬프트가 "정말로 시간을 정하는 중일 때만" 항목을 만든다.
+    const wantsTime = read.intent === "proposal" || read.intent === "availability"
+      || read.intent === "scheduling_request" || read.needsModel;
     if (!wantsTime) return;
 
     void (async () => {
       try {
+        // 앞말을 함께 보낸다. "그럼 4시" 는 앞말 없이는 오늘 4시로 읽힌다 —
+        // 그리고 캡처 바와 달리 이 자리에서는 그게 대개 틀리다.
+        const st = useWorkspace.getState();
+        const rid = st.chatRooms.find((r) => r.eventId === eventId)?.id ?? null;
+        const thread = rid
+          ? st.chatMessages
+              .filter((m) => m.roomId === rid && m.content !== text)
+              .sort((x, y) => +new Date(x.createdAt) - +new Date(y.createdAt))
+              .slice(-8)
+              .map((m) => `${m.senderId === ME_ID ? (st.settings.name || "나") : (st.contacts.find((c) => c.id === m.senderId)?.name ?? "상대")}: ${m.content}`)
+          : [];
         const res = await fetch(`${API_BASE}/api/chat`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ message: text }),
+          // 캡처 바와 **같은 것을 보낸다.** 예전에는 여기만 `{message}` 뿐이라, 같은 문장이
+          // 어느 칸에 들어가느냐에 따라 다른 AI 를 만났다(방에서는 서버 시계=UTC 로 떨어졌다).
+          body: JSON.stringify({
+            message: text,
+            context: {
+              now: localIsoNow(),
+              tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
+              ...(thread.length ? { thread } : {}),
+            },
+          }),
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -878,7 +903,10 @@ export default function Reimagine() {
       const res = await fetch(`${API_BASE}/api/summary`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ transcript, title: ev?.title ?? null, lang: st.settings.language }),
+        // 지금이 언제인지 함께 보낸다 — 요약은 **뒤늦게 온 사람**이 읽는 글인데,
+        // 대화 속의 "내일 3시" 는 말한 그 순간에만 뜻이 있다. 기준이 없으면 그 말을
+        // 그대로 옮길 수밖에 없고, 읽는 사람은 어느 내일인지 알 수 없다.
+        body: JSON.stringify({ transcript, title: ev?.title ?? null, lang: st.settings.language, now: localIsoNow() }),
       });
       if (!res.ok) {
         fail(lang0 === "en" ? "Couldn't read the conversation. Try again." : "대화를 정리하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
