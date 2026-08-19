@@ -21,6 +21,14 @@ import urllib.request
 
 from dotenv import load_dotenv
 
+# 한국어 Windows 의 콘솔은 cp949 다. 이 파일의 안내문에는 '—' 와 '·' 가 들어 있어서,
+# 그냥 print 하면 UnicodeEncodeError 로 **점검 자체가 죽었다** — 모델이 사라졌는지
+# 알려 주라고 만든 도구가 팀 PC 에서 한 번도 끝까지 돈 적이 없었다는 뜻이다.
+# 출력만 UTF-8 로 돌려 둔다(못 그리는 글자는 대체 문자로).
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, ROOT)
 load_dotenv(os.path.join(ROOT, "backend", ".env"))
@@ -85,10 +93,15 @@ def check_groq(model_name: str) -> bool:
         return True
 
     print(f"{FAIL} groq   — '{model_name}' 이(가) 없다. Groq 은 낡은 모델을 실제로 내린다.")
-    near = [m for m in usable if "llama" in m][:8]
+    # 예전에는 'llama' 가 든 이름만 골라 보여 줬다. 그런데 실제로 벌어진 일은
+    # **llama 계열이 통째로 사라진 것**이라, 그 필터로는 한 줄도 못 보여 준다 —
+    # 갈아 끼울 이름을 찾으라면서 후보를 감추는 셈이었다.
+    # 대화가 되는 것만 남기고 전부 보여 준다(음성·안전성 모델은 갈아 끼울 대상이 아니다).
+    skip = ("whisper", "orpheus", "guard", "tts", "embed")
+    near = [m for m in usable if not any(k in m for k in skip)]
     if near:
-        print("        비슷한 것들: " + ", ".join(near))
-    print("        고칠 곳: ai/llm/groq.py 의 GroqProvider(model_name=...)")
+        print("        쓸 수 있는 대화 모델: " + ", ".join(sorted(near)))
+    print("        고칠 곳: ai/llm/groq.py 의 DEFAULT_MODEL")
     return False
 
 

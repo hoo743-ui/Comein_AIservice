@@ -674,6 +674,9 @@ export default function Reimagine() {
   // 아무 일도 안 일어남' 으로만 보였다. 답이 막혔으면 왜 막혔는지는 사람이 알아야 한다(§17).
   // 겹친 사람이 무엇을 하는지는 여기서도 말하지 않는다 — 몇 명인지까지다(§11).
   const proposalConflict = useWorkspace((s) => s.proposalConflict);
+  // 화면은 바꿨는데 서버가 받지 않은 자리 — 스토어가 되돌린 뒤 남긴 한 줄.
+  const writeError = useWorkspace((s) => s.writeError);
+  const clearWriteError = useWorkspace((s) => s.clearWriteError);
   const requestError = useWorkspace((s) => s.requestError);
   const clearProposalError = useWorkspace((s) => s.clearProposalError);
   const [proposalBusy, setProposalBusy] = React.useState(false);
@@ -745,6 +748,9 @@ export default function Reimagine() {
   // 근거가 없는 갈래는 서버가 빈 채로 보낸다. 빈 갈래는 화면에도 서지 않는다.
   const [summaries, setSummaries] = React.useState<Record<string, ChatSummary>>({});
   const [summaryBusy, setSummaryBusy] = React.useState(false);
+  // 정리하지 못한 방 — 그 이유 한 줄. 예전에는 실패가 조용히 삼켜져서, 사용자가 '요약 보기'
+  // 를 눌러도 아무것도 열리지 않고 버튼만 '요약 닫기' 로 바뀌었다(닫을 것도 없이).
+  const [summaryErrors, setSummaryErrors] = React.useState<Record<string, string>>({});
   // AI 가 스스로 정리한 방 — 그 방에서는 요약을 펼친 채로 맞이한다.
   const [autoSummed, setAutoSummed] = React.useState<Record<string, boolean>>({});
 
@@ -752,7 +758,14 @@ export default function Reimagine() {
     const st = useWorkspace.getState();
     const ev = st.schedules.find((s) => s.id === eventId);
     const msgs = st.messagesOf(eventId);
-    if (msgs.length === 0) return;
+    const lang0 = st.settings.language;
+    const fail = (why: string) => setSummaryErrors((m) => ({ ...m, [eventId]: why }));
+    const clear = () => setSummaryErrors((m) => { const n = { ...m }; delete n[eventId]; return n; });
+    if (msgs.length === 0) {
+      fail(lang0 === "en" ? "Nothing to summarize yet." : "아직 정리할 말이 없어요.");
+      return;
+    }
+    clear();
     const nameOf = (uid: string) =>
       uid === ME_ID ? (st.settings.name || "나") : (st.contacts.find((c) => c.id === uid)?.name ?? "누군가");
     // 뒤쪽 40 개만 넘긴다 — 오래된 말까지 다 보내면 요약이 지금 이야기를 놓친다.
@@ -767,18 +780,29 @@ export default function Reimagine() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ transcript, title: ev?.title ?? null, lang: st.settings.language }),
       });
-      if (!res.ok) return;
+      if (!res.ok) {
+        fail(lang0 === "en" ? "Couldn't read the conversation. Try again." : "대화를 정리하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+        return;
+      }
       const data = await res.json();
       const s = (k: string) => (typeof data?.[k] === "string" ? data[k].trim() : "");
       const sum: ChatSummary = { recap: s("recap"), decided: s("decided"), pending: s("pending"), next: s("next"), title: s("title") };
       // 네 갈래가 모두 비었으면(옛 서버거나 근거가 없거나) 예전 형태로 물러난다.
       if (!sum.recap && !sum.decided && !sum.pending && !sum.next) {
         const lines: string[] = Array.isArray(data?.lines) ? data.lines.filter((l: unknown) => typeof l === "string" && l.trim()) : [];
-        if (!lines.length) return;
+        if (!lines.length) {
+          // 서버가 답하긴 했는데 갈래가 전부 비었다 — 근거가 없어서다. 실패와는 다른 말을 한다.
+          fail(lang0 === "en" ? "Not enough was said to summarize yet." : "아직 정리할 만큼 이야기가 쌓이지 않았어요.");
+          return;
+        }
         sum.recap = lines.join(" ");
       }
       setSummaries((m) => ({ ...m, [eventId]: sum }));
-    } catch { /* 닿지 않으면 조용히 둔다 — 요약은 없어도 대화는 그대로다 */ }
+      clear();
+    } catch {
+      // 요약이 없어도 대화는 그대로다 — 다만 조용히 두지는 않는다. 누른 사람은 답을 기다린다.
+      fail(lang0 === "en" ? "Couldn't reach the assistant." : "AI 에 닿지 못했어요. 잠시 뒤 다시 눌러 주세요.");
+    }
     finally { setSummaryBusy(false); }
   }, []);
 
@@ -1312,6 +1336,7 @@ export default function Reimagine() {
                 : null
           }
           summary={summaries[openEventData.id] ?? null}
+          summaryError={summaryErrors[openEventData.id] ?? null}
           summaryAuto={!!autoSummed[openEventData.id]}
           onRename={(t) => renameSchedule(openEventData.id, t)}
           summaryBusy={summaryBusy}
@@ -1751,6 +1776,25 @@ export default function Reimagine() {
         {/* 알아챈 것 — 경고가 아니라 '이해했고, 이런 게 필요해 보인다' 는 말.
             스침과 달리 스스로 사라지지 않는다(사용자의 답을 기다린다).
             입력창보다 가볍게 선다: 면도 테두리도 한 겹 옅고, 손잡이는 하나뿐이다. */}
+        {/* 서버가 받지 않은 자리 — 되돌렸다는 사실과 그 이유. AI 의 되물음(ask)과 같은
+            자리를 쓰되, 둘이 동시에 서지는 않는다: 물음이 있으면 그쪽이 먼저다.
+            스스로 사라지지 않는다 — 저장이 안 됐다는 말은 스쳐 지나가면 안 되는 말이다. */}
+        {!panel && !ask && writeError && (
+          <div className="rmg-note" role="alert" aria-live="assertive">
+            <span className="rmg-note-body">
+              <span className="rmg-note-t">{writeError}</span>
+            </span>
+            <button
+              type="button"
+              className="rmg-note-x"
+              onClick={clearWriteError}
+              aria-label={lang === "en" ? "Dismiss" : "닫기"}
+            >
+              <X className="rmg-note-xic" />
+            </button>
+          </div>
+        )}
+
         {!panel && ask && (
           <div className="rmg-note" role="status" aria-live="polite">
             <span className="rmg-note-body">
@@ -1905,7 +1949,8 @@ function Feature(props: {
   /** 사람 찾기·잇기 · 읽지 않은 말 — People 로 그대로 흘려보낸다. */
   onFind: (q: string) => Promise<Contact[]>;
   onRequest: (peerId: string) => Promise<{ outcome: string; message?: string }>;
-  onCancelRequest: (peerId: string) => Promise<void>;
+  /** 됐으면 true. 화면은 이 값을 보고 줄을 바꾼다 — 못 물렀는데 걷으면 거짓말이 된다. */
+  onCancelRequest: (peerId: string) => Promise<boolean>;
   /** 나에게 온, 아직 답하지 않은 요청 — 연락처 갈래 맨 위에 얹힌다. */
   requests: ConnectionRequest[];
   /** 내가 보내 두고 답을 못 받은 상대들 — 줄이 '요청' 을 다시 내밀지 않게. */

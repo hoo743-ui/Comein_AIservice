@@ -209,8 +209,8 @@ interface WorkspaceState {
   /** 잇자고 청한다 — 즉시 잇지 않는다. 상대가 받아야 이어진다.
    *  상대도 나에게 보내 두었다면 그 자리에서 이어진다("accepted"). */
   requestPerson: (peerId: ID) => Promise<{ outcome: RequestOutcome; message?: string }>;
-  /** 보낸 요청을 무른다. */
-  cancelRequest: (peerId: ID) => Promise<void>;
+  /** 보낸 요청을 무른다. 됐으면 true — 화면은 이 값을 보고 줄을 바꾼다. */
+  cancelRequest: (peerId: ID) => Promise<boolean>;
   /** 나에게 온, 아직 답하지 않은 요청들. */
   connectionRequests: ConnectionRequest[];
   /** 내가 보내 두고 아직 답을 못 받은 상대들 — 줄이 '요청' 을 다시 내밀지 않게. */
@@ -286,6 +286,15 @@ interface WorkspaceState {
    *  왜 안 됐는지 한 줄 보이는 편이 늘 낫다. */
   proposalError: { eventId: ID; message: string } | null;
   clearProposalError: () => void;
+
+  /** 화면은 바꿨는데 서버가 받지 않은 자리 — 그 한 줄.
+   *
+   *  이 앱의 쓰기는 전부 낙관적이다(먼저 그리고 뒤에 보낸다). 빠른 대신, 서버가 거절했을 때
+   *  **아무 말도 하지 않으면 거짓말이 된다.** 특히 RLS 는 오류를 주지 않고 '0행 수정' 으로
+   *  조용히 지나가므로, 남의 일정 이름을 고치면 내 화면에서만 바뀌었다가 다음 스냅샷에
+   *  슬며시 되돌아갔다. 이제는 되돌리고, 왜 되돌렸는지 말한다. */
+  writeError: string | null;
+  clearWriteError: () => void;
 
   /** 지금 답을 기다리는 제안을 모두 받아 둔다 — 일정을 열어 봐야 알 수 있으면
    *  열지 않은 사람에게는 제안이 없는 것과 같다. */
@@ -369,8 +378,11 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
 
   cancelRequest: async (peerId) => {
-    if (!remoteReady()) return;
-    await cancelConnectionRequest(peerId);
+    if (!remoteReady()) return false;
+    // 예전에는 결과를 버렸다. 그래서 서버가 못 무른 경우에도 화면은 '취소됨' 으로 바뀌었고,
+    // 상대에게는 요청이 그대로 남아 있었다 — 무른 줄 알고 있는데 무르지 않은 상태.
+    // 됐는지 안 됐는지를 돌려주고, 화면을 어떻게 할지는 부른 쪽이 정한다.
+    return cancelConnectionRequest(peerId);
   },
 
   connectionRequests: [],
@@ -493,7 +505,13 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     if (remoteReady()) {
       unsynced.add(id); // 진짜 id 를 받기 전까지, 이 일정에 붙는 초대는 밀어 둔다
       void pushEvent({ ...s, id } as Schedule).then((realId) => {
-        if (!realId) { unsynced.delete(id); pendingInvites.delete(id); return; }
+        if (!realId) {
+          // 서버에 앉지 못했다. 화면에서 지우지는 않는다 — 사용자가 방금 만든 것을
+          // 눈앞에서 없애는 편이 더 나쁘다. 대신 이 자리가 이 브라우저에만 있다고 말한다.
+          unsynced.delete(id); pendingInvites.delete(id);
+          set({ writeError: "일정을 서버에 저장하지 못했어요 — 이 화면에만 남아요." });
+          return;
+        }
         flushInvites(id, realId);
         set((st) => ({
           idAlias: { ...st.idAlias, [id]: realId },
@@ -508,35 +526,76 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   },
   confirmSchedule: (id) => {
     const real = get().resolveEventId(id) ?? id;
+    const before = get().schedules.find((s) => s.id === real)?.status;
+    if (before === undefined || before === "confirmed") return;   // 이미 확정이면 아무 일도 없다
     set((st) => ({
       schedules: st.schedules.map((s) => (s.id === real ? { ...s, status: "confirmed" } : s)),
+      writeError: null,
     }));
-    if (remoteReady() && !unsynced.has(real)) void confirmEvent(real);
+    if (!remoteReady() || unsynced.has(real)) return;
+    void confirmEvent(real).then((ok) => {
+      if (ok) return;
+      // 확정하지 못했으면 제안으로 되돌린다. 확정된 척 서 있는 일정이 가장 나쁘다 —
+      // 사용자는 그걸 믿고 그 시간을 비워 둔다.
+      set((st) => ({
+        schedules: st.schedules.map((s) => (s.id === real ? { ...s, status: before } : s)),
+        writeError: "일정을 확정하지 못했어요. 잠시 뒤 다시 눌러 주세요.",
+      }));
+    });
   },
 
   removeSchedule: (id) => {
     const real = get().resolveEventId(id) ?? id;
+    // 되돌릴 수 있게 지우기 전 모습을 쥔다. 일정 하나에 참여자·방·말이 매달려 있어
+    // 실패했을 때 일정만 되살리면 그 방과 대화는 잃어버린다.
+    const st0 = get();
+    const roomIds = st0.chatRooms.filter((r) => r.eventId === real).map((r) => r.id);
+    const before = {
+      schedules: st0.schedules,
+      eventParticipants: st0.eventParticipants,
+      chatRooms: st0.chatRooms,
+      chatMessages: st0.chatMessages,
+    };
+    if (!before.schedules.some((s) => s.id === real)) return;
     // 일정이 사라지면 그 자리에 매달려 있던 것들도 함께 사라진다 —
     // 남겨 두면 주인 없는 방과 참여자가 목록에 유령으로 선다.
-    set((st) => {
-      const roomIds = st.chatRooms.filter((r) => r.eventId === real).map((r) => r.id);
-      return {
-        schedules: st.schedules.filter((s) => s.id !== real),
-        eventParticipants: st.eventParticipants.filter((p) => p.eventId !== real),
-        chatRooms: st.chatRooms.filter((r) => r.eventId !== real),
-        chatMessages: st.chatMessages.filter((m) => !roomIds.includes(m.roomId)),
-      };
-    });
+    set(() => ({
+      schedules: before.schedules.filter((s) => s.id !== real),
+      eventParticipants: before.eventParticipants.filter((p) => p.eventId !== real),
+      chatRooms: before.chatRooms.filter((r) => r.eventId !== real),
+      chatMessages: before.chatMessages.filter((m) => !roomIds.includes(m.roomId)),
+      writeError: null,
+    }));
+    if (!remoteReady() || unsynced.has(real)) return;
     // 서버의 events 행만 지운다 — 참여자·방·말은 DB 가 on delete cascade 로 따라 지운다.
-    if (remoteReady() && !unsynced.has(real)) void deleteEvent(real);
+    void deleteEvent(real).then((ok) => {
+      if (ok) return;
+      // 못 지웠으면 되살린다. 그대로 두면 다음 스냅샷에 그 일정이 스스로 돌아오는데,
+      // 사용자에게는 지운 것이 유령처럼 되살아나는 것으로 보인다.
+      set(() => ({ ...before, writeError: "일정을 지우지 못했어요 — 주최자만 지울 수 있어요." }));
+    });
   },
 
   renameSchedule: (id, title) => {
     const real = get().resolveEventId(id) ?? id;
     const name = title.trim();
     if (!name) return;
-    set((st) => ({ schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: name } : s)) }));
-    if (remoteReady() && !unsynced.has(real)) void renameEvent(real, name);
+    const before = get().schedules.find((s) => s.id === real)?.title;
+    if (before === undefined || before === name) return;
+    set((st) => ({
+      schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: name } : s)),
+      writeError: null,
+    }));
+    if (!remoteReady() || unsynced.has(real)) return;
+    void renameEvent(real, name).then((ok) => {
+      if (ok) return;
+      // 서버는 주최자만 받는다(0001 events_update). 막히면 오류가 아니라 0행 수정으로
+      // 지나가므로, 이걸 보지 않으면 내 화면에서만 이름이 바뀐 채로 남는다.
+      set((st) => ({
+        schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: before } : s)),
+        writeError: "이름을 바꾸지 못했어요 — 이 일정의 주최자만 바꿀 수 있어요.",
+      }));
+    });
   },
 
   // ── 공유 일정 · 참여자 ──────────────────────────────
@@ -553,34 +612,68 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 
   addParticipant: (eventId, userId) => {
     // 멱등 — 같은 사람이 동시에 두 번 초대돼도 한 줄만 남는다.
-    set((st) =>
-      st.eventParticipants.some((p) => p.eventId === eventId && p.userId === userId)
-        ? st
-        : { eventParticipants: [...st.eventParticipants, { eventId, userId, role: "participant", status: "invited" }] },
-    );
+    if (get().eventParticipants.some((p) => p.eventId === eventId && p.userId === userId)) return;
+    set((st) => ({
+      eventParticipants: [...st.eventParticipants, { eventId, userId, role: "participant", status: "invited" }],
+      writeError: null,
+    }));
     // 참여자가 되면 그 일정의 대화에 들어올 수 있어야 한다.
     get().ensureRoom(eventId);
     if (!remoteReady()) return;
     // 아직 서버에 없는 일정이면 지금 보내 봐야 FK 위반으로 사라진다 — 진짜 id 를 받은 뒤에 보낸다.
-    if (unsynced.has(eventId)) queueInvite(eventId, userId);
-    else void pushParticipant(eventId, userId);
+    if (unsynced.has(eventId)) { queueInvite(eventId, userId); return; }
+    void pushParticipant(eventId, userId).then((ok) => {
+      if (ok) return;
+      // 부르지 못했으면 그 줄을 걷는다. 남겨 두면 목록에는 있는데 그 사람 화면에는
+      // 아무 일도 일어나지 않은, 한쪽만 아는 초대가 된다.
+      set((st) => ({
+        eventParticipants: st.eventParticipants.filter((p) => !(p.eventId === eventId && p.userId === userId)),
+        writeError: "그 사람을 부르지 못했어요 — 주최자만 부를 수 있어요.",
+      }));
+    });
   },
 
   removeParticipant: (eventId, userId) => {
     // 참여자에서 빠지면 대화 접근도 끊긴다. 다만 이미 남긴 메시지의 작성자 정보는 지우지 않는다.
+    const before = get().eventParticipants.find((p) => p.eventId === eventId && p.userId === userId);
+    if (!before) return;
     set((st) => ({
       eventParticipants: st.eventParticipants.filter((p) => !(p.eventId === eventId && p.userId === userId)),
+      writeError: null,
     }));
-    if (remoteReady()) void pullParticipant(eventId, userId);
+    if (!remoteReady()) return;
+    void pullParticipant(eventId, userId).then((ok) => {
+      if (ok) return;
+      set((st) => ({
+        eventParticipants: st.eventParticipants.some((p) => p.eventId === eventId && p.userId === userId)
+          ? st.eventParticipants
+          : [...st.eventParticipants, before],
+        writeError: "그 사람을 빼지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+      }));
+    });
   },
 
   setParticipantStatus: (eventId, userId, status) => {
+    const before = get().eventParticipants.find((p) => p.eventId === eventId && p.userId === userId)?.status;
+    if (before === undefined || before === status) return;
     set((st) => ({
       eventParticipants: st.eventParticipants.map((p) =>
         p.eventId === eventId && p.userId === userId ? { ...p, status } : p,
       ),
+      writeError: null,
     }));
-    if (remoteReady()) void pushParticipantStatus(eventId, userId, status);
+    if (!remoteReady()) return;
+    void pushParticipantStatus(eventId, userId, status).then((ok) => {
+      if (ok) return;
+      // 참석하겠다고 눌렀는데 서버가 못 받았다면, 그 사실을 아는 사람이 나뿐이다.
+      // 다른 참여자의 화면에는 여전히 '답 없음' 으로 서 있다.
+      set((st) => ({
+        eventParticipants: st.eventParticipants.map((p) =>
+          p.eventId === eventId && p.userId === userId ? { ...p, status: before } : p,
+        ),
+        writeError: "참석 여부를 보내지 못했어요. 잠시 뒤 다시 눌러 주세요.",
+      }));
+    });
   },
 
   // ── 일정 제안 ───────────────────────────────────────
@@ -588,6 +681,8 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   proposalConflict: null,
   proposalError: null,
   clearProposalError: () => set({ proposalError: null }),
+  writeError: null,
+  clearWriteError: () => set({ writeError: null }),
   justConfirmed: null,
   clearJustConfirmed: () => set({ justConfirmed: null }),
 

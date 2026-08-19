@@ -287,7 +287,7 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
   );
 }
 
-export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage }: {
+export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, summaryError }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -307,6 +307,8 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   /** 이름을 고쳐 단다 — AI 가 권한 이름을 사람이 받아들였을 때만 불린다. */
   onRename?: (title: string) => void;
   summaryBusy?: boolean;
+  /** 정리하지 못했을 때 그 한 줄. 없으면 null. */
+  summaryError?: string | null;
   onSummarize?: () => void;
   onClose: () => void;
   onSend: (text: string) => void;
@@ -485,10 +487,22 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
                 : (en ? "You declined." : "불참으로 표시했어요.")}
           </p>
           <div className="rmg-rsvp-acts">
-            <button type="button" className={`rmg-ppl-act ${me.status === "accepted" ? "primary" : ""}`} onClick={() => onRespond("accepted")}>
+            {/* 이미 그 답으로 서 있는 버튼은 누를 것이 없다. 눌러도 스토어가 곧바로 되돌아
+                나가지만(같은 값이면 아무 일도 하지 않는다), 눌리는 것처럼 보이면 안 된다. */}
+            <button
+              type="button"
+              className={`rmg-ppl-act ${me.status === "accepted" ? "primary" : ""}`}
+              disabled={me.status === "accepted"}
+              onClick={() => onRespond("accepted")}
+            >
               {en ? "Going" : "참석"}
             </button>
-            <button type="button" className={`rmg-ppl-act ${me.status === "declined" ? "primary" : ""}`} onClick={() => onRespond("declined")}>
+            <button
+              type="button"
+              className={`rmg-ppl-act ${me.status === "declined" ? "primary" : ""}`}
+              disabled={me.status === "declined"}
+              onClick={() => onRespond("declined")}
+            >
               {en ? "Can't" : "불참"}
             </button>
           </div>
@@ -620,13 +634,25 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
               disabled={summaryBusy}
               onClick={() => { if (!summary) onSummarize(); setSumOpen((v) => !v); }}
             >
-              {summaryBusy ? (en ? "Reading…" : "읽는 중…") : sumOpen ? (en ? "Hide" : "요약 닫기") : (en ? "Summary" : "요약 보기")}
+              {/* 라벨은 **정말로 열려 있을 때만** '닫기' 라고 말한다.
+                  예전에는 sumOpen 만 보고 바꿨는데, 서버가 실패하면 summary 가 없어
+                  아무것도 안 열린 채 버튼만 '요약 닫기' 가 됐다 — 누를 것도 닫을 것도 없이. */}
+              {summaryBusy
+                ? (en ? "Reading…" : "읽는 중…")
+                : sumOpen && (summary || summaryError)
+                  ? (en ? "Hide" : "요약 닫기")
+                  : (en ? "Summary" : "요약 보기")}
             </button>
           )}
         </div>
 
         {/* 요약 — 대화를 밀어내지 않게 위에 한 겹만. 스스로 갱신하지 않는다. */}
         {sumOpen && summary && <SummaryBlock summary={summary} lang={lang} busy={!!summaryBusy} onRefresh={onSummarize} />}
+        {/* 정리하지 못했으면 그렇다고 말한다. 눌렀는데 아무 일도 일어나지 않는 것이
+            이 화면에서 가장 나쁜 답이다 — 사용자는 자기가 잘못 눌렀다고 생각한다. */}
+        {sumOpen && !summary && summaryError && (
+          <p className="rmg-prop-err" role="alert">{summaryError}</p>
+        )}
 
         <div className="rmg-msgwrap">
           <div className="rmg-drawer-msgs" ref={listRef}>

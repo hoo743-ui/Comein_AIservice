@@ -483,8 +483,12 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
 
   const unask = async (id: string) => {
     if (answering) return;
-    setAnswering(id);
-    try { await onCancelRequest?.(id); } finally { setAnswering(null); }
+    setAnswering(id); setAskErr(null);
+    let ok = false;
+    try { ok = (await onCancelRequest?.(id)) ?? false; } finally { setAnswering(null); }
+    // 못 물렀으면 줄을 그대로 둔다. 예전에는 결과와 상관없이 '보냄' 을 걷어서,
+    // 상대에게는 요청이 남아 있는데 내 화면에서만 사라졌다.
+    if (!ok) { setAskErr(en ? "Couldn't undo. Try again." : "요청을 무르지 못했어요. 잠시 뒤 다시 눌러 주세요."); return; }
     setAsked((m) => { const n = { ...m }; delete n[id]; return n; });
   };
 

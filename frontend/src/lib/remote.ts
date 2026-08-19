@@ -244,16 +244,27 @@ export async function pushEvent(s: Schedule): Promise<string | null> {
   } catch (e: any) { console.error("일정 저장 실패:", e?.message); return null; }
 }
 
+/** 고치기·지우기가 **정말로** 됐는가.
+ *
+ *  RLS 가 막으면 PostgREST 는 오류를 주지 않는다 — 정책이 행을 안 보이게 하므로 조건에
+ *  맞는 행이 없는 것과 같고, 200 + 빈 응답이 돌아온다. 그래서 "주최자가 아니라 못 고쳤다"가
+ *  지금까지 성공으로 읽혔다(화면만 바뀌고 서버는 그대로, 다음 스냅샷에서 조용히 되돌아갔다).
+ *
+ *  `return=representation` 을 붙이면 실제로 손댄 행이 돌아온다. 0행이면 못 한 것이다. */
+async function touchedRows(path: string, init: RequestInit): Promise<boolean> {
+  const rows = await rest(path, { ...init, prefer: "return=representation" });
+  return Array.isArray(rows) && rows.length > 0;
+}
+
 /** AI 가 놓아 둔 제안(pending)을 사람이 확정한다. 확정은 언제나 사람의 손에서 일어난다. */
 export async function confirmEvent(eventId: ID): Promise<boolean> {
   const uid = await ensureUid();
   if (!uid) return false;
   try {
-    await rest(`events?id=eq.${eventId}`, {
+    return await touchedRows(`events?id=eq.${eventId}`, {
       method: "PATCH",
       body: JSON.stringify({ status: "confirmed" }),
     });
-    return true;
   } catch (e: any) { console.error("일정 확정 실패:", e?.message); return false; }
 }
 
@@ -263,8 +274,7 @@ export async function renameEvent(eventId: ID, title: string): Promise<boolean> 
   const uid = await ensureUid();
   if (!uid) return false;
   try {
-    await rest(`events?id=eq.${eventId}`, { method: "PATCH", body: JSON.stringify({ title }) });
-    return true;
+    return await touchedRows(`events?id=eq.${eventId}`, { method: "PATCH", body: JSON.stringify({ title }) });
   } catch (e: any) { console.error("일정 이름 변경 실패:", e?.message); return false; }
 }
 
@@ -273,37 +283,50 @@ export async function deleteEvent(eventId: ID): Promise<boolean> {
   const uid = await ensureUid();
   if (!uid) return false;
   try {
-    await rest(`events?id=eq.${eventId}`, { method: "DELETE" });
-    return true;
+    return await touchedRows(`events?id=eq.${eventId}`, { method: "DELETE" });
   } catch (e: any) { console.error("일정 삭제 실패:", e?.message); return false; }
 }
 
-export async function pushParticipant(eventId: ID, userId: ID) {
+// 아래 셋은 **됐는지 안 됐는지를 돌려준다.** 예전에는 전부 void 였고 실패는 콘솔에만
+// 남았다 — 화면은 이미 바꿔 놓은 뒤라, 서버가 거절해도 사용자는 그걸 알 길이 없었다.
+// 스토어가 이 값을 보고 화면을 되돌린다(store.ts).
+
+export async function pushParticipant(eventId: ID, userId: ID): Promise<boolean> {
   const sb = getSupabase();
   const me = await ensureUid();
   const uid = toRemoteUser(userId);
-  if (!sb || !me || !uid) return;
+  if (!sb || !me || !uid) return false;
   // 같은 사람을 두 번 넣어도 한 줄 — DB 의 복합 PK 와 같은 약속을 여기서도 지킨다.
   const { error } = await sb
     .from("event_participants")
     .upsert({ event_id: eventId, user_id: uid, role: "participant", status: "invited" }, { onConflict: "event_id,user_id" });
-  if (error) console.error("참여자 추가 실패:", error.message);
+  if (error) { console.error("참여자 추가 실패:", error.message); return false; }
+  return true;
 }
 
-export async function pullParticipant(eventId: ID, userId: ID) {
+export async function pullParticipant(eventId: ID, userId: ID): Promise<boolean> {
   const sb = getSupabase();
   const uid = toRemoteUser(userId);
-  if (!sb || !uid) return;
+  if (!sb || !uid) return false;
   const { error } = await sb.from("event_participants").delete().eq("event_id", eventId).eq("user_id", uid);
-  if (error) console.error("참여자 제외 실패:", error.message);
+  if (error) { console.error("참여자 제외 실패:", error.message); return false; }
+  return true;
 }
 
-export async function pushParticipantStatus(eventId: ID, userId: ID, status: string) {
+export async function pushParticipantStatus(eventId: ID, userId: ID, status: string): Promise<boolean> {
   const sb = getSupabase();
   const uid = toRemoteUser(userId);
-  if (!sb || !uid) return;
-  const { error } = await sb.from("event_participants").update({ status }).eq("event_id", eventId).eq("user_id", uid);
-  if (error) console.error("참석 여부 저장 실패:", error.message);
+  if (!sb || !uid) return false;
+  // 정말로 그 줄이 바뀌었는지까지 본다 — 남의 참석 여부는 RLS 가 막는데, 그때도 오류가
+  // 아니라 '0행 수정' 으로 조용히 지나간다.
+  const { data, error } = await sb
+    .from("event_participants")
+    .update({ status })
+    .eq("event_id", eventId)
+    .eq("user_id", uid)
+    .select("user_id");
+  if (error) { console.error("참석 여부 저장 실패:", error.message); return false; }
+  return (data?.length ?? 0) > 0;
 }
 
 /** 일정 방의 id 를 가져온다(트리거가 이미 만들어 두었다). */
