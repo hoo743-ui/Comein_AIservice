@@ -78,7 +78,7 @@ export function CalendarView({ schedules, mounted, now, mine, lang, onAddSchedul
           </div>
           <span className="rmg-cv-spacer" />
         </div>
-        <DayTimetable day={day} spans={spans} now={base} lang={lang} onAdd={onAddSchedule} onOpenEvent={onOpenEvent} participantsOf={participantsOf} />
+        <DayTimetable day={day} spans={spans} now={base} lang={lang} onAdd={onAddSchedule} onOpenEvent={onOpenEvent} participantsOf={participantsOf} onDay={onSelectDay} />
       </div>
     );
   }
@@ -357,11 +357,13 @@ export function DayDial({ spans, day, now, lang, onOpenEvent }: {
 
 /** 하루 타임테이블 — 왼쪽은 시간축(Time Gutter), 오른쪽은 일정이 놓이는 판(Event Canvas).
  *  빈 자리를 누르면 그 시각에 바로 한 줄 적어 넣고, 일정을 누르면 그 일정의 상세·대화로 간다. */
-export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, participantsOf }: {
+export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, participantsOf, onDay }: {
   day: Date; spans: Span[]; now: Date; lang: Lang;
   onAdd?: (title: string, start: Date) => void;
   onOpenEvent?: (id: string) => void;
   participantsOf?: (id: string) => EventParticipant[];
+  /** 하루의 끝을 지나면 다음 날로 — 없으면 그냥 멈춘다. */
+  onDay?: (d: Date) => void;
 }) {
   const [openHour, setOpenHour] = React.useState<number | null>(null);
   const [draft, setDraft] = React.useState("");
@@ -384,6 +386,33 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
     el.scrollTop = Math.max(0, target - el.clientHeight / 3);
   }, [day]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** 하루의 끝에서 한 번 더 굴리면 다음 날로, 시작에서 거슬러 올리면 전날로.
+   *
+   *  시간표는 하루짜리인데 시간은 하루에서 끊기지 않는다. 23시를 보다가 자정 너머를
+   *  보려면 지금까지는 위로 돌아가 날짜 버튼을 눌러야 했다 — 읽던 자리를 잃고 손이 멀어진다.
+   *  끝에 닿았을 때 **한 번 더** 굴리는 것을 '넘긴다' 로 읽는다(닿자마자 넘기면 스크롤이
+   *  미끄러질 때마다 날이 바뀐다). 넘어간 뒤에는 이어서 읽던 쪽 끝에 세운다. */
+  const turning = React.useRef(false);
+  const onWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    const el = scrollRef.current;
+    if (!el || !onDay || turning.current) return;
+    const atTop = el.scrollTop <= 0;
+    const atEnd = el.scrollTop + el.clientHeight >= el.scrollHeight - 1;
+    const dir = e.deltaY > 0 ? 1 : e.deltaY < 0 ? -1 : 0;
+    if (!dir || (dir > 0 && !atEnd) || (dir < 0 && !atTop)) return;
+    turning.current = true;
+    const next = new Date(day);
+    next.setDate(next.getDate() + dir);
+    onDay(next);
+    // 다음 날은 위에서부터, 전날은 아래에서부터 — 읽던 방향이 이어진다.
+    requestAnimationFrame(() => {
+      const box = scrollRef.current;
+      if (box) box.scrollTop = dir > 0 ? 0 : box.scrollHeight;
+      // 한 번의 손짓이 여러 날을 넘기지 않게 잠깐 잠근다.
+      window.setTimeout(() => { turning.current = false; }, 320);
+    });
+  };
+
   const submit = (h: number) => {
     const title = draft.trim();
     setOpenHour(null);
@@ -396,7 +425,7 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
 
   return (
     <div className="rmg-tt">
-      <div className="rmg-tt-scroll" ref={scrollRef}>
+      <div className="rmg-tt-scroll" ref={scrollRef} onWheel={onWheel}>
         <div className="rmg-tt-grid" style={{ height: `${canvasH}px` }}>
           {hours.map((h) => (
             <React.Fragment key={h}>

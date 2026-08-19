@@ -1113,12 +1113,17 @@ html { font-size: 17px; }
 /* 스크롤은 있되 보이지 않는다 — 막대가 UI 의 한 요소처럼 서 있으면 시간표가 상자에 갇힌 것처럼 읽힌다. */
 /* 최소 높이가 최대 높이를 넘지 않게 — 낮은 화면(640px 미만)에서는 380px 이 상한을 이겨
    시간표가 캡처바 밑으로 흘러넘쳤다. 낮으면 낮은 대로 남는 만큼만 쓴다. */
-.rmg-tt-scroll { max-height: calc(100dvh - 260px); min-height: min(380px, calc(100dvh - 260px)); overflow-y: auto; overscroll-behavior: contain;
-  scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 12%, transparent) transparent; }
-.rmg-tt-scroll::-webkit-scrollbar { width: 6px; }
-.rmg-tt-scroll::-webkit-scrollbar-track { background: transparent; }
-.rmg-tt-scroll::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 12%, transparent); border-radius: 3px; }
-.rmg-tt-scroll:hover::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 20%, transparent); }
+/* 하루는 위아래로 흘러간다 — 막대가 아니라 흐름으로 보여 준다.
+   막대를 지우고 위·아래 가장자리를 옅게 흐린다. 내용이 '끝난' 것이 아니라 '이어지는'
+   것으로 읽히고, 하루의 끝에서 한 번 더 굴리면 실제로 다음 날로 이어진다(DayViews onWheel).
+   위쪽 여백은 00:00 을 위한 자리다 — 시각 글자가 선 위에 반쯤 걸터앉는데(-0.5em),
+   맨 위 눈금에는 걸터앉을 위가 없어 글자가 잘려 나갔다. */
+.rmg-tt-scroll { max-height: calc(100dvh - 260px); min-height: min(380px, calc(100dvh - 260px));
+  overflow-y: auto; overscroll-behavior: contain; padding-top: 0.62em;
+  scrollbar-width: none;
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, #000 18px, #000 calc(100% - 18px), transparent 100%); }
+.rmg-tt-scroll::-webkit-scrollbar { width: 0; height: 0; }
 .rmg-tt-grid { position: relative; }
 /* 시각은 시간축 안에 오른쪽 정렬 — 선 위에 걸터앉되 겹치지 않게 살짝 올려 둔다. */
 /* 시각은 읽으라고 있는 글자다 — 선보다 또렷해야 한다(예전엔 둘 다 흐려 어느 쪽도 안 읽혔다). */
