@@ -133,7 +133,107 @@ export function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
  *  무엇이 있는지(대화·일정·메모·자취)를 아주 가벼운 글줄로만 보여 준다. 카드로 만들지 않는다.
  *  거기서 대화로 들어가면 그때 이 칸이 대화 화면이 된다. 메신저가 먼저 오지 않는다 —
  *  Comein 에서 대화는 목적이 아니라 일정·메모로 이어지는 통로다. */
-export function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion }: {
+/**
+ * 대화 위에 얹히는 자리 한 칸.
+ *
+ * 왜 이것이 필요한가 — 1:1 에서 자리 하나를 누르면 화면이 통째로 그 자리의 방으로 갈렸다.
+ * 같은 두 사람인데 대화가 둘이고, 하나를 누르면 다른 하나가 말없이 사라진다. 사람 쪽에서
+ * 보면 "일정이 여기저기 흩어져 있다" 로 읽힌다 — 실제로는 한 곳에 있는데도.
+ *
+ * 그래서 여기서 끝낸다: **언제 · 누구 · 내가 가는가.** 자리 하나를 두고 사람이 대개
+ * 알고 싶은 것이 그 셋이다. 그 이상이 필요할 때만 방으로 건너간다.
+ *
+ * 무엇을 여기 두지 않았나 — 시간 후보(제안)와 하루 겹쳐 보기는 그 방에 둔다. 여럿이
+ * 시간을 맞추는 일은 넓은 자리가 필요하고, 여기 끌고 오면 이 칸이 또 하나의 방이 된다.
+ */
+function EventStrip({ event, parts, peerName, msgCount, lang, onRespond, onOpen, onClose }: {
+  event: Schedule;
+  parts: EventParticipant[];
+  peerName: string;
+  msgCount: number;
+  lang: Lang;
+  onRespond: (status: "accepted" | "declined") => void;
+  onOpen: () => void;
+  onClose: () => void;
+}) {
+  const en = lang === "en";
+  const start = new Date(event.start);
+  const end = event.end ? new Date(event.end) : null;
+  const me = parts.find((p) => p.userId === ME_ID) ?? null;
+  const going = parts.filter((p) => p.status === "accepted").length;
+  // 둘만의 자리인가. 셋 이상이면 그 방에는 여기 없는 사람이 있다 — 건너갈 이유가 하나 더 있다.
+  const others = parts.length - 2;
+
+  return (
+    <div className="rmg-pev" role="group" aria-label={event.title}>
+      <div className="rmg-pev-head">
+        <p className="rmg-pev-when">
+          {fmtDate(start)} · {fmtTime(start)}{end ? `–${fmtTime(end)}` : ""}
+          {event.location ? ` · ${event.location}` : ""}
+          {/* 중요도는 말한 것만 보여 준다 — 비어 있는 것은 '보통' 이 아니라 '아무도 말하지 않음' 이다(0018). */}
+          {event.priority && event.priority !== "mid" && (
+            <span className={`rmg-drawer-cat pr-${event.priority}`}>
+              {event.priority === "high" ? (en ? "Important" : "중요") : (en ? "Light" : "가벼움")}
+            </span>
+          )}
+        </p>
+        <button type="button" className="rmg-pev-x" onClick={onClose} aria-label={en ? "Collapse" : "접기"}>
+          <X className="rmg-drawer-pxic" />
+        </button>
+      </div>
+
+      {/* 누가 — 둘뿐이면 이름을 다시 적지 않는다. 방금 그 사람을 골라서 여기 온 것이다. */}
+      <p className="rmg-pev-who">
+        {others > 0
+          ? (en ? `${peerName} and ${others} more · ${going} going` : `${peerName} 외 ${others}명 · 참석 ${going}`)
+          : (en ? `Just you and ${peerName}` : `${peerName} 와 둘이서`)}
+      </p>
+
+      {/* 참석 여부 — 자리를 떠나지 않고 여기서 답한다. 주최자에게는 물을 것이 없다. */}
+      {me && me.role !== "owner" && (
+        <div className="rmg-rsvp">
+          <p className="rmg-rsvp-q">
+            {me.status === "invited"
+              ? (en ? "Are you joining?" : "참석하시겠어요?")
+              : me.status === "accepted"
+                ? (en ? "You're going." : "참석으로 표시했어요.")
+                : (en ? "You declined." : "불참으로 표시했어요.")}
+          </p>
+          <div className="rmg-rsvp-acts">
+            <button
+              type="button"
+              className={`rmg-ppl-act ${me.status === "accepted" ? "primary" : ""}`}
+              disabled={me.status === "accepted"}
+              onClick={() => onRespond("accepted")}
+            >
+              {en ? "Going" : "참석"}
+            </button>
+            <button
+              type="button"
+              className={`rmg-ppl-act ${me.status === "declined" ? "primary" : ""}`}
+              disabled={me.status === "declined"}
+              onClick={() => onRespond("declined")}
+            >
+              {en ? "Can't" : "불참"}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* 그 방으로 — 한 줄이고, 어디로 가는지 미리 말한다.
+          아무 말도 없는 방을 '대화 0' 이라고 부르면 갈 이유가 없어 보인다. 실제로는 시간을
+          맞추고 하루를 겹쳐 보는 자리이므로, 비어 있을 때는 그 쪽을 말한다. */}
+      <button type="button" className="rmg-pev-go" onClick={onOpen}>
+        {msgCount > 0
+          ? (en ? `Open the conversation · ${msgCount}` : `이 자리의 대화 ${msgCount}`)
+          : (en ? "Find a time together" : "시간 맞추러 가기")}
+        <span className="rmg-pev-goic" aria-hidden>›</span>
+      </button>
+    </div>
+  );
+}
+
+export function PersonPanel({ person, messages, sharedEvents, participantsOf, myName, lang, focusChat, onClose, onSend, onOpenEvent, onCreateEvent, onEditMessage, onDeleteMessage, outcome, onAnswerSuggestion, openEventId, onPickEvent, onRespond, msgCountOf }: {
   person: Contact;
   messages: ChatMessage[];
   sharedEvents: Schedule[];
@@ -143,7 +243,15 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
   focusChat: boolean;
   onClose: () => void;
   onSend: (text: string) => void;
+  /** 자리의 대화로 **일부러** 건너간다 — 칩을 누르는 것으로는 더 이상 일어나지 않는다. */
   onOpenEvent: (eventId: string) => void;
+  /** 지금 이 사람 밑에서 펼쳐 둔 자리. 대화로 다녀와도 그대로 펼쳐져 있다(page 가 쥔다). */
+  openEventId: string | null;
+  onPickEvent: (eventId: string | null) => void;
+  /** 참석 여부 — 자리를 떠나지 않고 여기서 답한다. 그게 이 줄이 여기 있는 이유다. */
+  onRespond: (eventId: string, status: "accepted" | "declined") => void;
+  /** 그 자리의 방에 쌓인 말의 수. 0 이면 건너갈 이유를 만들지 않는다. */
+  msgCountOf: (eventId: string) => number;
   /** 이름을 모르면 null 을 넘긴다 — 짓는 일은 부모가 한곳에서 한다. */
   onCreateEvent: (title: string | null, start: Date) => void;
   /** 내 말 고치기·지우기 */
@@ -230,6 +338,8 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
       .sort((a, b) => +new Date(b.start) - +new Date(a.start));
     return [...next, ...past];
   }, [sharedEvents]);
+  /** 펼쳐 둔 자리. 그 사이 지워졌으면(다른 기기에서) 조용히 접힌다. */
+  const picked = openEventId ? sharedEvents.find((e) => e.id === openEventId) ?? null : null;
   const recent = (() => {
     const mAt = last ? +new Date(last.createdAt) : 0;
     const eAt = recentEvent ? +new Date(recentEvent.start) : 0;
@@ -293,9 +403,10 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
               <button
                 key={s2.id}
                 type="button"
-                className={`rmg-pwith-chip ${+new Date(s2.start) < Date.now() ? "past" : ""}`}
+                className={`rmg-pwith-chip ${+new Date(s2.start) < Date.now() ? "past" : ""} ${openEventId === s2.id ? "on" : ""}`}
                 data-tour="sharedevent"
-                onClick={() => onOpenEvent(s2.id)}
+                aria-expanded={openEventId === s2.id}
+                onClick={() => onPickEvent(openEventId === s2.id ? null : s2.id)}
                 title={`${fmtDate(new Date(s2.start))} · ${fmtTime(new Date(s2.start))}`}
               >
                 <span className="rmg-pwith-t">{s2.title}</span>
@@ -314,6 +425,26 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
               </button>
             )}
           </div>
+
+          {/* 고른 자리 — 여기서 펼친다. 예전에는 칩을 누르면 화면 전체가 그 자리의 방으로
+              갈려 나갔다. 같은 두 사람인데 대화가 둘이고, 하나를 누르면 다른 하나가
+              말없이 사라지니 일정이 여기저기 흩어져 있는 것처럼 읽혔다.
+
+              그래서 자리는 **대화 위에 얹힌다.** 읽던 말은 그대로 아래에 남아 있고,
+              언제·누구·내 참석 여부처럼 대개 알고 싶은 것은 여기서 끝난다.
+              그 자리의 방으로 건너가는 것은 이제 실수가 아니라 선택이다(아래 한 줄). */}
+          {picked && (
+            <EventStrip
+              event={picked}
+              parts={participantsOf(picked.id)}
+              peerName={person.name}
+              msgCount={msgCountOf(picked.id)}
+              lang={lang}
+              onRespond={(st) => onRespond(picked.id, st)}
+              onOpen={() => onOpenEvent(picked.id)}
+              onClose={() => onPickEvent(null)}
+            />
+          )}
 
           {/* 새 자리 — 칩 줄 바로 아래에서 열린다. 다른 화면으로 옮겨 가지 않는다. */}
           {creating && (

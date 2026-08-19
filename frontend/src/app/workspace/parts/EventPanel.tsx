@@ -298,7 +298,7 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
   );
 }
 
-export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, onDelete, summaryError }: {
+export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, onDelete, peerLink, summaryError }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -336,6 +336,8 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   onDeleteMessage?: (id: string) => void;
   /** 이 자리를 없앤다 — 주최자에게만 보인다. 없으면 손잡이를 그리지 않는다. */
   onDelete?: () => void;
+  /** 둘만의 자리일 때, 그 사람과의 **다른** 대화로 건너가는 길. 없으면 그리지 않는다. */
+  peerLink?: { name: string; onOpen: () => void } | null;
 }) {
   const en = lang === "en";
   const [adding, setAdding] = React.useState(false);
@@ -648,6 +650,16 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
       <div className="rmg-drawer-chat">
         <div className="rmg-drawer-chathead">
           <p className="rmg-eyebrow rmg-drawer-eye">{en ? "Conversation" : "이 일정의 대화"}</p>
+          {/* 같은 두 사람에게 대화가 둘이면, 둘이 서로를 가리켜야 한다.
+              한쪽을 열었을 때 다른 쪽이 말없이 사라지는 것이 '흩어져 있다' 는 느낌의 정체였다.
+              여기 이 한 줄이 그 되돌아가는 길이다 — 셋 이상이면 그리지 않는다(그 방에는
+              여기 없는 사람이 있어서, '둘만의 대화' 라는 말이 성립하지 않는다). */}
+          {peerLink && (
+            <button type="button" className="rmg-pev-go" onClick={peerLink.onOpen}>
+              {en ? `Just you and ${peerLink.name}` : `${peerLink.name} 와 둘만의 대화`}
+              <span className="rmg-pev-goic" aria-hidden>›</span>
+            </button>
+          )}
           {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다. */}
           {/* 말이 몇 마디뿐이면 요약할 것도 없다 — 그때까지는 이 자리를 만들지 않는다.
               'AI' 라고 크게 말하지 않는다. 정리된 것이 조용히 나타날 뿐이다(§12·§17). */}

@@ -1494,6 +1494,37 @@ html { font-size: 17px; }
 .rmg-pwith-empty:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 25%, var(--hair)); }
 @media (prefers-reduced-motion: reduce) { .rmg-pwith-chip, .rmg-pwith-more, .rmg-pwith-new, .rmg-pwith-empty { transition: none; } }
 
+/* 펼쳐 둔 자리 — 칩은 '눌린 채로' 남아 있어야 아래 칸이 어디서 나왔는지 읽힌다. */
+.rmg-pwith-chip.on { border-color: color-mix(in srgb, var(--ink) 30%, var(--hair));
+  background: color-mix(in srgb, var(--surface) 98%, transparent); color: var(--ink); }
+.rmg-pwith-chip.on.past { color: var(--ink); }
+
+/* 대화 위에 얹히는 자리 한 칸.
+   카드가 아니라 **한 칸**이다 — 그림자도 큰 모서리도 두지 않는다. 대화와 같은 평면 위에
+   얹혀 있어야 '다른 화면으로 넘어온 것' 이 아니라 '이 대화에 딸린 것' 으로 읽힌다(§6). */
+.rmg-pev { display: flex; flex-direction: column; gap: var(--sp-1);
+  margin-top: var(--sp-1); padding: var(--sp-2);
+  border: 1px solid var(--hair); border-radius: var(--r);
+  background: color-mix(in srgb, var(--surface) 55%, transparent);
+  animation: rmg-prop-in 200ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) { .rmg-pev { animation: none; } }
+.rmg-pev-head { display: flex; align-items: flex-start; gap: var(--sp-1); }
+.rmg-pev-when { flex: 1; min-width: 0; margin: 0; font-size: 0.88rem; color: var(--ink); }
+.rmg-pev-who { margin: 0; font-size: 0.8rem; color: var(--muted); }
+/* 접기 — 칩을 다시 눌러도 접히지만, 칸 안에서 눈에 보이는 길이 하나 있어야 한다. */
+.rmg-pev-x { flex-shrink: 0; border: 0; background: none; color: var(--faint); padding: 2px;
+  border-radius: 6px; cursor: pointer; line-height: 0; transition: color 160ms ease-out, background 160ms ease-out; }
+.rmg-pev-x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 7%, transparent); }
+/* 그 방으로 가는 한 줄 — 버튼처럼 생기지 않는다. 건너가는 것은 드문 일이어야 한다. */
+.rmg-pev-go { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px;
+  border: 0; background: none; font: inherit; font-size: 0.82rem; color: var(--muted);
+  padding: 3px 0; cursor: pointer; transition: color 160ms ease-out; }
+.rmg-pev-go:hover { color: var(--ink); }
+.rmg-pev-go:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 3px; border-radius: 4px; }
+.rmg-pev-goic { color: var(--faint); transition: transform 160ms ease-out; }
+.rmg-pev-go:hover .rmg-pev-goic { transform: translateX(2px); }
+@media (prefers-reduced-motion: reduce) { .rmg-pev-goic { transition: none; } }
+
 /* 사람 패널 — 대화가 남는 자리를 다 갖는다(위의 칩 줄과 정리 한 겹을 뺀 나머지). */
 .rmg-ppanel .rmg-drawer-chat-solo { flex: 1; min-height: 0; }
 /* 사람 패널 — 둘만의 대화 / 함께하는 일정 */

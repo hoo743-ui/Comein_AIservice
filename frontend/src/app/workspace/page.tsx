@@ -146,6 +146,8 @@ export default function Reimagine() {
   const [rawOpenEventId, setOpenEventId] = React.useState<string | null>(null); // 일정 상세 + 대화
   const openEventId = useWorkspace((s) => s.resolveEventId)(rawOpenEventId);
   const [chatFocus, setChatFocus] = React.useState(false); // '대화'로 들어왔으면 입력에 바로 커서를 둔다
+  // 사람 밑에서 펼쳐 둔 자리. 그 자리의 방에 다녀와도 접히지 않게 여기서 쥔다.
+  const [personEvent, setPersonEvent] = React.useState<string | null>(null);
   // 사람 패널의 세 자리 — 처음 고른 사람은 '요약'으로 맞이한다.
   // 곧바로 대화창을 펴면 이 화면이 메신저가 되고, 그와 나 사이의 일정·메모·자취는 갈 곳을 잃는다.
 
@@ -576,6 +578,7 @@ export default function Reimagine() {
     setPersonId(id);
     setOpenEventId(null);
     setOpenGroupId(null);   // 오른쪽 칸은 하나뿐이다 — 서로를 비켜 준다
+    setPersonEvent(null);   // 펼쳐 둔 자리도 그 사람의 것이었다
   }, []);
 
   // 서버와의 연결 — 한 번만 건다(자식에서 또 걸면 Realtime 소켓이 두 개 열린다).
@@ -1471,6 +1474,18 @@ export default function Reimagine() {
           onRespond={(status) => setParticipantStatus(openEventData.id, ME_ID, status)}
           backLabel={shownView === "people" && person ? person.name : undefined}
           onBack={shownView === "people" && person ? () => setOpenEventId(null) : undefined}
+          // 둘만의 자리라면 그 사람과의 다른 대화(둘만의 방)로 가는 길을 한 줄 둔다.
+          // 이미 그 사람 밑에서 들어왔으면 그리지 않는다 — 위의 '‹ 이름' 이 같은 길이다.
+          peerLink={(() => {
+            if (shownView === "people" && person) return null;
+            if (openEventParts.length !== 2) return null;
+            const other = openEventParts.find((p) => p.userId !== ME_ID);
+            const c = other ? contacts.find((x) => x.id === other.userId) : null;
+            if (!c) return null;
+            // 순서가 중요하다 — selectPerson 이 펼침을 지우므로(사람이 바뀌면 그 사람의
+            // 자리도 지운다) 펼칠 자리는 그 뒤에 세운다. 건너가서도 같은 자리가 펼쳐져 있다.
+            return { name: c.name, onOpen: () => { setView("people"); selectPerson(c.id); setPersonEvent(openEventData.id); } };
+          })()}
           // 여럿이 모인 자리에서만 하루를 세운다 — 혼자인 일정 옆에 남의 가용시간을 그릴 이유가 없다.
           timeline={
             openEventParts.length >= 2 ? (
@@ -1594,6 +1609,12 @@ export default function Reimagine() {
           onEditMessage={(id, text) => void editMessage(id, text)}
           onDeleteMessage={(id) => void deleteMessage(id)}
           onOpenEvent={(id) => openEvent(id, true)}
+          // 칩을 누르는 것은 이제 '펼치기' 다. 어느 자리를 펼쳐 뒀는지는 여기서 쥔다 —
+          // 패널 안에 두면 방에 다녀오는 동안 언마운트되어 접힌 채로 돌아온다.
+          openEventId={personEvent}
+          onPickEvent={setPersonEvent}
+          onRespond={(id, st) => setParticipantStatus(id, ME_ID, st)}
+          msgCountOf={(id) => { const rid = roomIdOfEvent(id); return rid ? chatMessages.filter((m) => m.roomId === rid).length : 0; }}
           onCreateEvent={(title, start) => createEventWith([person.id], title, start)}
           outcome={personOutcome}
           onAnswerSuggestion={answerPersonSuggestion}
