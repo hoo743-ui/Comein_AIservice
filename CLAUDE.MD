@@ -226,7 +226,7 @@ Comein_AIservice/
 | UI | **컴포넌트 로컬 `<style>` + CSS 토큰** · lucide-react(아이콘) · next-themes(테마) · zustand(상태) | Tailwind 는 리셋과 `font-sans` 만 쓴다. 아래 6절 참고 |
 | Backend | FastAPI (Python) — **무상태**, 파싱 전용 | `backend/` · 엔드포인트 3개뿐 |
 | LLM (파싱·요약) | **Gemini `gemini-flash-latest`** 무료 티어 | httpx 로 REST 직접 호출(SDK 미사용) |
-| LLM (폴백) | **Groq `llama-3.3-70b-versatile`** | Gemini 가 429·오류·파싱실패일 때만 |
+| LLM (폴백) | **Groq `openai/gpt-oss-120b`** | Gemini 가 429·오류·파싱실패일 때만. 무료 1,000 req/day · 8,000 TPM |
 | DB · Auth · Realtime | **Supabase** 무료 티어 | 프론트가 직접 붙는다(RLS). 스키마는 `supabase/migrations/` |
 | Infra | Vercel(FE) + Render(BE) | 둘 다 무료 티어 — Render 는 15분 무요청 시 슬립 |
 

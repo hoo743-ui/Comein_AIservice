@@ -46,7 +46,16 @@ def _classify(e: Exception, model_name: str) -> Exception:
 
 #: 폴백이 부르는 이름. 한 곳에만 적는다 — scripts/check_models.py 가 이걸 읽어
 #: "오늘도 있는가" 를 확인한다. 두 군데 적으면 언젠가 한쪽만 갈린다.
-DEFAULT_MODEL = "llama-3.3-70b-versatile"
+#:
+#: `llama-3.3-70b-versatile` 이었다. 2026-08-19 에 확인해 보니 이 계정에서 **404** 였고,
+#: 모델 목록에 llama 계열 대화 모델이 하나도 남아 있지 않았다 — Groq 이 내린 것이다.
+#: 그동안 Gemini 가 503(high demand)으로 흔들릴 때마다 폴백이 받지 못해 사용자에게
+#: 그대로 오류가 나갔다. 위 주석이 걱정하던 일이 실제로 일어난 셈이다(docs/24 §21.4·§25.5).
+#:
+#: 갈아 끼우기 전에 실제 프롬프트로 재 봤다(§25.5의 표). gpt-oss-120b 는 끝 시각·되묻기·
+#: 참여자 분리·"다음 주 화요일" 까지 전부 맞혔다. 무료 티어 한도는 1,000 req/day · 8,000 TPM 이고,
+#: 폴백은 주 경로가 흔들릴 때만 부르므로 이 한도로 충분하다.
+DEFAULT_MODEL = "openai/gpt-oss-120b"
 
 
 class GroqProvider(LLMProvider):
