@@ -1,0 +1,80 @@
+# 우리가 부르는 그 모델이 오늘도 있는가 — 하루에 한 번.
+#
+# 이 워크플로가 왜 생겼는지가 곧 이것의 사양이다.
+#
+# `llama-3.3-70b-versatile` 이 Groq 계정에서 내려간 뒤로 폴백이 죽어 있었다. 그동안
+# Gemini 가 503(high demand)으로 흔들릴 때마다 받을 곳이 없어 사용자에게 그대로 오류가
+# 나갔다. 코드는 제 할 일을 다 했다 — 실패에 `LLMModelUnavailableError` 라는 이름이
+# 붙었고 "폴백 모델도 사라졌다" 가 error 로 찍혔다. **다만 그걸 읽는 사람이 없었다.**
+#
+# scripts/check_models.py 는 정확히 이걸 잡으라고 §21.4 에서 만든 것이다. 그런데
+# 사람이 기억해서 손으로 돌려야 했고, 게다가 한국어 Windows 에서 UnicodeEncodeError 로
+# 죽었다 — 감시하라고 만든 것이 팀 PC 에서 한 번도 끝까지 돈 적이 없었다(docs/24 §25.4).
+#
+# 사람의 기억에 맡기지 않는다. 그게 이 파일의 전부다.
+#
+# ■ 왜 크게 실패하는가 (warm-render 와 반대)
+#
+#   warm-render 는 실패해도 경고로 둔다 — 잃는 것이 '다음 첫 요청이 느리다' 뿐이라
+#   빨간 X 를 쌓으면 진짜 경고가 묻힌다. 이쪽은 다르다. 모델이 사라진 것은 흔들림이
+#   아니라 사실이고, 사람이 이름을 갈기 전까지 스스로 낫지 않는다. keepalive-supabase
+#   와 같은 쪽에 세운다: 조용히 죽은 감시는 없느니만 못하다.
+
+name: check-models
+
+on:
+  schedule:
+    # 08:37 KST (= 23:37 UTC). 하루가 시작할 때 보이도록. 정각을 피한 것은 그 시각이
+    # 가장 붐벼 GitHub 의 cron 이 크게 밀리기 때문이다 — 몇십 분 밀려도 상관없는 일이다.
+    - cron: "37 23 * * *"
+  workflow_dispatch:        # 데모 직전에 손으로 한 번 돌려 보는 길
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          # render.yaml 의 PYTHON_VERSION 과 같은 자리를 본다.
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      # 스크립트가 ai/llm/*.py 의 DEFAULT_MODEL 을 직접 import 한다 — 이름을 두 곳에
+      # 적지 않기 위해서다. 그래서 그 모듈이 딛는 것(httpx·pydantic·groq)이 필요하다.
+      - run: pip install -r backend/requirements.txt
+
+      # 비밀값이 없으면 조용히 통과시키지 않는다.
+      # check_models.py 는 키가 없으면 '건너뜀' 으로 보고 0 으로 끝난다 — 사람이 손으로
+      # 돌릴 때는 맞는 태도지만(키 없이도 다른 쪽은 볼 수 있다), 여기서는 아니다.
+      # 키가 빠진 채 초록이 뜨면 그때부터 이 워크플로는 아무것도 지키지 않으면서
+      # 지키고 있는 것처럼 보인다 — 원래 고치려던 그 병이다.
+      - name: 시크릿이 있는지 먼저 본다
+        env:
+          G: ${{ secrets.GEMINI_API_KEY }}
+          Q: ${{ secrets.GROQ_API_KEY }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ -z "${G:-}" ] && missing="$missing GEMINI_API_KEY"
+          [ -z "${Q:-}" ] && missing="$missing GROQ_API_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::시크릿이 없다:$missing — Settings → Secrets and variables → Actions 에 넣는다. 없는 채로 두면 이 감시는 아무것도 보지 않는다."
+            exit 1
+          fi
+
+      - name: 두 Provider 의 모델이 오늘도 있는가
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          GROQ_API_KEY: ${{ secrets.GROQ_API_KEY }}
+        run: python scripts/check_models.py
+
+      # 여기까지 왔으면 둘 다 살아 있다. 실패하면 위 스텝이 0 이 아닌 값으로 끝나고,
+      # 어느 이름을 무엇으로 갈아야 하는지까지 그 출력에 적혀 있다(쓸 수 있는 모델 목록).
+      - name: 실패했다면 어디를 고치는지
+        if: failure()
+        run: |
+          echo "::notice::모델 이름은 ai/llm/gemini.py · ai/llm/groq.py 의 DEFAULT_MODEL 한 곳에만 있다. 위 출력의 '쓸 수 있는 대화 모델' 에서 고른다."
