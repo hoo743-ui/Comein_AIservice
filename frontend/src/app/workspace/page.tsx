@@ -748,7 +748,16 @@ export default function Reimagine() {
           const p = toParsed(raw, text);
           if (p.kind !== "일정" || !p.date) continue;
           setProposalBusy(true);
-          await proposeTime(eventId, p.date, 60, p.title);
+          // **이름은 넘기지 않는다.** 서버는 확정될 때 제안의 이름을 일정에 덮어쓴다
+          // (`respond_to_proposal` — `title = coalesce(pr.title, ev.title)`). 여기서 넘기던
+          // `p.title` 은 AI 가 **그 한 마디**에서 뽑은 말이지 이 자리의 이름이 아니다.
+          // 그래서 "그럼 20시 ㄱㄱ" 한 마디에 동의하면 '제육먹방' 이 '20시' 가 됐다 —
+          // 사용자는 이름을 바꾼 적이 없고 누가 바꿨는지도 모른다(실제로 그랬다, docs/24 §25.6).
+          //
+          // 이름을 고치는 정식 길은 이미 있다: 요약이 뽑은 이름을 **사람에게 물어보는**
+          // 제안이다(EventPanel 의 '이 자리를 … 라고 부를까요?'). 두 길이 있으면 그중
+          // 하나는 반드시 몰래 바꾸는 길이 된다.
+          await proposeTime(eventId, p.date, 60);
           setProposalBusy(false);
           return;
         }
