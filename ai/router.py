@@ -190,6 +190,16 @@ ASK BACK INSTEAD OF GUESSING:
 - Only schedules and meetings are worth asking about. A todo without a due date is a
   perfectly good todo — take it as it is, `ask` stays null.
 
+NOTHING TO FILE — and that is a normal outcome:
+- Some messages ask nothing of you. A refusal ("그때는 안 돼", "못 갈 것 같아",
+  "안 될 것 같아", "I can't make it"), a cancellation, a thank-you, or plain small talk.
+  For those return an EMPTY `items` array AND `ask: null`. Silence is the correct answer.
+- A refusal is the clearest case, and the easiest to get wrong. The user is telling you a
+  time does NOT work. Asking "언제로 잡을까요?" back reads as if you did not understand
+  them at all — worse than saying nothing. Never ask a question in response to a refusal.
+- `ask` is only for a request you understood but cannot complete. If there was no request,
+  there is nothing to ask about.
+
 Output JSON shape:
 {{"user_id": "{user_id}", "items": [ ...zero or more items... ], "ask": null or "one short question"}}
 
