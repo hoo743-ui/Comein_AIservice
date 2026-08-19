@@ -20,7 +20,8 @@ import { getSupabase, isSupabaseConfigured } from "@/lib/supabase";
 import {
   ME_ID,
   type Availability, type ChatMessage, type ChatRoom, type ConnectionRequest, type Contact,
-  type EventParticipant, type ID, type ProposalResponse, type ProposalStatus, type Schedule,
+  type EventParticipant, type Group, type GroupMember, type GroupRole,
+  type ID, type ProposalResponse, type ProposalStatus, type Schedule,
   type ScheduleProposal, type SlotSuggestion,
 } from "@/lib/types";
 
@@ -30,6 +31,8 @@ export type RemoteSnapshot = {
   chatRooms: ChatRoom[];
   chatMessages: ChatMessage[];
   contacts: Contact[];
+  groups: Group[];
+  groupMembers: GroupMember[];
 };
 
 /** 지금 로그인한 사람의 uuid. 로그인 전이면 null.
@@ -160,14 +163,19 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
   const sb = getSupabase();
   if (!sb || !myUidOf()) return null;
 
-  const [ev, pa, ro] = await Promise.all([
+  const [ev, pa, ro, gr, gm] = await Promise.all([
     sb.from("events").select("*").order("start_at"),
     sb.from("event_participants").select("*"),
     sb.from("chat_rooms").select("*"),
+    // 그룹은 실패해도 나머지를 막지 않는다 — 아직 0017 을 올리지 않았을 수 있다
+    // (사람 목록이 0004 를 그렇게 다루는 것과 같다).
+    sb.from("groups").select("*").order("created_at"),
+    sb.from("group_members").select("*"),
   ]);
   if (ev.error) throw ev.error;
   if (pa.error) throw pa.error;
   if (ro.error) throw ro.error;
+  if (gr.error) console.warn("그룹 조회 실패(0017 마이그레이션 확인):", gr.error.message);
 
   const roomIds = (ro.data ?? []).map((r: any) => r.id);
   const ms = roomIds.length
@@ -189,6 +197,7 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
       description: e.description ?? undefined,
       ownerId: toLocalUser(e.owner_id),
       status: e.status,
+      groupId: e.group_id ?? undefined,
     })),
     eventParticipants: (pa.data ?? []).map((p: any): EventParticipant => ({
       eventId: p.event_id,
@@ -205,6 +214,12 @@ export async function fetchSnapshot(): Promise<RemoteSnapshot | null> {
     // 지워진 말은 가져오지 않는다 — 자리를 남길지는 화면이 정할 일이지만,
     // 지금은 조용히 사라지는 편이 대화를 덜 어지럽힌다(행은 서버에 남아 있다).
     chatMessages: (ms.data ?? []).filter((m: any) => !m.deleted_at).map(toMessage),
+    groups: (gr.data ?? []).map((g: any): Group => ({
+      id: g.id, name: g.name, ownerId: toLocalUser(g.owner_id), createdAt: g.created_at,
+    })),
+    groupMembers: (gm.data ?? []).map((m: any): GroupMember => ({
+      groupId: m.group_id, userId: toLocalUser(m.user_id), role: m.role,
+    })),
   };
 }
 
@@ -238,6 +253,9 @@ export async function pushEvent(s: Schedule): Promise<string | null> {
         description: s.description ?? null,
         status: s.status,
         owner_id: uid,
+        // 그룹의 자리면 여기서 단다 — 서버 트리거가 멤버 전원을 참여자로 앉힌다(0017).
+        // 남의 그룹 id 는 events_insert 가 막는다.
+        group_id: s.groupId ?? null,
       }),
     });
     return rows?.[0]?.id ?? null;
@@ -366,6 +384,82 @@ export async function pushMessage(roomId: ID, content: string): Promise<string |
     .single();
   if (error) { console.error("메시지 전송 실패:", error.message); return null; }
   return data?.id ?? null;
+}
+
+// ── 그룹 ────────────────────────────────────────────────
+// 같은 사람들이 다시 모인다. 그래서 사람의 묶음은 일정보다 오래 산다(0017).
+//
+// 아래도 전부 **성패를 돌려준다.** 화면이 먼저 그리고 서버가 뒤따르는 구조라,
+// 서버가 거절했는데 아무 말도 하지 않으면 화면이 거짓말을 한다(§25.5 에서 배운 것).
+
+/** 그룹을 연다. 만든 사람은 트리거가 주인이자 멤버로 앉힌다 — 여기서 따로 넣지 않는다. */
+export async function createGroupRemote(name: string): Promise<string | null> {
+  const sb = getSupabase();
+  const uid = await ensureUid();
+  if (!sb || !uid) return null;
+  const { data, error } = await sb
+    .from("groups")
+    .insert({ owner_id: uid, name })
+    .select("id")
+    .single();
+  if (error) { console.error("그룹 생성 실패:", error.message); return null; }
+  return data?.id ?? null;
+}
+
+/** 이름을 고친다. 서버는 주인만 받는다 — 막히면 오류가 아니라 0행으로 지나가므로 행 수를 본다. */
+export async function renameGroupRemote(groupId: ID, name: string): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { data, error } = await sb.from("groups").update({ name }).eq("id", groupId).select("id");
+  if (error) { console.error("그룹 이름 변경 실패:", error.message); return false; }
+  return (data?.length ?? 0) > 0;
+}
+
+/** 그룹을 없앤다. 그 그룹의 일정은 남는다(group_id 만 비워진다 — 0017 on delete set null). */
+export async function deleteGroupRemote(groupId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return false;
+  const { data, error } = await sb.from("groups").delete().eq("id", groupId).select("id");
+  if (error) { console.error("그룹 삭제 실패:", error.message); return false; }
+  return (data?.length ?? 0) > 0;
+}
+
+/** 사람을 부른다(주인만). 같은 사람을 두 번 넣어도 한 줄 — DB 의 복합 PK 와 같은 약속이다. */
+export async function pushGroupMember(groupId: ID, userId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  const uid = toRemoteUser(userId);
+  if (!sb || !uid || !(await ensureUid())) return false;
+  const { error } = await sb
+    .from("group_members")
+    .upsert({ group_id: groupId, user_id: uid, role: "member" as GroupRole }, { onConflict: "group_id,user_id" });
+  if (error) { console.error("그룹 멤버 추가 실패:", error.message); return false; }
+  return true;
+}
+
+/** 뺀다. 주인이 빼거나, 스스로 나가거나(서버가 둘 다 받는다 — 주인만 뺄 수 있으면 그룹에 갇힌다). */
+export async function pullGroupMember(groupId: ID, userId: ID): Promise<boolean> {
+  const sb = getSupabase();
+  const uid = toRemoteUser(userId);
+  if (!sb || !uid) return false;
+  const { data, error } = await sb
+    .from("group_members").delete()
+    .eq("group_id", groupId).eq("user_id", uid).select("user_id");
+  if (error) { console.error("그룹 멤버 제외 실패:", error.message); return false; }
+  return (data?.length ?? 0) > 0;
+}
+
+/** 그룹의 일정들에 지금 멤버 전원을 채운다. 몇 번을 눌러도 결과가 같다(멱등).
+ *
+ *  자동으로 하지 않는 이유는 서버 쪽에 적어 두었다(0017 §규칙 ②) — 이미 지나간 자리에
+ *  사람을 소급해 앉히는 것은 조용히 할 일이 아니다. 그래서 손잡이가 화면에 있다.
+ *  돌려주는 것은 '몇 개의 일정에 몇 사람을 채웠는가' 다. 둘 다 0 이면 이미 맞아 있었다는 뜻이다. */
+export async function syncGroupCalendar(groupId: ID): Promise<{ events: number; members: number } | null> {
+  const sb = getSupabase();
+  if (!sb || !(await ensureUid())) return null;
+  const { data, error } = await sb.rpc("sync_group_calendar", { g: groupId });
+  if (error) { console.error("그룹 동기화 실패:", error.message); return null; }
+  const row = Array.isArray(data) ? data[0] : data;
+  return { events: Number(row?.events_touched ?? 0), members: Number(row?.members_added ?? 0) };
 }
 
 // ── 사람 ────────────────────────────────────────────────

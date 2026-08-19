@@ -17,7 +17,7 @@ import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 import { API_BASE } from "@/lib/api";
 import { useRemoteSync } from "@/lib/useRemoteSync";
 import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signOutRemote } from "@/lib/remote";
-import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Schedule } from "@/lib/types";
+import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Group, Schedule } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import { DEST, NAV, NAV_GAP, NAV_ROW, NAV_ROW_TOUCH, type Parsed, type Receipt, type View } from "./nav";
 import { L, type Lang } from "./i18n";
@@ -34,6 +34,7 @@ import { CalendarView } from "./parts/DayViews";
 import type { ChatSummary } from "./parts/Chat";
 import { EventPanel, RoomTimeline } from "./parts/EventPanel";
 import { NewRoomPanel, PeopleView, PersonPanel } from "./parts/People";
+import { GroupPanel, NewGroupPanel } from "./parts/Groups";
 import { GuideTour, type TourStep } from "./parts/Guide";
 import { SettingsPanel } from "./parts/Settings";
 
@@ -91,6 +92,18 @@ export default function Reimagine() {
   const markRoomRead = useWorkspace((s) => s.markRoomRead);
   const sharedEventsWith = useWorkspace((s) => s.sharedEventsWith);
   const participantsOf = useWorkspace((s) => s.participantsOf);
+  // 그룹 — 같은 사람들이 다시 모인다.
+  const groups = useWorkspace((s) => s.groups);
+  const groupMembers = useWorkspace((s) => s.groupMembers);
+  const membersOf = useWorkspace((s) => s.membersOf);
+  const eventsOfGroup = useWorkspace((s) => s.eventsOfGroup);
+  const isGroupOwner = useWorkspace((s) => s.isGroupOwner);
+  const createGroup = useWorkspace((s) => s.createGroup);
+  const renameGroup = useWorkspace((s) => s.renameGroup);
+  const removeGroup = useWorkspace((s) => s.removeGroup);
+  const addGroupMember = useWorkspace((s) => s.addGroupMember);
+  const removeGroupMember = useWorkspace((s) => s.removeGroupMember);
+  const syncGroup = useWorkspace((s) => s.syncGroup);
   // 사람 찾기·잇기 — 지어낸 이름이 아니라 실재하는 Comein 계정을 고른다.
   // 그리고 즉시 잇지 않는다: 청하고, 상대가 받아야 이어진다.
   const findPeople = useWorkspace((s) => s.findPeople);
@@ -137,6 +150,9 @@ export default function Reimagine() {
 
   const [peopleQuery, setPeopleQuery] = React.useState("");
   const [newRoom, setNewRoom] = React.useState(false); // 여러 명과 함께할 자리 만들기
+  // 그룹 — 사람의 묶음(0017). 레일에 탭을 하나 더 만들지 않고 '사람' 안에 산다.
+  const [openGroupId, setOpenGroupId] = React.useState<string | null>(null);
+  const [newGroup, setNewGroup] = React.useState(false);
   // AI 가 되묻는 한 줄 — 확신이 없으면 멋대로 만들지 않고 물어본다.
   // text = 알아챈 사실 · q = 권하는 한 마디 · cta = 그 한 번의 행동 · seed = 그 행동이 들고 갈 것.
   // 문구를 '경고'가 아니라 '이해했다는 말'로 세운다 — 오류가 난 것이 아니라 AI 가 읽은 것이다.
@@ -414,8 +430,14 @@ export default function Reimagine() {
         pendingAsk.current = { message: t, ask: asked };
         return;
       }
-      // 여기까지 왔으면 되물음이 아니다 — 기다리던 질문이 있었다면 답이 된 것이므로 내린다.
-      setAsk(null);
+      // 항목이 나왔는데 물음도 함께 왔다면, **한 마디에 두 가지가 들어 있었다는 뜻**이다.
+      //   "내일 3시 회의 잡고 교수님 면담도 잡아줘"
+      //     → 회의는 세우고, 면담은 물어서라도 남긴다.
+      // 예전에는 여기서 물음을 통째로 버렸다(setAsk(null)). 그래서 시각이 없던 쪽이
+      // 화면에서 조용히 사라졌다 — 사용자는 없어진 줄도 몰랐다(docs/24 §25.8).
+      // 물음을 남길 때는 그때의 원래 말도 함께 쥔다. 다음 한 줄("4시")이 그 답이 된다.
+      if (asked) { setAsk({ text: asked }); pendingAsk.current = { message: t, ask: asked }; }
+      else setAsk(null);
 
       // AI가 한 문장에서 여러 건을 뽑았으면 전부 각자의 목적지로 보낸다.
       // ("내일 3시 미팅 잡고 자료도 준비해야 해" → 일정 + 할 일)
@@ -528,6 +550,7 @@ export default function Reimagine() {
   const selectPerson = React.useCallback((id: string | null) => {
     setPersonId(id);
     setOpenEventId(null);
+    setOpenGroupId(null);   // 오른쪽 칸은 하나뿐이다 — 서로를 비켜 준다
   }, []);
 
   // 서버와의 연결 — 한 번만 건다(자식에서 또 걸면 Realtime 소켓이 두 개 열린다).
@@ -658,7 +681,8 @@ export default function Reimagine() {
     setOpenEventId(null);
     setChatFocus(false);
     setNewRoom(false);
-    if (shownView !== "people") setPersonId(null);
+    setNewGroup(false);
+    if (shownView !== "people") { setPersonId(null); setOpenGroupId(null); }
   }, [shownView]);
 
   const endTour = React.useCallback((completed: boolean) => {
@@ -866,6 +890,12 @@ export default function Reimagine() {
   }, [doorOpening]);
 
   const person = personId ? contacts.find((c: any) => c.id === personId) ?? null : null;
+  const openGroup = openGroupId ? groups.find((g) => g.id === openGroupId) ?? null : null;
+  /** 그룹마다 몇 명인가 — 목록이 한 줄에 그것만 말한다. */
+  const memberCountOf = React.useCallback(
+    (gid: string) => groupMembers.filter((m) => m.groupId === gid).length,
+    [groupMembers],
+  );
   /** 방 id 는 반드시 방 목록에서 찾는다.
    *  `dm_${peerId}` · `room_${eventId}` 는 서버가 없을 때 스토어가 붙이는 임시 이름일 뿐이고,
    *  서버에 붙으면 진짜 uuid 로 바뀐다. 규칙을 화면에서 다시 지어내면 서버에서 온 말이
@@ -1096,6 +1126,36 @@ export default function Reimagine() {
     setChatFocus(true);
     ignite();
   }, [addSchedule, addParticipant, contacts, schedules, eventParticipants, lang]);
+
+  /** 그룹의 자리를 하나 세운다.
+   *
+   *  참여자를 여기서 넣지 않는다 — 서버 트리거가 그룹 멤버 전원을 앉힌다(0017).
+   *  화면이 같은 일을 또 하면 두 벌이 되고, 무엇보다 **그룹에 사람이 늘었을 때**
+   *  화면이 아는 명단과 서버가 아는 명단이 갈린다. 명단은 한 곳에서만 읽는다.
+   *  앉은 결과는 Realtime(events 변화 → 스냅샷)이 곧바로 실어 온다. */
+  const createGroupEvent = React.useCallback((groupId: string, start: Date) => {
+    const g = groups.find((x) => x.id === groupId);
+    if (!g) return;
+    const id = addSchedule({
+      title: g.name,
+      start: start.toISOString(),
+      end: new Date(+start + 3_600_000).toISOString(),
+      status: "confirmed",
+      groupId,
+    });
+    setOpenGroupId(null);
+    setOpenEventId(id);
+    setChatFocus(true);
+    ignite();
+  }, [addSchedule, groups, ignite]);
+
+  /** 그룹을 연다. 사람·일정 패널과 같은 칸을 쓰므로 서로를 비켜 준다. */
+  const selectGroup = React.useCallback((id: string | null) => {
+    setOpenGroupId(id);
+    setPersonId(null);
+    setOpenEventId(null);
+    setNewGroup(false);
+  }, []);
 
   // ── Invisible AI · 조용한 비서 — 데이터가 아니라 '사람다운 한 문장'으로. ──
   const h = now?.getHours() ?? 9;
@@ -1445,6 +1505,48 @@ export default function Reimagine() {
       );
     }
     if (shownView !== "people") return null;
+    if (newGroup) {
+      return (
+        <NewGroupPanel
+          contacts={contacts}
+          lang={lang}
+          onClose={() => setNewGroup(false)}
+          onCreate={(name, ids) => {
+            void createGroup(name, ids).then((id) => {
+              setNewGroup(false);
+              if (id) selectGroup(id);
+            });
+          }}
+        />
+      );
+    }
+    if (openGroup) {
+      return (
+        <GroupPanel
+          key={openGroup.id}
+          group={openGroup}
+          members={membersOf(openGroup.id)}
+          events={eventsOfGroup(openGroup.id)}
+          contacts={contacts}
+          lang={lang}
+          isOwner={isGroupOwner(openGroup.id)}
+          onClose={() => selectGroup(null)}
+          onRename={(t) => renameGroup(openGroup.id, t)}
+          onRemove={() => { removeGroup(openGroup.id); selectGroup(null); }}
+          onAddMember={(uid) => addGroupMember(openGroup.id, uid)}
+          onRemoveMember={(uid) => removeGroupMember(openGroup.id, uid)}
+          onSync={() => syncGroup(openGroup.id)}
+          onOpenEvent={(id) => openEvent(id, true)}
+          // 기본값은 '내일 이 시간쯤' — 빈 칸부터 채우게 하지 않는다(새 자리 폼과 같은 태도).
+          onNewEvent={() => {
+            const at = new Date();
+            at.setDate(at.getDate() + 1);
+            at.setMinutes(0, 0, 0);
+            createGroupEvent(openGroup.id, at);
+          }}
+        />
+      );
+    }
     if (newRoom) {
       return <NewRoomPanel contacts={contacts} lang={lang} onClose={() => setNewRoom(false)} onCreate={createEventWith} />;
     }
@@ -1678,7 +1780,7 @@ export default function Reimagine() {
             data-view={shownView}
             data-ctx={showCtxRail}
             data-aside={!!aside}
-            data-picked={shownView === "people" && !!(person || openEventData || newRoom)}
+            data-picked={shownView === "people" && !!(person || openEventData || newRoom || openGroup || newGroup)}
             data-settings={panel === "settings"}
           >
 
@@ -1787,6 +1889,11 @@ export default function Reimagine() {
                   unreadOf={unreadOf}
                   convo={convo}
                   openEventId={openEventId}
+                  teams={groups}
+                  memberCountOf={memberCountOf}
+                  openGroupId={openGroupId}
+                  onOpenGroup={(id: string) => selectGroup(id)}
+                  onNewGroup={() => { selectGroup(null); setNewGroup(true); }}
                   onSearchDay={() => setCalSearchOpen(true)}
                   focusDay={calFocus}
                 />
@@ -1915,7 +2022,7 @@ export default function Reimagine() {
             /* 아래에 이미 제 입력칸을 가진 화면 위에서는 물러난다.
                새 자리 만들기 폼도 그중 하나다 — 물러나지 않으면 캡처 바가 '만들기' 버튼
                한복판을 덮어 클릭을 가로챈다(실제로 눌리지 않았다). */
-            tuck={shownView === "people" && !!(personId || openEventId || newRoom)}
+            tuck={shownView === "people" && !!(personId || openEventId || newRoom || openGroupId || newGroup)}
           />
         )}
 
@@ -1993,6 +2100,12 @@ function Feature(props: {
     groups: { id: string; title: string; count: number; last?: ChatMessage; unread: number; at: number }[];
   };
   openEventId: string | null;
+  /** 그룹 — 사람의 묶음(0017). 사람 화면 안에 갈래 하나로 산다. */
+  teams: Group[];
+  memberCountOf: (groupId: string) => number;
+  openGroupId: string | null;
+  onOpenGroup: (groupId: string) => void;
+  onNewGroup: () => void;
   /** 말로 날짜를 찾는 자리를 연다 · 그렇게 찾은 날이 있는 달로 달력을 옮긴다. */
   onSearchDay?: () => void;
   focusDay?: Date | null;

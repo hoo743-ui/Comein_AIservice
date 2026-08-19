@@ -184,7 +184,7 @@ export function MessageGroups({ messages, nameOf, myName, lang, onEdit, onDelete
         prevDay = g.at;
         return (
           <React.Fragment key={g.key}>
-            {divider && <p className="rmg-msg-day">{divider}</p>}
+            {divider && <p className="rmg-msg-day" role="separator"><span>{divider}</span></p>}
             <div className={`rmg-mg ${g.senderId === ME_ID ? "mine" : ""}`}>
               <p className="rmg-mg-head">
                 <span className="rmg-mg-who">{g.senderId === ME_ID ? myName : nameOf(g.senderId)}</span>

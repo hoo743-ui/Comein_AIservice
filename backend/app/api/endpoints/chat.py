@@ -102,9 +102,21 @@ async def chat(req: ChatRequest) -> AiResult:
         logger.exception("AI processing error")
         return AiResult(intent="chat", reply=_FALLBACK_ERROR, items=[])
 
-    # 뽑았으면 묻지 않는다. 둘 다 오면 뽑은 쪽을 믿는다 —
-    # 이미 정리된 것을 두고 다시 물으면, 사용자는 정리가 안 된 줄 안다.
-    ask = None if items else _ask_of(raw)
+    # 물음은 그대로 전한다.
+    #
+    # 예전에는 `None if items else ...` 였다 — "뽑았으면 묻지 않는다". 같은 것을 두고
+    # 항목과 질문이 함께 서는 것을 막으려던 것이고, 그 자체는 옳다. 그런데 **한 마디에 두
+    # 가지가 들어 있을 때** 그 규칙이 엉뚱하게 걸렸다:
+    #
+    #   "내일 3시 회의 잡고 교수님 면담도 잡아줘"
+    #     → 회의(시각 있음)는 서고, 면담(시각 없음)은 items 에도 ask 에도 없이 사라졌다.
+    #
+    # 사용자가 말한 것 하나가 조용히 증발한다. 같은 것을 두 번 묻는 것보다 나쁘다 —
+    # 두 번 물으면 귀찮을 뿐이지만, 사라지면 없어진 줄도 모른다.
+    #
+    # '같은 것을 두고 둘 다 하지 않는다' 는 판단은 프롬프트가 항목 단위로 한다
+    # (ai/router.py 의 ASK BACK — "for the same thing"). 여기서 통째로 덮지 않는다.
+    ask = _ask_of(raw)
 
     intent = items[0].category if items else "chat"
     # 예전에는 여기서 `raw.get("reply")` 를 먼저 봤다. 그런데 `ParseResponse`(ai/router.py)에는

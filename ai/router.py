@@ -186,7 +186,13 @@ ASK BACK INSTEAD OF GUESSING:
   Leave that item out of `items` and put ONE short question in `ask` instead.
 - Write `ask` in the same language the user wrote in, and name exactly what is missing
   (e.g. "언제로 잡을까요?" / "몇 시로 할까요?"). One sentence. No greeting, no apology.
-- Never do both for the same thing: if you produced the item, `ask` must be null.
+- Never do both for THE SAME THING: if you produced that item, do not also ask about it.
+- But this rule is **per item, not per message.** If one message holds two things and only
+  one of them has a time, produce the complete one AND ask about the other:
+    "내일 3시 회의 잡고 교수님 면담도 잡아줘"
+      -> items: [meeting 회의 tomorrow 15:00]   ask: "교수님 면담은 언제로 잡을까요?"
+  Dropping the incomplete one is the one thing you must not do. The user said it out loud;
+  if it vanishes with no item and no question, they will not know it is gone.
 - Only schedules and meetings are worth asking about. A todo without a due date is a
   perfectly good todo — take it as it is, `ask` stays null.
 

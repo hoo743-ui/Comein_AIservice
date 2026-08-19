@@ -10,6 +10,8 @@ import type {
   ConnectionRequest,
   Contact,
   EventParticipant,
+  Group,
+  GroupMember,
   Place,
   ID,
   ParticipantStatus,
@@ -18,6 +20,7 @@ import type {
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
+  createGroupRemote, deleteGroupRemote, pullGroupMember, pushGroupMember, renameGroupRemote, syncGroupCalendar,
   editMessage as editMessageRemote, deleteMessage as deleteMessageRemote,
   answerConnectionRequest, cancelConnectionRequest, changeMyHandle, dayAvailability, ensureDmRoomRemote,
   fetchHandleState,
@@ -177,6 +180,9 @@ interface WorkspaceState {
   timetable: ClassEntry[];
   contacts: Contact[];
   eventParticipants: EventParticipant[];
+  /** 같은 사람들이 다시 모인다 — 일정보다 오래 사는 묶음(0017). */
+  groups: Group[];
+  groupMembers: GroupMember[];
   chatRooms: ChatRoom[];
   chatMessages: ChatMessage[];
   settings: Settings;
@@ -201,6 +207,8 @@ interface WorkspaceState {
     chatRooms: ChatRoom[];
     chatMessages: ChatMessage[];
     contacts?: Contact[];
+    groups?: Group[];
+    groupMembers?: GroupMember[];
   }) => void;
   /** 사람 목록만 다시 받아온다(누군가를 잇고 난 뒤). */
   refreshPeople: () => Promise<void>;
@@ -252,6 +260,22 @@ interface WorkspaceState {
   removeSchedule: (id: ID) => void;
   /** 이름을 고쳐 단다. 방 이름은 곧 일정 제목이다(서버는 주최자만 받는다). */
   renameSchedule: (id: ID, title: string) => void;
+
+  // 그룹 — 같은 사람들이 다시 모인다(0017)
+  /** 그 그룹의 사람들. */
+  membersOf: (groupId: ID) => GroupMember[];
+  /** 그 그룹으로 잡힌 일정들(시간 순). */
+  eventsOfGroup: (groupId: ID) => Schedule[];
+  /** 내가 그 그룹의 주인인가 — 이름·사람은 주인만 건드릴 수 있다(서버도 그렇게 받는다). */
+  isGroupOwner: (groupId: ID) => boolean;
+  /** 그룹을 열고 사람들을 부른다. 만든 사람은 서버 트리거가 주인이자 멤버로 앉힌다. */
+  createGroup: (name: string, memberIds: ID[]) => Promise<ID | null>;
+  renameGroup: (groupId: ID, name: string) => void;
+  removeGroup: (groupId: ID) => void;
+  addGroupMember: (groupId: ID, userId: ID) => void;
+  removeGroupMember: (groupId: ID, userId: ID) => void;
+  /** 그룹의 일정들에 지금 멤버 전원을 채운다(멱등). 몇 개 일정에 몇 사람을 채웠는지 돌려준다. */
+  syncGroup: (groupId: ID) => Promise<{ events: number; members: number } | null>;
 
   // 공유 일정 · 참여자 — 하나의 일정을 여럿이 같은 id 로 바라본다
   participantsOf: (eventId: ID) => EventParticipant[];
@@ -337,6 +361,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
   timetable: seedTimetable,
   contacts: seedContacts,
   eventParticipants: seedParticipants,
+  // 그룹은 지어내지 않는다. 사람과 같은 이유다 — 지어낸 묶음은 로그인한 뒤에도 남아
+  // 진짜인 척한다(seedContacts 위 주석 참고).
+  groups: [],
+  groupMembers: [],
   chatRooms: seedRooms,
   chatMessages: seedChatMessages,
   // 이름의 기본값은 **빈 칸**이다. 예전에는 "나" 로 박혀 있었는데, 그러면 화면 쪽의
@@ -363,6 +391,10 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       ],
       // 사람은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
       contacts: snap.contacts ?? [],
+      // 그룹도 같다. 0017 을 아직 안 올린 서버에서는 비어 온다 — 그때 화면은
+      // 그룹 갈래를 '아직 없음' 으로 그리면 되고, 다른 것은 그대로 돈다.
+      groups: snap.groups ?? [],
+      groupMembers: snap.groupMembers ?? [],
     })),
 
   refreshPeople: async () => {
@@ -600,6 +632,123 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         writeError: "이름을 바꾸지 못했어요 — 이 일정의 주최자만 바꿀 수 있어요.",
       }));
     });
+  },
+
+  // ── 그룹 ────────────────────────────────────────────
+  membersOf: (groupId) => get().groupMembers.filter((m) => m.groupId === groupId),
+
+  eventsOfGroup: (groupId) =>
+    get().schedules
+      .filter((s) => s.groupId === groupId)
+      .sort((a, b) => +new Date(a.start) - +new Date(b.start)),
+
+  isGroupOwner: (groupId) => get().groups.find((g) => g.id === groupId)?.ownerId === ME_ID,
+
+  createGroup: async (name, memberIds) => {
+    const label = name.trim();
+    if (!label) return null;
+    if (!remoteReady()) {
+      // 그룹은 서버 없이는 뜻이 없다 — 사람의 묶음인데 그 사람들이 서버에만 있다.
+      // 지역 그룹을 만들어 두면 로그인한 뒤 진짜와 겹쳐 두 벌이 된다.
+      set({ writeError: "그룹은 로그인해야 만들 수 있어요." });
+      return null;
+    }
+    const id = await createGroupRemote(label);
+    if (!id) { set({ writeError: "그룹을 만들지 못했어요. 잠시 뒤 다시 시도해 주세요." }); return null; }
+    // 주인 줄은 서버 트리거가 넣는다. 여기서는 부른 사람들만 보낸다.
+    set((st) => ({
+      groups: [...st.groups, { id, name: label, ownerId: ME_ID }],
+      groupMembers: [...st.groupMembers, { groupId: id, userId: ME_ID, role: "owner" }],
+      writeError: null,
+    }));
+    for (const uid of memberIds) get().addGroupMember(id, uid);
+    return id;
+  },
+
+  renameGroup: (groupId, name) => {
+    const label = name.trim();
+    const before = get().groups.find((g) => g.id === groupId)?.name;
+    if (!label || before === undefined || before === label) return;
+    set((st) => ({
+      groups: st.groups.map((g) => (g.id === groupId ? { ...g, name: label } : g)),
+      writeError: null,
+    }));
+    if (!remoteReady()) return;
+    void renameGroupRemote(groupId, label).then((ok) => {
+      if (ok) return;
+      set((st) => ({
+        groups: st.groups.map((g) => (g.id === groupId ? { ...g, name: before } : g)),
+        writeError: "그룹 이름을 바꾸지 못했어요 — 그룹을 만든 사람만 바꿀 수 있어요.",
+      }));
+    });
+  },
+
+  removeGroup: (groupId) => {
+    const st0 = get();
+    const before = { groups: st0.groups, groupMembers: st0.groupMembers, schedules: st0.schedules };
+    if (!before.groups.some((g) => g.id === groupId)) return;
+    // 그룹이 사라져도 **일정은 남는다** — 그 표시만 걷는다(서버도 on delete set null).
+    // 모임이 해체됐다고 지난 약속까지 지울 이유가 없다.
+    set(() => ({
+      groups: before.groups.filter((g) => g.id !== groupId),
+      groupMembers: before.groupMembers.filter((m) => m.groupId !== groupId),
+      schedules: before.schedules.map((s) => (s.groupId === groupId ? { ...s, groupId: undefined } : s)),
+      writeError: null,
+    }));
+    if (!remoteReady()) return;
+    void deleteGroupRemote(groupId).then((ok) => {
+      if (ok) return;
+      set(() => ({ ...before, writeError: "그룹을 없애지 못했어요 — 그룹을 만든 사람만 없앨 수 있어요." }));
+    });
+  },
+
+  addGroupMember: (groupId, userId) => {
+    if (get().groupMembers.some((m) => m.groupId === groupId && m.userId === userId)) return;
+    set((st) => ({
+      groupMembers: [...st.groupMembers, { groupId, userId, role: "member" }],
+      writeError: null,
+    }));
+    if (!remoteReady()) return;
+    void pushGroupMember(groupId, userId).then((ok) => {
+      if (ok) return;
+      set((st) => ({
+        groupMembers: st.groupMembers.filter((m) => !(m.groupId === groupId && m.userId === userId)),
+        writeError: "그 사람을 그룹에 넣지 못했어요 — 그룹을 만든 사람만 부를 수 있어요.",
+      }));
+    });
+  },
+
+  removeGroupMember: (groupId, userId) => {
+    const before = get().groupMembers.find((m) => m.groupId === groupId && m.userId === userId);
+    if (!before) return;
+    set((st) => ({
+      groupMembers: st.groupMembers.filter((m) => !(m.groupId === groupId && m.userId === userId)),
+      writeError: null,
+    }));
+    if (!remoteReady()) return;
+    void pullGroupMember(groupId, userId).then((ok) => {
+      if (ok) return;
+      set((st) => ({
+        groupMembers: st.groupMembers.some((m) => m.groupId === groupId && m.userId === userId)
+          ? st.groupMembers
+          : [...st.groupMembers, before],
+        writeError: "그 사람을 그룹에서 빼지 못했어요. 잠시 뒤 다시 시도해 주세요.",
+      }));
+    });
+  },
+
+  syncGroup: async (groupId) => {
+    if (!remoteReady()) { set({ writeError: "아직 서버에 연결되지 않았어요." }); return null; }
+    set({ writeError: null });
+    const r = await syncGroupCalendar(groupId);
+    if (!r) { set({ writeError: "일정을 맞추지 못했어요. 잠시 뒤 다시 눌러 주세요." }); return null; }
+    // 참여자가 늘었으면 그 관계를 화면이 알아야 한다 — 한 건씩 깁지 않고 다시 받아 온다
+    // (스토어가 일정·참여자를 다루는 방식과 같다).
+    if (r.members > 0) {
+      const snap = await fetchSnapshot();
+      if (snap) get().hydrateRemote(snap);
+    }
+    return r;
   },
 
   // ── 공유 일정 · 참여자 ──────────────────────────────

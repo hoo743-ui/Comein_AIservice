@@ -24,7 +24,9 @@ import {
   type EventParticipant, type Schedule,
 } from "@/lib/types";
 import { ChatThread } from "./Chat";
+import { GroupLane } from "./Groups";
 import { chatStamp } from "../chatTime";
+import { eventStamp } from "../datetime";
 import { L, type Lang } from "../i18n";
 
 export function NewRoomPanel({ contacts, lang, onClose, onCreate }: {
@@ -216,6 +218,18 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
   const last = messages.length ? messages[messages.length - 1] : undefined;
   // 최근 활동 — 마지막 말과 가장 가까운 자리 중 더 최근인 쪽 하나만.
   const recentEvent = [...sharedEvents].sort((a, b) => +new Date(b.start) - +new Date(a.start))[0];
+  /** 다가오는 것이 앞, 지난 것은 뒤(가까운 과거부터).
+   *  세 개만 보여 주는 자리라 순서가 곧 '무엇을 먼저 보여 줄 것인가' 다 — 지난 약속보다
+   *  다음 약속이 먼저다. 예전에는 서버가 준 순서(시작 시각 오름차순) 그대로여서,
+   *  지난 자리가 많으면 앞으로의 자리가 '외 N' 뒤에 숨었다. */
+  const ordered = React.useMemo(() => {
+    const now = Date.now();
+    const next = sharedEvents.filter((e) => +new Date(e.start) >= now)
+      .sort((a, b) => +new Date(a.start) - +new Date(b.start));
+    const past = sharedEvents.filter((e) => +new Date(e.start) < now)
+      .sort((a, b) => +new Date(b.start) - +new Date(a.start));
+    return [...next, ...past];
+  }, [sharedEvents]);
   const recent = (() => {
     const mAt = last ? +new Date(last.createdAt) : 0;
     const eAt = recentEvent ? +new Date(recentEvent.start) : 0;
@@ -275,17 +289,18 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
         <div className="rmg-pwith">
           <p className="rmg-pwith-k">{en ? "Together" : "함께하는 일정"}</p>
           <div className="rmg-pwith-row">
-            {(showAllEvents ? sharedEvents : sharedEvents.slice(0, 3)).map((s2: Schedule) => (
+            {(showAllEvents ? ordered : ordered.slice(0, 3)).map((s2: Schedule) => (
               <button
                 key={s2.id}
                 type="button"
-                className="rmg-pwith-chip"
+                className={`rmg-pwith-chip ${+new Date(s2.start) < Date.now() ? "past" : ""}`}
                 data-tour="sharedevent"
                 onClick={() => onOpenEvent(s2.id)}
                 title={`${fmtDate(new Date(s2.start))} · ${fmtTime(new Date(s2.start))}`}
               >
                 <span className="rmg-pwith-t">{s2.title}</span>
-                <span className="rmg-pwith-at">{fmtTime(new Date(s2.start))}</span>
+                {/* 시각만으로는 어느 날인지 알 수 없다 — "14:00" 은 오늘일 수도 지난달일 수도 있다. */}
+                <span className="rmg-pwith-at">{eventStamp(new Date(s2.start), en)} {fmtTime(new Date(s2.start))}</span>
               </button>
             ))}
             {!showAllEvents && sharedEvents.length > 3 && (
@@ -411,7 +426,7 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent }: any) {
+export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent, teams, memberCountOf, openGroupId, onOpenGroup, onNewGroup }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   // 앞의 @ 는 이름의 일부가 아니라 '핸들을 부르는 방식' 이다. 여기서 벗겨야
@@ -421,14 +436,18 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
   // ── 세 갈래 ──
   // 연락처는 '누구와 이어져 있는가', 대화는 '무슨 말이 오갔는가' 다. 서로 다른 질문이라 목록도 나눈다.
   // 탭은 버튼처럼 보이지 않는다 — 얇은 밑줄 하나로만 지금 어디를 보는지 말한다.
-  type Lane = "contacts" | "dm" | "group";
+  // 갈래 넷. `rooms` 는 예전에 `group` 이라 불렀는데, 그건 **일정마다 생긴 방**이지
+  // 사람의 묶음이 아니다. 진짜 그룹(0017)이 생기면서 같은 낱말이 둘이 되므로,
+  // 이쪽은 이 제품이 이미 쓰는 어휘를 따라 '자리' 로 부른다("새 자리" 버튼이 그렇다).
+  type Lane = "contacts" | "dm" | "rooms" | "teams";
   const [lane, setLane] = React.useState<Lane>("contacts");
   const dm = (convo?.dm as Map<string, { last?: ChatMessage; unread: number }>) ?? new Map();
   const groups = (convo?.groups as { id: string; title: string; count: number; last?: ChatMessage; unread: number }[]) ?? [];
   const LANES: { key: Lane; label: string; n: number }[] = [
     { key: "contacts", label: en ? "Contacts" : "연락처", n: contacts.length },
     { key: "dm", label: en ? "Direct" : "개인 채팅", n: [...dm.values()].filter((v) => v.last).length },
-    { key: "group", label: en ? "Groups" : "그룹 채팅", n: groups.length },
+    { key: "rooms", label: en ? "Rooms" : "자리 대화", n: groups.length },
+    { key: "teams", label: en ? "Groups" : "그룹", n: (teams?.length ?? 0) },
   ];
   const preview = (m?: ChatMessage) =>
     m ? `${m.senderId === ME_ID ? (en ? "You: " : "나: ") : ""}${m.content}` : "";
@@ -516,11 +535,18 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
           </button>
         )}
         {/* 만들기는 큰 버튼이 아니라 한 줄의 말이다 — 늘 눌리길 기다리는 얼굴을 하지 않는다.
-            '그룹' 이라 부르지 않는다: 이 제품에 group 이라는 것은 없고, 이 버튼이 여는 패널은
-            스스로를 '새 자리(New event)' 라고 부른다. 여는 것과 열리는 것의 이름이 다르면
-            누른 사람은 자기가 무엇을 만들었는지 모른다. */}
-        <button type="button" className="rmg-ppl-make" onClick={onNewRoom}>
-          {en ? "New event" : "새 자리"}
+            **여는 것과 열리는 것의 이름이 같아야 한다.** 누른 사람은 자기가 무엇을 만들었는지
+            그 이름으로 안다. 그래서 지금 보고 있는 갈래를 따라간다:
+              그룹 갈래에서는 '그룹 만들기' → 새 그룹 패널
+              그 밖에서는     '새 자리'     → 새 자리(New event) 패널
+            (한때 이 자리에 "이 제품에 group 이라는 것은 없다" 고 적혀 있었다. 0017 로
+             생겼다 — 그래서 그 말을 지운다. 없다고 적어 둔 것이 생기면 주석이 거짓이 된다.) */}
+        <button
+          type="button"
+          className="rmg-ppl-make"
+          onClick={() => (lane === "teams" ? onNewGroup?.() : onNewRoom?.())}
+        >
+          {lane === "teams" ? (en ? "New group" : "그룹 만들기") : (en ? "New event" : "새 자리")}
         </button>
       </div>
 
@@ -594,7 +620,17 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
         ))}
       </nav>
 
-      {lane === "group" ? (
+      {lane === "teams" ? (
+        <GroupLane
+          teams={teams ?? []}
+          memberCountOf={memberCountOf ?? (() => 0)}
+          openGroupId={openGroupId ?? null}
+          q={q}
+          lang={lang}
+          onOpenGroup={onOpenGroup}
+          onNewGroup={onNewGroup}
+        />
+      ) : lane === "rooms" ? (
         groups.length === 0 ? (
           <div className="rmg-ppl-blank">
             <p className="rmg-ppl-blank-t">{en ? "No groups yet." : "함께하는 자리가 아직 없어요."}</p>

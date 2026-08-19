@@ -1283,9 +1283,18 @@ html { font-size: 17px; }
 /* ── AI 일정 제안 ──
    대화 위에 잠깐 놓이는 한 칸. 카드처럼 띄우지 않고 이 화면의 재질로 눕힌다
    — 여기만 다른 앱에서 온 위젯처럼 보이면 '조용히 돕는다'가 깨진다. */
+/* AI 일정 제안 — 대화 위에 **끼어드는** 카드다. 그래서 나타나는 방식이 곧 이 카드의 예의다.
+   갑자기 자리를 차지하면 읽던 사람의 눈이 밀린다("훅 내려간다"). 짧게 열리며 들어온다.
+   모션을 줄여 달라고 한 사람에게는 그냥 서 있는다. */
 .rmg-prop { display: flex; flex-direction: column; gap: var(--sp-1);
   padding: var(--sp-2); border: 1px solid var(--hair); border-radius: var(--r);
-  background: color-mix(in srgb, var(--ink) 3%, transparent); }
+  background: color-mix(in srgb, var(--ink) 3%, transparent);
+  animation: rmg-prop-in 320ms cubic-bezier(0.22, 1, 0.36, 1); transform-origin: top; }
+@keyframes rmg-prop-in {
+  from { opacity: 0; transform: translateY(-6px) scaleY(0.96); }
+  to   { opacity: 1; transform: none; }
+}
+@media (prefers-reduced-motion: reduce) { .rmg-prop { animation: none; } }
 .rmg-prop-eye { margin: 0; }
 .rmg-prop-when { margin: 0; font-size: 1.02rem; font-weight: 500; letter-spacing: -0.015em; color: var(--ink); font-variant-numeric: tabular-nums; }
 .rmg-prop-why { margin: 0; font-size: 0.84rem; line-height: 1.6; color: color-mix(in srgb, var(--ink) 70%, transparent); }
@@ -1299,6 +1308,11 @@ html { font-size: 17px; }
 .rmg-prop-pans { min-width: 2.6em; text-align: right; font-size: 0.78rem; color: var(--faint); }
 .rmg-prop-pans.accepted { color: color-mix(in srgb, var(--ink) 78%, transparent); }
 .rmg-prop-sum { margin: var(--sp-1) 0 0; font-size: 0.8rem; color: color-mix(in srgb, var(--ink) 62%, transparent); }
+/* '누가?' — 요약 줄 끝에 붙는 낱말 하나. 버튼처럼 생기지 않는다(카드 안에 버튼이 셋이
+   되면 무엇을 눌러야 할지가 흐려진다). 눌러야 할 것은 아래 동의·다른 시간 둘뿐이다. */
+.rmg-prop-who { border: 0; background: none; font: inherit; font-size: 0.78rem; padding: 0 2px;
+  color: var(--faint); text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.rmg-prop-who:hover { color: var(--ink); }
 .rmg-prop-acts { display: flex; gap: 6px; margin-top: 4px; }
 .rmg-prop-acts .rmg-ppl-act { font-size: 0.84rem; padding: 6px 14px; }
 /* 막힌 이유 — 붉게 소리치지 않는다. 다만 분명히 읽히게. */
@@ -1449,6 +1463,12 @@ html { font-size: 17px; }
   transition: border-color 170ms ease-out, background 170ms ease-out; }
 .rmg-pwith-chip:hover { border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); background: color-mix(in srgb, var(--surface) 95%, transparent); }
 .rmg-pwith-chip:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 지난 자리는 뒤로 물러난다. 지우지 않는 이유는 지난 약속도 기록이기 때문이고,
+   그렇다고 앞으로의 것과 같은 얼굴로 서 있으면 어느 쪽을 봐야 하는지 매번 읽어야 한다. */
+.rmg-pwith-chip.past { border-color: color-mix(in srgb, var(--hair) 60%, transparent);
+  background: none; color: var(--muted); }
+.rmg-pwith-chip.past .rmg-pwith-at { color: color-mix(in srgb, var(--faint) 80%, transparent); }
+.rmg-pwith-chip.past:hover { color: var(--ink); border-color: var(--hair); }
 .rmg-pwith-t { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rmg-pwith-at { flex-shrink: 0; font-size: 0.74rem; color: var(--faint); font-variant-numeric: tabular-nums; }
 .rmg-pwith-more, .rmg-pwith-new { border: 0; background: none; font: inherit; font-size: 0.78rem; color: var(--faint);
@@ -1725,6 +1745,12 @@ html { font-size: 17px; }
 .rmg-mg-head { display: flex; align-items: baseline; gap: var(--sp-1); margin: 0; }
 .rmg-mg-who { font-size: 0.78rem; font-weight: 500; letter-spacing: -0.005em; color: var(--muted); }
 .rmg-mg.mine .rmg-mg-who { color: var(--ink); }
+/* 내 말과 남의 말 — 말풍선을 그리지 않기로 한 화면이라(§chatTime) 구별이 이름 색 하나뿐이었고,
+   같은 사람이 이어 말하면 이름조차 다시 적지 않으므로 그 단서마저 사라졌다.
+   왼쪽에 1px 세로 선을 하나 세운다. 보라를 쓰지 않는다 — 이 화면에서 보라는 오직 AI 의
+   언어다(§0). 잉크를 옅게 쓴 선이면 '내가 한 말' 이라는 표시로 충분하다. */
+.rmg-mg { padding-left: 9px; border-left: 1px solid transparent; }
+.rmg-mg.mine { border-left-color: color-mix(in srgb, var(--ink) 20%, transparent); }
 /* 시각은 이름 옆에 한 번만 — 뭉치의 시작에만 적는다.
    0.68rem 에 --faint 는 '있다' 는 표시였을 뿐 읽으라고 둔 글자가 아니었다.
    말이 언제 왔는지는 대화에서 자주 되짚는 것이라, 눈에 힘을 주지 않고도 읽혀야 한다. */
@@ -1770,12 +1796,18 @@ html { font-size: 17px; }
    그리고 긴 하루를 스크롤할 때는 그 표시가 위로 사라져 지금 어느 날을 읽는지 알 수 없었다 —
    그래서 붙어 있게(sticky) 두었다. 글자 뒤에 면을 한 겹 깔아 두는 이유는 그것뿐이다
    (붙어 있는 글자가 아래 말과 겹쳐 읽히면 그게 더 나쁘다). */
-.rmg-msg-day { position: sticky; top: 0; z-index: 2; width: fit-content;
-  margin: var(--sp-3) auto var(--sp-1); padding: 3px 10px; border-radius: 999px;
+/* 날이 바뀌는 자리 — 낱말 하나만 떠 있으면 '어디서부터 어제인지' 가 눈에 안 잡힌다.
+   양쪽으로 선을 그어 **경계**로 만든다. 점선이 아니라 직선인 이유: 점선은 이 화면에서
+   '아직 정해지지 않은 것'을 뜻한다(제안 일정·초대 대기). 지나간 날은 확정된 사실이다. */
+.rmg-msg-day { position: sticky; top: 0; z-index: 2;
+  display: flex; align-items: center; gap: var(--sp-2);
+  margin: var(--sp-3) 0 var(--sp-1); padding: 0;
   font-size: 0.72rem; font-weight: 500; letter-spacing: 0.06em;
-  text-transform: uppercase; color: var(--muted); text-align: center;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  backdrop-filter: blur(6px); }
+  text-transform: uppercase; color: var(--muted); }
+.rmg-msg-day::before, .rmg-msg-day::after { content: ""; flex: 1; height: 1px; background: var(--hair); }
+/* 낱말은 선 위에 앉되 배경을 깔아 선이 글자를 지나가지 않게 — 스크롤로 겹쳐도 읽힌다. */
+.rmg-msg-day > span { flex-shrink: 0; padding: 2px 8px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); backdrop-filter: blur(6px); }
 
 /* 컴포저 — 큰 둥근 상자가 아니라 얇은 선 하나. 쓰기 시작하면 그때만 아주 미세하게 떠오른다. */
 .rmg-drawer-compose { display: flex; align-items: center; gap: var(--sp-1); padding: 9px var(--sp-1) 9px var(--sp-2);

@@ -29,6 +29,9 @@ export interface Schedule {
    *  실체는 하나다 — 일정을 유형별로 복제하지 않고 이 한 칸으로 의미만 가른다.
    *  비어 있으면 제목에서 읽어 낸다(`lib/mode.ts` classifyEvent). */
   category?: EventCategory;
+  /** 어느 그룹의 자리인가. 있으면 만들 때 멤버 전원이 참여자가 된다(0017 트리거).
+   *  그룹이 사라져도 이 값만 비고 일정은 남는다 — 모임이 해체됐다고 지난 약속까지 지우지 않는다. */
+  groupId?: ID;
 }
 
 // ── 공유 일정 · 참여자 · 일정 대화 ──────────────────────
@@ -163,6 +166,28 @@ export interface Contact {
   sharedEvents?: number;
   /** 자유 태그. 관계를 규칙으로 읽을 때의 실마리이자, 나중에 검색이 붙을 자리. */
   tags?: string[];
+}
+
+// ── 그룹 ──────────────────────────────────────────────
+// 같은 사람들이 다시 모인다. 그래서 사람의 묶음은 일정보다 오래 산다.
+//   Group ─< GroupMember >─ User        Group ─< Schedule (groupId)
+// 일정 하나에 매인 '참여자들' 과 다르다 — 그쪽은 그 자리가 끝나면 함께 사라진다.
+
+export type GroupRole = "owner" | "member";
+
+export interface Group {
+  id: ID;
+  name: string;
+  /** 만든 사람. 이름을 고치고 사람을 부르는 것은 이 사람만 할 수 있다(서버도 그렇게 받는다). */
+  ownerId: ID;
+  createdAt?: string; // ISO
+}
+
+/** (groupId, userId) 는 유일하다 — 같은 사람을 두 번 넣어도 한 줄만 남는다. */
+export interface GroupMember {
+  groupId: ID;
+  userId: ID; // Contact.id 또는 ME_ID
+  role: GroupRole;
 }
 
 export type Weekday = "mon" | "tue" | "wed" | "thu" | "fri";

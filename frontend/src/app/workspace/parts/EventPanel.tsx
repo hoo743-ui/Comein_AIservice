@@ -51,6 +51,11 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, error, onAns
   const answer = new Map(proposal.responses.map((r) => [r.userId, r.response]));
   const mine = answer.get(ME_ID) ?? "pending";
   const waiting = participants.filter((p) => (answer.get(p.userId) ?? "pending") !== "accepted").length;
+  // 사람별 줄은 접어 둔다. 이 카드는 대화 위에 **끼어드는** 것이라, 사람 수만큼 세로로
+  // 자라면 그만큼 대화와 캘린더가 아래로 밀린다("훅 내려간다"). 게다가 그 줄들을 합친 말이
+  // 바로 아래 한 줄로 이미 있다(`rmg-prop-sum` — "2명 모두 충돌 없음 · 1명 대기 중").
+  // 요약이 있는데 원본을 펼쳐 두는 것은, 읽는 사람이 아니라 만든 사람 편한 배치다.
+  const [openWho, setOpenWho] = React.useState(false);
   const freeAll = participants.every((p) => avail.get(p.userId) !== "busy");
 
   const stateWord = (s?: string) =>
@@ -67,7 +72,19 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, error, onAns
       </p>
       {proposal.rationale && <p className="rmg-prop-why">{proposal.rationale}</p>}
 
+      <p className="rmg-prop-sum">
+        {freeAll
+          ? (en ? `No conflicts for ${participants.length}.` : `${participants.length}명 모두 일정 충돌 없음`)
+          : (en ? "Some have something then." : "일부는 그 시간에 일정이 있어요")}
+        {waiting > 0 && (en ? ` · waiting on ${waiting}` : ` · ${waiting}명 대기 중`)}
+        {" "}
+        <button type="button" className="rmg-prop-who" aria-expanded={openWho} onClick={() => setOpenWho((v) => !v)}>
+          {openWho ? (en ? "hide" : "접기") : (en ? "who?" : "누가?")}
+        </button>
+      </p>
+
       {/* 사람마다 그 시간에 되는지 · 답했는지. 두 가지는 다른 이야기라 나란히 둔다. */}
+      {openWho && (
       <ul className="rmg-prop-people">
         {participants.map((p) => {
           const a = avail.get(p.userId);
@@ -85,13 +102,7 @@ function ProposalCard({ proposal, participants, nameOf, lang, busy, error, onAns
           );
         })}
       </ul>
-
-      <p className="rmg-prop-sum">
-        {freeAll
-          ? (en ? `No conflicts for ${participants.length}.` : `${participants.length}명 모두 일정 충돌 없음`)
-          : (en ? "Some have something then." : "일부는 그 시간에 일정이 있어요")}
-        {waiting > 0 && (en ? ` · waiting on ${waiting}` : ` · ${waiting}명 대기 중`)}
-      </p>
+      )}
 
       {/* 이미 답했으면 조용히 상태만 두고, 마음이 바뀌면 다시 누를 수 있게 남겨 둔다. */}
       <div className="rmg-prop-acts">

@@ -94,7 +94,12 @@ checked(seq, migration, looked_for, present) as (
          (select count(*) from pubs where tablename in ('chat_rooms','chat_room_members')) = 2),
 
     (16, '0016 dm_is_exactly_two_people', '함수 is_dm_peer',
-         exists (select 1 from fns where name = 'is_dm_peer'))
+         exists (select 1 from fns where name = 'is_dm_peer')),
+
+    (17, '0017 groups', '표 groups · group_members, events.group_id, 함수 sync_group_calendar',
+         (select count(*) from tbls where table_name in ('groups','group_members')) = 2
+         and exists (select 1 from cols where table_name = 'events' and column_name = 'group_id')
+         and exists (select 1 from fns where name = 'sync_group_calendar'))
 )
 select
   seq,
@@ -116,6 +121,6 @@ select
     || ' · Realtime ' || (select count(*)::text from pubs)
     -- 대략의 기대치다. Supabase 가 스스로 심는 것이 섞일 수 있어 정확히 맞을 필요는 없다 —
     -- 자릿수가 크게 다르면 그때 위 표에서 어느 줄이 MISSING 인지 보면 된다.
-    || '  (대략의 기대: 표 14 · 함수 35 · Realtime 11)'
+    || '  (대략의 기대: 표 16 · 함수 38 · Realtime 13)'
 
 order by seq;
