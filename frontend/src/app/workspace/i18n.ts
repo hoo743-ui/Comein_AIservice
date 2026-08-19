@@ -24,7 +24,7 @@ export const EN_PLACEHOLDER: Record<View, string> = {
 export const EN_HINTS = [
   "Write anything — I'll tidy the rest",
   "e.g.  Meet the professor tomorrow 3pm",
-  "e.g.  Prep the deck — as a task",
+  "e.g.  2 to 5 on Thursday, capstone review",
   "e.g.  Organize this week",
 ];
 
@@ -50,7 +50,6 @@ export function L(lang: Lang) {
     open: en ? "Open" : "열기",
     undo: en ? "Undo" : "되돌리기",
     startingSoon: en ? "Starting soon" : "곧 시작하는 일정",
-    importantTask: en ? "Important task" : "중요한 할 일",
     noNotif: en ? "No new notifications." : "새로운 알림이 없어요.",
     topCalendar: en ? "Calendar" : "캘린더",
     topSettings: en ? "Settings" : "설정",
@@ -85,7 +84,6 @@ export function L(lang: Lang) {
     asInsBusy: en ? "It's a full day — I'll keep room to breathe." : "일정이 촘촘해요 — 사이에 숨 쉴 틈을 남겨둘게요.",
     asInsFree: en ? "The afternoon is fairly open — good for focus." : "오후가 비교적 비어 있어요 — 몰입하기 좋아요.",
     actOrganize: en ? "Tidy up today" : "오늘 준비해 두기",
-    actMeeting: en ? "Wrap meeting into tasks" : "회의 정리해서 할 일로",
     actWeek: en ? "Preview this week" : "이번 주 미리 살펴보기",
     quietNote: (w: number) => (en ? `quiet for ${w} week${w > 1 ? "s" : ""}` : `${w}주째 조용해요`),
     setName: en ? "Name" : "이름", setNameD: en ? "Display name in greetings and profile" : "인사와 프로필에 쓰이는 표시 이름",
@@ -114,6 +112,6 @@ export const PLACEHOLDER: Record<View, string> = {
 export const HINTS = [
   "무엇이든 적어보세요 — 나머지는 정리해 둘게요",
   "예) 내일 3시 교수님 미팅 잡아줘",
-  "예) 발표 자료 준비 — 할 일로",
+  "예) 목요일 2시부터 5시까지 캡스톤 리뷰",
   "예) 이번 주 일정 정리해줘",
 ];

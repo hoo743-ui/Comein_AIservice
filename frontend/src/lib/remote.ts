@@ -108,10 +108,21 @@ export async function signInWithProvider(provider: "github" | "kakao", redirectT
 /** 이메일 + 비밀번호 — 메일 전송이나 OAuth 설정 없이 바로 확인할 수 있는 가장 짧은 길.
  *  (Supabase 는 기본적으로 가입 시 메일 확인을 요구한다. 바로 쓰려면 대시보드에서
  *   Authentication → Sign In / Providers → Email → "Confirm email" 을 꺼 두면 된다.) */
-export async function signUpWithPassword(email: string, password: string) {
+export async function signUpWithPassword(email: string, password: string, name?: string) {
   const sb = getSupabase();
   if (!sb) throw new Error("Supabase 설정이 없습니다.");
-  const { data, error } = await sb.auth.signUp({ email, password });
+  // 이름은 `options.data` 로 실어 보낸다 — 그래야 auth.users.raw_user_meta_data 에 앉고,
+  // 가입 트리거(0004 tg_new_user_profile)가 그걸 읽어 display_name 을 세운다.
+  //
+  // 예전에는 화면이 이름을 받아 놓고 여기까지 넘기지 않았다. 트리거는 늘 빈 칸을 읽었고,
+  // 그래서 모든 사람의 표시 이름이 이메일 앞부분(= 핸들)이 됐다. 사용자는 제 이름을
+  // 분명히 적었는데 어디에도 없었던 셈이다(§25).
+  const display = (name ?? "").trim();
+  const { data, error } = await sb.auth.signUp({
+    email,
+    password,
+    ...(display ? { options: { data: { name: display } } } : {}),
+  });
   if (error) throw error;
   return data;
 }

@@ -19,8 +19,8 @@ export function toParsed(raw: unknown, fallbackTitle: string): Parsed {
   const it = (raw ?? {}) as Record<string, unknown>;
   const str = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : null);
 
-  // 백엔드는 아직 네 갈래(schedule/meeting/todo/memo)로 준다 → 화면의 두 갈래로 접는다.
-  // 시각이 있는 것(일정·회의)은 캘린더로, 시각 밖의 것(할 일·메모)은 할 일로.
+  // 백엔드는 세 갈래(schedule/meeting/todo)로 준다 → 화면의 두 갈래로 접는다.
+  // 시간 위의 일(일정·회의)은 캘린더로, 시간 밖의 일(할 일)은 갈 곳이 없다(DEST 참고).
   const kind: Kind =
     it.category === "schedule" || it.category === "meeting" ? "일정" : "할 일";
 
@@ -35,7 +35,20 @@ export function toParsed(raw: unknown, fallbackTitle: string): Parsed {
     }
   }
 
-  // 메모류는 백엔드가 title 없이 content 만 주는 경우가 많다 → 본문 첫 줄을 제목으로 세운다.
+  // 끝 시각 — 사용자가 말했을 때만 온다.
+  //
+  // 예전에는 이 칸을 아예 읽지 않았다. 그래서 "2시부터 5시까지 회의" 가 캘린더에
+  // 2~3시로 앉았다(화면이 무조건 한 시간을 붙였다). AI 는 옳게 뽑아 보냈는데 그 값이
+  // 여기서 조용히 버려진 것이라, 화면에서는 AI 가 못 읽은 것처럼 보였다.
+  // 시작보다 앞서거나 같은 값은 버린다 — 자정을 넘긴 표기가 뒤집혀 오는 일이 있다.
+  let end: Date | undefined;
+  const till = str(it.end);
+  if (till && date) {
+    const e = new Date(till);
+    if (!Number.isNaN(e.getTime()) && +e > +date) end = e;
+  }
+
+  // 회의는 백엔드가 title 없이 notes·summary 만 주는 경우가 있다 → 본문 첫 줄을 제목으로 세운다.
   const body = str(it.content) ?? str(it.notes) ?? str(it.summary);
   const title = str(it.title) ?? (body ? body.split("\n")[0].slice(0, 40) : null) ?? fallbackTitle;
   const priority = it.priority === "high" || it.priority === "low" || it.priority === "mid"
@@ -52,6 +65,7 @@ export function toParsed(raw: unknown, fallbackTitle: string): Parsed {
     kind,
     time,
     date,
+    end,
     participants,
     // 일정은 장소가, 할 일은 본문이 부가 정보다.
     note: (kind === "일정" ? str(it.location) : null) ?? body ?? str(it.location) ?? "",

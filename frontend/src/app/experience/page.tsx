@@ -129,7 +129,7 @@ export default function Opening() {
     e.preventDefault();
     setErr(null);
     try {
-      if (mode === "signup") await signUpWithPassword(email, pw);
+      if (mode === "signup") await signUpWithPassword(email, pw, name);
       else await signInWithPassword(email, pw);
       cross();
     } catch (e: any) { setErr(e?.message ?? "로그인에 실패했어요."); }

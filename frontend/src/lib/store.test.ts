@@ -17,22 +17,11 @@ const emptySnap = { schedules: [], eventParticipants: [], chatRooms: [], chatMes
 
 describe("hydrateRemote", () => {
   beforeEach(() => {
-    useWorkspace.setState({ remoteLive: false, todos: [], chatMessages: [] });
+    useWorkspace.setState({ remoteLive: false, chatMessages: [] });
   });
 
-  it("처음 한 번은 시드 할 일을 물린다 — 지어낸 데이터가 진짜인 줄 알게 하지 않는다", () => {
-    useWorkspace.setState({ remoteLive: false, todos: [{ id: "seed", title: "데모", status: "todo" } as any] });
-    useWorkspace.getState().hydrateRemote(emptySnap);
-    assert.deepEqual(useWorkspace.getState().todos, []);
-  });
-
-  it("그 다음부터는 사용자가 적어 둔 할 일을 건드리지 않는다", () => {
-    useWorkspace.getState().hydrateRemote(emptySnap);          // 첫 하이드레이션
-    useWorkspace.getState().addTodo({ title: "논문 초고", status: "todo" } as any);
-    useWorkspace.getState().hydrateRemote(emptySnap);          // 일정 하나 바뀌어 다시 받음
-    assert.equal(useWorkspace.getState().todos.length, 1, "일정이 바뀌었다고 할 일이 사라지면 안 된다");
-    assert.equal(useWorkspace.getState().todos[0].title, "논문 초고");
-  });
+  // 시드 할 일을 언제 물리는가를 재던 시험 둘이 여기 있었다. 그 슬라이스를 걷으면서
+  // 함께 걷었다(docs/24 §25) — 없는 것을 재는 시험은 통과해도 아무것도 지키지 않는다.
 
   it("보내는 중인 내 말은 남긴다 — 방금 친 문장이 눈앞에서 사라지지 않게", () => {
     useWorkspace.setState({ chatMessages: [msg({ id: "temp", pending: true })] });

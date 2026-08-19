@@ -3,14 +3,11 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useTheme } from "next-themes";
-import {
-  ArrowUp, CalendarDays, Cloud, CloudRain, CloudSnow,
-  ChevronDown, LogOut, MessageSquare, MoreHorizontal, Search, Settings as SettingsIcon, Sparkles, Sun, Users, X,
-} from "lucide-react";
+import { Cloud, LogOut, MessageSquare, Search, Settings as SettingsIcon, X } from "lucide-react";
 
-import { useWorkspace, dayKeyOf, TEXT_SCALE_MAX, TEXT_SCALE_MIN, type Settings } from "@/lib/store";
-import { MODE_CONFIG, USER_MODES, categoryLabel, classifyEvent, normalizeMode, useCurrentMode, type EventCategory } from "@/lib/mode";
-import { analyzeConversation, analyzeMessage, localIsoNow, suggestionLine, summarize, track, type AnalysisOutcome } from "@/lib/conversation";
+import { useWorkspace, dayKeyOf, type Settings } from "@/lib/store";
+import { MODE_CONFIG, useCurrentMode } from "@/lib/mode";
+import { analyzeConversation, analyzeMessage, localIsoNow, track } from "@/lib/conversation";
 import { fmtTime, fmtDate } from "@/lib/format";
 import { CSS } from "./styles";
 import { pendingAnswers } from "@/lib/awaiting";
@@ -18,25 +15,24 @@ import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
 import { API_BASE } from "@/lib/api";
-import { useRemoteSync, type RemoteState } from "@/lib/useRemoteSync";
-import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signInWithEmail, signInWithPassword, signInWithProvider, signOutRemote, signUpWithPassword } from "@/lib/remote";
-import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Schedule, ScheduleProposal, TodoPriority } from "@/lib/types";
+import { useRemoteSync } from "@/lib/useRemoteSync";
+import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signOutRemote } from "@/lib/remote";
+import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Schedule } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
-import { DEST, NAV, NAV_GAP, NAV_ROW, NAV_ROW_TOUCH, VIEW_LABEL, type Kind, type Parsed, type Receipt, type View } from "./nav";
-import { HINTS, L, PLACEHOLDER, type Lang } from "./i18n";
-import { WCODE, moodEn, partOfDay, weatherIconOf, weatherWord } from "./weather";
+import { DEST, NAV, NAV_GAP, NAV_ROW, NAV_ROW_TOUCH, type Parsed, type Receipt, type View } from "./nav";
+import { L, type Lang } from "./i18n";
+import { WCODE, moodEn, weatherIconOf, weatherWord } from "./weather";
 import { classify, parseTime, toParsed } from "./capture";
-import { chatStamp, dayDivider, groupMessages, type MsgGroup } from "./chatTime";
-import { MONTHS_EN, WEEKDAYS, WEEKDAYS_EN, parseNaturalDate } from "./calendarDate";
-import { MIN_ARC, TT_FROM, TT_GAP, TT_MIN_H, TT_ROW, TT_TO, eventDurationToHeight, eventToPosition, layoutSpans, spanRange, spansOf, timeToPosition, type Span } from "./spans";
-import { NEAR_BOTTOM, useCoarsePointer, useKeyHint, useStickToBottom } from "./hooks";
-import { dayKey, hhmm, pad } from "./datetime";
+import { useCoarsePointer } from "./hooks";
+import { dayKey } from "./datetime";
+// 조각들. 이 파일은 조립만 한다 — 여기서 부르지 않는 것은 조각끼리 주고받는다
+// (DayDial·DayTimetable 은 CalendarView 가, ChatThread 는 People 이 쥔다).
 import { AiDoor, Ambient } from "./parts/Environment";
 import { DoorInvoke } from "./parts/CaptureBar";
 import { CalSearch, MonthCalendar } from "./parts/MonthCalendar";
-import { CalendarView, DayDial, DayTimetable } from "./parts/DayViews";
-import { ChatThread, SummaryBlock, type ChatSummary } from "./parts/Chat";
-import { EventPanel, RoomTimeline, TL_DEFAULT, TL_KEY, TL_MAX, TL_MIN, TL_OPEN_KEY, clampTl } from "./parts/EventPanel";
+import { CalendarView } from "./parts/DayViews";
+import type { ChatSummary } from "./parts/Chat";
+import { EventPanel, RoomTimeline } from "./parts/EventPanel";
 import { NewRoomPanel, PeopleView, PersonPanel } from "./parts/People";
 import { GuideTour, type TourStep } from "./parts/Guide";
 import { SettingsPanel } from "./parts/Settings";
@@ -71,7 +67,6 @@ const conditionOf = (code: number) => WCODE[code] ?? "흐림";
 export default function Reimagine() {
   const { resolvedTheme, setTheme } = useTheme();
   const schedules = useWorkspace((s) => s.schedules);
-  const todos = useWorkspace((s) => s.todos);
   const contacts = useWorkspace((s) => s.contacts);
   const addSchedule = useWorkspace((s) => s.addSchedule);
   // AI 가 놓아 둔 제안을 사람이 확정하거나 없던 일로 되돌린다.
@@ -154,8 +149,8 @@ export default function Reimagine() {
   >(null);
   const [flashOut, setFlashOut] = React.useState(false);
   const [organizing, setOrganizing] = React.useState(false);
-  // 마지막 캡처가 AI 에 닿지 못했는가 — 닿지 못했으면 그 정리는 화면에만 있다.
-  const [aiOffline, setAiOffline] = React.useState(false);
+  // 'AI 에 닿지 못했다' 를 따로 쥐던 값이 있었다. 세팅만 하고 읽는 곳이 없었다 —
+  // 그 사실은 아래 catch 의 스침 줄이 그 자리에서 이미 말한다(§25).
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
   const [calDay, setCalDay] = React.useState<Date | null>(null);
   // 전체 화면 란은 설정 하나뿐이다. 예전엔 "calendar" 도 있었지만 그 란을 여는 손잡이가
@@ -271,7 +266,6 @@ export default function Reimagine() {
     const t = +now - 3_600_000;
     return [...schedules].filter((s) => +new Date(s.start) >= t).sort((a, b) => +new Date(a.start) - +new Date(b.start));
   }, [schedules, now]);
-  const openTodos = React.useMemo(() => todos.filter((t) => t.status !== "done"), [todos]);
   const next = upcoming[0];
 
   // 왼쪽 캘린더 — 실제 일정 + AI가 넣은 일정
@@ -315,10 +309,12 @@ export default function Reimagine() {
     const at = Date.now();
     const rows: Receipt[] = fresh.map((p) => {
       seq.current += 1;
+      // 갈 곳이 없는 갈래도 있다(할 일). 그럴 땐 목적지를 비워 둔다 —
+      // 없는 곳의 이름을 적으면 스침 줄이 "오늘로 정리했어요" 라고 말하게 된다.
       const dest = DEST[p.kind];
       return {
         id: seq.current, at, title: p.title.trim(), kind: p.kind,
-        destView: dest.view, destLabel: dest.label,
+        destView: dest?.view, destLabel: dest?.label,
         time: p.time, date: p.date, note: p.note.trim() || undefined,
         priority: p.priority,
       };
@@ -333,10 +329,16 @@ export default function Reimagine() {
     for (const timer of flashTimers.current) clearTimeout(timer);
     const head = rows[0];
     const more = rows.length > 1 ? ` 외 ${rows.length - 1}건` : "";
+    // 갈 곳이 있으면 어디로 갔는지, 없으면 담아 두지 못했다고 말한다.
+    // 예전에는 갈 곳 없는 할 일에도 "· 오늘" 을 붙였다 — 오늘 화면 어디에도 남지 않는데.
+    // 한 줄이 하지 않은 일을 했다고 말하면, 그 다음부터는 한 줄을 믿을 수 없게 된다.
+    const where = head.destLabel
+      ? ` · ${head.destLabel}`
+      : lang === "en" ? " · not stored yet" : " · 담아 두는 곳은 아직 없어요";
     setFlashOut(false);
     setFlash({
-      text: text || `${head.title}${more} · ${head.destLabel}`,
-      dest: head.destView,
+      text: text || `${head.title}${more}${where}`,
+      dest: head.destView ?? null,
       ids: rows.map((r) => r.id),
       events,
       pending: pending && events.length > 0,
@@ -346,7 +348,7 @@ export default function Reimagine() {
     flashTimers.current = pending && events.length
       ? []
       : [setTimeout(() => setFlashOut(true), 6000), setTimeout(() => setFlash(null), 6500)];
-  }, []);
+  }, [lang]);
 
   /** 정리한 것 없이 한 마디만 스치게 한다 — AI 가 "정리할 게 없다" 고 답했을 때의 자리.
    *  목적지도 되돌릴 것도 없으므로 손잡이를 달지 않는다. */
@@ -369,7 +371,6 @@ export default function Reimagine() {
     for (const timer of flashTimers.current) clearTimeout(timer);
     setOrganizing(true);
     setFlash(null);
-    setAiOffline(false); // 이번 한 줄은 아직 실패하지 않았다 — 지난 실패 표시를 걷는다
 
     // 답을 기다리던 질문이 있었다면 이번 한 줄이 그 답이다 — 물어본 쪽이 함께 가야 말이 된다.
     const pending = pendingAsk.current;
@@ -441,7 +442,9 @@ export default function Reimagine() {
         const eventId = addSchedule({
           title: p.title,
           start: p.date.toISOString(),
-          end: new Date(+p.date + 3_600_000).toISOString(),
+          // 사용자가 끝 시각을 말했으면 그것을 쓴다. 안 말했을 때만 한 시간으로 둔다 —
+          // 예전에는 늘 한 시간이라 "2시부터 5시까지" 가 2~3시로 앉았다(§25).
+          end: (p.end ?? new Date(+p.date + 3_600_000)).toISOString(),
           location: p.note || undefined,
           status: asProposal ? "pending" : "confirmed",
         });
@@ -482,7 +485,6 @@ export default function Reimagine() {
       // "AI 가 갑자기 멍청해진 것" 처럼 보였다(docs/24 §8.2 에 기록된 그 함정).
       // 그래서 방금 정리한 그 줄 위에, 그 자리에서 말해 준다 — 따로 알림을 띄우지 않는다.
       console.error("AI 파싱 실패 → 로컬 폴백:", err);
-      setAiOffline(true);
       const rows = file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
       const head = rows[0];
       // 이 한 줄은 한 줄로만 서고 넘치면 뒤가 잘린다(rmg-flash-text). 그래서 순서가 중요하다:
@@ -667,6 +669,11 @@ export default function Reimagine() {
   const proposeTime = useWorkspace((s) => s.proposeTime);
   const answerProposal = useWorkspace((s) => s.answerProposal);
   const proposalError = useWorkspace((s) => s.proposalError);
+  // 전원이 동의했는데 그 사이 누가 그 시간에 다른 일정을 잡았다 — 확정은 일어나지 않았다.
+  // 스토어는 이걸 오래전부터 쥐고 있었지만 읽는 화면이 없어서, 사용자에게는 '동의를 눌렀는데
+  // 아무 일도 안 일어남' 으로만 보였다. 답이 막혔으면 왜 막혔는지는 사람이 알아야 한다(§17).
+  // 겹친 사람이 무엇을 하는지는 여기서도 말하지 않는다 — 몇 명인지까지다(§11).
+  const proposalConflict = useWorkspace((s) => s.proposalConflict);
   const requestError = useWorkspace((s) => s.requestError);
   const clearProposalError = useWorkspace((s) => s.clearProposalError);
   const [proposalBusy, setProposalBusy] = React.useState(false);
@@ -1042,13 +1049,14 @@ export default function Reimagine() {
   // ── Invisible AI · 조용한 비서 — 데이터가 아니라 '사람다운 한 문장'으로. ──
   const h = now?.getHours() ?? 9;
   const WeatherIcon = weather ? weatherIconOf(weather.condition) : Cloud;
-  const rc = (v: View) => receipts.filter((r) => r.destView === v).length;
-  const taskCount = openTodos.length + rc("today");
   // 시각이 잡힌 일정은 캡처하는 순간 진짜 일정(addSchedule)이 되어 upcoming 에 이미 들어 있다.
   // 영수증까지 더하면 한 건이 두 번 세어진다 — "내일 3시 미팅" 한 줄에 숫자가 2씩 올랐다.
   // 시각을 못 읽은 것만(영수증으로만 남은 것) 여기에 더한다.
   const eventCount = upcoming.length + receipts.filter((r) => r.destView === "calendar" && !r.date).length;
-  const paceLine = taskCount > 0 ? t.pace(taskCount, upcoming.length > 2) : t.paceEmpty;
+  // 숫자가 둘이었다. 하나는 '할 일' 이었는데, 그 수가 세던 것은 시드 다섯 줄과 이번 세션의
+  // 영수증뿐이었다 — 로그인하면 시드가 물러나 0 이 됐고, 새로고침하면 영수증도 사라졌다.
+  // 담을 표가 없는 것을 세고 있었던 셈이라(§25) 숫자를 하나로 줄였다.
+  const paceLine = eventCount > 0 ? t.pace(eventCount, upcoming.length > 2) : t.paceEmpty;
 
   /** 오늘의 브리핑 — 날씨만 보고 말하지 않는다. 실제 일정을 읽고 먼저 알려준다.
    *  붙어 있는 회의, 답하지 않은 초대, 곧 시작하는 일 — 사용자가 묻기 전에 말해 주는 것들. */
@@ -1294,7 +1302,15 @@ export default function Reimagine() {
           focusChat={chatFocus}
           proposal={proposals[openEventData.id] ?? null}
           proposalBusy={proposalBusy}
-          proposalError={proposalError?.eventId === openEventData.id ? proposalError.message : null}
+          proposalError={
+            proposalError?.eventId === openEventData.id
+              ? proposalError.message
+              : proposalConflict?.eventId === openEventData.id
+                ? lang === "en"
+                  ? `Everyone agreed, but ${proposalConflict.busy} now have something else then. Pick another time.`
+                  : `모두 동의했지만 그 사이 ${proposalConflict.busy}명에게 다른 일정이 생겼어요. 다른 시간을 골라 주세요.`
+                : null
+          }
           summary={summaries[openEventData.id] ?? null}
           summaryAuto={!!autoSummed[openEventData.id]}
           onRename={(t) => renameSchedule(openEventData.id, t)}
@@ -1663,7 +1679,6 @@ export default function Reimagine() {
                     </p>
                     <div className="rmg-counts">
                       <span className="rmg-count"><b className="rmg-count-n">{eventCount}</b><span className="rmg-count-l">{lang === "en" ? "Events" : "일정"}</span></span>
-                      <span className="rmg-count"><b className="rmg-count-n">{taskCount}</b><span className="rmg-count-l">{lang === "en" ? "Tasks" : "할 일"}</span></span>
                     </div>
                   </section>
 
@@ -1693,7 +1708,6 @@ export default function Reimagine() {
                   view={shownView}
                   lang={lang}
                   schedules={schedules}
-                  todos={openTodos}
                   contacts={contacts}
                   mounted={mounted}
                   receipts={receipts}
@@ -1876,7 +1890,7 @@ export default function Reimagine() {
 
 // 각 기능은 '익숙한' 인터페이스로 — AI는 강화만. (제안 배너 + 귀속 마크 + 행 액션)
 function Feature(props: {
-  view: View; lang: Lang; schedules: any[]; todos: any[]; contacts: any[];
+  view: View; lang: Lang; schedules: any[]; contacts: any[];
   mounted: boolean; receipts: Receipt[]; now: Date | null;
   onRemoveReceipt: (id: number) => void;
   onAddSchedule: (title: string, start: Date) => void;

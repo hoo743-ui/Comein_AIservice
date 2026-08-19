@@ -15,8 +15,6 @@ import type {
   ParticipantStatus,
   Schedule,
   ScheduleProposal,
-  Todo,
-  TodoStatus,
 } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import {
@@ -64,15 +62,6 @@ const uid = (): ID =>
 
 const nowISO = () => new Date().toISOString();
 
-/** 두 일정이 시간상 겹치는지 (충돌 감지 · 차별화 기능) */
-export function overlaps(a: Schedule, b: Schedule): boolean {
-  const aStart = +new Date(a.start);
-  const aEnd = a.end ? +new Date(a.end) : aStart + 60 * 60 * 1000;
-  const bStart = +new Date(b.start);
-  const bEnd = b.end ? +new Date(b.end) : bStart + 60 * 60 * 1000;
-  return aStart < bEnd && bStart < aEnd;
-}
-
 // ── 시드 날짜 기준점 ──
 // 시드는 고정 ISO 로 둔다 — 모듈이 읽히는 시점에 new Date() 를 쓰면 서버와 브라우저가
 // 서로 다른 값을 만들어 하이드레이션이 깨진다. 대신 화면이 뜬 뒤 rebaseSeeds() 로
@@ -108,16 +97,14 @@ const seedSchedules: Schedule[] = [
   { id: "s4", title: "스터디", start: "2026-07-10T19:00:00", end: "2026-07-10T21:00:00", location: "스터디카페", status: "pending" },
 ];
 
-const seedTodos: Todo[] = [
-  { id: "t1", title: "발표자료 초안 작성", due: "2026-07-08", priority: "high", status: "doing" },
-  { id: "t2", title: "회의록 정리", due: "2026-07-09", priority: "mid", status: "todo" },
-  { id: "t3", title: "레퍼런스 리서치", priority: "low", status: "todo" },
-  { id: "t4", title: "UI 컴포넌트 리뷰", due: "2026-07-08", priority: "mid", status: "doing" },
-  { id: "t5", title: "배포 스크립트 점검", priority: "mid", status: "done" },
-];
-
-// 메모·회의 슬라이스는 걷어냈다. 뷰가 사라지면서(24_AI_PIPELINE_STATUS §9·§10.1)
-// 어떤 화면도 읽지 않게 됐고, 캡처는 memo 를 '할 일'로 접어 담는다.
+// 할 일·메모·회의 슬라이스는 걷어냈다.
+//
+// 뷰가 사라진 것이 먼저였고(§9·§10.1), 그 뒤로 아무 화면도 이것들을 읽지 않았다.
+// 그런데도 시드가 남아 있어서 '오늘'의 할 일 수를 채웠고 — 로그인하면 그 수가 0 이 됐다.
+// 지어낸 다섯 줄이 기능이 있는 것처럼 보이게 하고 있었던 셈이다.
+//
+// 할 일은 담을 표도 없다(supabase/migrations 에 todos 가 없다). 살리려면 표부터
+// 세워야 하고, 그건 화면을 되살리는 날 함께 할 일이다(docs/24 §25).
 // 시드만 남으면 로그인한 계정에 지어낸 회의가 떠 있는 것처럼 보인다.
 
 // 장소 (범용 · 스키매틱 좌표 0~100). 캠퍼스 건물 + 직장인 프리셋 예시. 실제 지도 연동 시 x/y→lat/lng.
@@ -186,9 +173,6 @@ export interface Settings {
 // ── 스토어 ─────────────────────────────────────────────
 interface WorkspaceState {
   schedules: Schedule[];
-  /** 아직 서버에 자리가 없다 — 캡처한 할 일은 지금 어디에도 저장되지 않는다.
-   *  '오늘'의 할 일 수만 이 값을 읽는다. todos 테이블이 생기면 그때 이어진다. */
-  todos: Todo[];
   places: Place[];
   timetable: ClassEntry[];
   contacts: Contact[];
@@ -269,12 +253,6 @@ interface WorkspaceState {
   /** 이름을 고쳐 단다. 방 이름은 곧 일정 제목이다(서버는 주최자만 받는다). */
   renameSchedule: (id: ID, title: string) => void;
 
-  // Todo
-  addTodo: (t: Omit<Todo, "id">) => void;
-  updateTodo: (id: ID, patch: Partial<Todo>) => void;
-  moveTodo: (id: ID, status: TodoStatus) => void;
-  removeTodo: (id: ID) => void;
-
   // 공유 일정 · 참여자 — 하나의 일정을 여럿이 같은 id 로 바라본다
   participantsOf: (eventId: ID) => EventParticipant[];
   /** 그 사람과 내가 함께 있는 일정 — People 화면의 '공유 일정'. */
@@ -346,7 +324,6 @@ export const settleSent = (all: ChatMessage[], tempId: ID, realId: string | null
 
 export const useWorkspace = create<WorkspaceState>((set, get) => ({
   schedules: seedSchedules,
-  todos: seedTodos,
   places: seedPlaces,
   timetable: seedTimetable,
   contacts: seedContacts,
@@ -373,10 +350,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
       ],
       // 사람은 서버가 준 진짜 계정으로 채운다(없으면 빈 채로 둔다).
       contacts: snap.contacts ?? [],
-      // 데모용으로 깔아 둔 할 일은 **처음 한 번만** 물러난다.
-      // 예전에는 스냅샷이 올 때마다 비웠다 — 일정 하나만 바뀌어도(그때 스냅샷을 다시 받는다)
-      // 사용자가 적어 둔 할 일이 통째로 사라졌다. 지울 것은 시드이지 사용자의 것이 아니다.
-      todos: st.remoteLive ? st.todos : [],
     })),
 
   refreshPeople: async () => {
@@ -502,7 +475,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
         start: shiftISO(s.start, days),
         end: s.end ? shiftISO(s.end, days) : s.end,
       })),
-      todos: st.todos.map((t) => (t.due ? { ...t, due: shiftISO(t.due, days) } : t)),
       contacts: st.contacts.map((c) => (c.lastMet ? { ...c, lastMet: shiftISO(c.lastMet, days) } : c)),
       chatMessages: st.chatMessages.map((m) => ({ ...m, createdAt: shiftISO(m.createdAt, days) })),
     }));
@@ -566,13 +538,6 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     set((st) => ({ schedules: st.schedules.map((s) => (s.id === real ? { ...s, title: name } : s)) }));
     if (remoteReady() && !unsynced.has(real)) void renameEvent(real, name);
   },
-
-  addTodo: (t) => set((st) => ({ todos: [{ ...t, id: uid() }, ...st.todos] })),
-  updateTodo: (id, patch) =>
-    set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, ...patch } : t)) })),
-  moveTodo: (id, status) =>
-    set((st) => ({ todos: st.todos.map((t) => (t.id === id ? { ...t, status } : t)) })),
-  removeTodo: (id) => set((st) => ({ todos: st.todos.filter((t) => t.id !== id) })),
 
   // ── 공유 일정 · 참여자 ──────────────────────────────
   participantsOf: (eventId) => get().eventParticipants.filter((p) => p.eventId === eventId),
@@ -793,13 +758,19 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
 }));
 
 // 함께 걷어낸 것들 —
-//   commandOpen / setCommandOpen      커맨드 팔레트가 없다
-//   dismissNotif(s) / dismissedNotifs 알림 벨을 없앨 때(§10.1) 함께 죽었다
+//   commandOpen / setCommandOpen        커맨드 팔레트가 없다
+//   dismissNotif(s) / dismissedNotifs   알림 벨을 없앨 때(§10.1) 함께 죽었다
 //   connections / toggle·setConnection  구글·아웃룩 토글 화면이 없다
-//   addContact                        사람은 이제 Comein 계정 검색으로만 들어온다
-//   memos / meetings                  뷰가 사라졌다(§9·§10.1)
-//   conversations / sendMessage       가짜 AI 대화방. 캡처바가 대신한다
-//   updateSchedule / removeSchedule / removeScheduleCascade / confirmSchedule /
-//   conflictsFor / overlaps / isShared / myEvents / directMessagesOf
-//                                     한 곳에서도 부르지 않았다
+//   addContact                          사람은 이제 Comein 계정 검색으로만 들어온다
+//   memos / meetings                    뷰가 사라졌다(§9·§10.1)
+//   todos / addTodo·updateTodo·moveTodo·removeTodo
+//                                       담을 표가 없다(§25). 시드만 남아 기능인 척했다
+//   conversations / sendMessage         가짜 AI 대화방. 캡처바가 대신한다
+//   updateSchedule / removeScheduleCascade / conflictsFor / overlaps /
+//   isShared / myEvents / directMessagesOf
+//                                       한 곳에서도 부르지 않았다
+//
+// 이 목록은 한동안 거짓이었다: removeSchedule·confirmSchedule 을 걷었다고 적어 두었지만
+// 둘 다 살아서 화면이 부르고 있었다. 걷은 것을 적는 자리라, 적힌 것이 틀리면
+// 다음 사람은 있는 것을 없다고 믿고 다시 만든다. 코드를 보고 다시 적었다.
 // 되살릴 일이 생기면 git 이 기억하고 있다.

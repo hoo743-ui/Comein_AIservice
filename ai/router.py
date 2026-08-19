@@ -156,14 +156,20 @@ IMPORTANT DATE/TIME RULES:
 {follow_up}
 User Message: {message}
 
-Extract all relevant schedules, todos, memos, and meetings from the user message.
+Extract all relevant schedules, meetings, and todos from the user message.
 If a single message contains multiple distinct items (e.g., a meeting and a todo), output multiple items in the `items` array.
 
+There are exactly three categories. There is no `memo` — a thought worth keeping is either
+something to do (todo) or something that happens at a time (schedule). Do not invent a fourth.
+
 Required fields per category:
-- schedule: `title`, `start` (ISO datetime)
-- meeting: `title`, `start` (ISO datetime)
+- schedule: `title`, `start` (ISO datetime), and `end` when the user gives one
+- meeting: `title`, `start` (ISO datetime), and `end` when the user gives one
 - todo: `title`
-- memo: `content`
+
+DURATION:
+- If the user says how long it runs or when it ends ("2시부터 5시까지", "3시에 한 시간"),
+  put that in `end`. If they do not say, leave `end` null — do not guess a length.
 
 PEOPLE (meeting only):
 - If the message names other people to meet with, put their names in `participants`
@@ -182,7 +188,7 @@ ASK BACK INSTEAD OF GUESSING:
   (e.g. "언제로 잡을까요?" / "몇 시로 할까요?"). One sentence. No greeting, no apology.
 - Never do both for the same thing: if you produced the item, `ask` must be null.
 - Only schedules and meetings are worth asking about. A todo without a due date is a
-  perfectly good todo, and a memo is just a memo — take those as they are, `ask` stays null.
+  perfectly good todo — take it as it is, `ask` stays null.
 
 Output JSON shape:
 {{"user_id": "{user_id}", "items": [ ...zero or more items... ], "ask": null or "one short question"}}

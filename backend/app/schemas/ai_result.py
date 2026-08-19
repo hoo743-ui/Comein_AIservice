@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 
 from app.schemas.items import ParsedItem
 
-Intent = Literal["schedule", "todo", "memo", "meeting", "chat"]
+Intent = Literal["schedule", "todo", "meeting", "chat"]
 
 
 class AiResult(BaseModel):

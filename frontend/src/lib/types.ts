@@ -9,7 +9,8 @@ import type { EventCategory } from "./mode";
 export type ID = string;
 
 export type ScheduleStatus = "pending" | "confirmed";
-export type TodoStatus = "todo" | "doing" | "done";
+/** AI 가 할 일에 매기는 급함. 캡처 결과가 이 낱말을 그대로 들고 다닌다.
+ *  `Todo`·`TodoStatus` 는 함께 걷었다 — 담을 표도 화면도 없다(docs/24 §25). */
 export type TodoPriority = "high" | "mid" | "low";
 
 export interface Schedule {
@@ -109,15 +110,7 @@ export interface SlotSuggestion {
   distanceMin: number;
 }
 
-export interface Todo {
-  id: ID;
-  title: string;
-  due?: string; // ISO date
-  priority: TodoPriority;
-  status: TodoStatus;
-}
-
-// 메모·회의·대화방(Conversation/Message/MessageCard/Role) 타입은 걷어냈다.
+// 할 일·메모·회의·대화방(Todo/Conversation/Message/MessageCard/Role) 타입은 걷어냈다.
 // 뷰가 사라지면서 어떤 화면도 이 모양을 쓰지 않는다 — 쓰이지 않는 타입은
 // '앞으로 만들 것' 처럼 보여서, 없는 기능을 있는 것처럼 읽히게 한다.
 

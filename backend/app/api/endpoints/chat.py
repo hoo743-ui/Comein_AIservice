@@ -35,7 +35,6 @@ _FALLBACK_ERROR = "일시적인 오류가 발생했어요."
 _CATEGORY_LABELS = {
     "schedule": "일정",
     "todo": "할 일",
-    "memo": "메모",
     "meeting": "회의",
 }
 

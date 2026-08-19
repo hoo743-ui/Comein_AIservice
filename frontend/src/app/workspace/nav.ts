@@ -18,19 +18,27 @@ export const NAV: { key: View; label: string; icon: React.ComponentType<{ classN
 ];
 
 // AI는 두 갈래로만 정리한다 — 시간 위의 일(일정) · 시간 밖의 일(할 일).
-// 회의·메모 분류는 걷어냈다: 갈래가 적을수록 사용자가 분류를 의식하지 않는다.
+// 회의는 일정으로 접히고, 메모는 아예 없앴다(백엔드 계약에서도 걷었다 — docs/24 §25).
+// 갈래가 적을수록 사용자가 분류를 의식하지 않는다.
 export type Kind = "일정" | "할 일";
 
 // 영수증 — AI가 한 모든 일: 무엇 + 어디(목적지) + 언제. 즉시 실행하되 자취를 남긴다.
-export type Receipt = { id: number; at: number; title: string; kind: Kind; destView: View; destLabel: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority };
+// 목적지가 없는 갈래도 있다(할 일). 그때 destView·destLabel 은 비고, 화면은 '어디로 갔다'고
+// 말하지 않는다 — 없는 목적지를 적는 것이 곧 거짓말이었다.
+export type Receipt = { id: number; at: number; title: string; kind: Kind; destView?: View; destLabel?: string; time: string | null; date?: Date; note?: string; priority?: TodoPriority };
 
 // AI가 이해한 한 건. 확인 단계 없이 그대로 목적지로 배정된다(= 영수증이 된다).
-export type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; note: string; priority?: TodoPriority; participants?: string[] };
+// `end` 는 사용자가 끝 시각을 말했을 때만 있다 — 없으면 화면이 한 시간으로 둔다.
+export type Parsed = { title: string; kind: Kind; time: string | null; date?: Date; end?: Date; note: string; priority?: TodoPriority; participants?: string[] };
 
-// 할 일 뷰를 걷어냈으므로 시간 밖의 일은 '오늘'로 모인다 — 오늘 화면의 할 일 수에 그대로 반영된다.
-export const DEST: Record<Kind, { view: View; label: string }> = {
+// 갈 곳이 있는 갈래는 하나뿐이다.
+//
+// 할 일은 담을 표가 없다(supabase/migrations 에 todos 가 없다). 예전에는 여기서 '오늘'을
+// 가리켜, 캡처가 "오늘로 정리했어요" 라고 말한 뒤 아무 데도 남지 않았다 — 화면이 하지 않은
+// 일을 했다고 말한 셈이다. 갈 곳이 없으면 없다고 적는다(docs/24 §25).
+export const DEST: Record<Kind, { view: View; label: string } | null> = {
   일정: { view: "calendar", label: "캘린더" },
-  "할 일": { view: "today", label: "오늘" },
+  "할 일": null,
 };
 
 export const VIEW_LABEL: Record<View, string> = { today: "오늘", calendar: "캘린더", people: "사람" };
