@@ -106,7 +106,6 @@ src/
 |---|---|
 | `schedules` · `eventParticipants` | 공유 일정과 그 사람들. **일정을 복제하지 않는다** — 하나의 event 를 여럿이 같은 id 로 본다 |
 | `chatRooms` · `chatMessages` · `unread` | 일정 방(1:1 방 포함)과 그 안의 말, 방마다 읽지 않은 수 |
-| `todos` | 시간 밖의 일. 서버 표가 없어 이 브라우저에만 산다 |
 | `contacts` · `connectionRequests` · `outgoingRequests` · `myHandle` | 사람과 연결 |
 | `proposals` · `justConfirmed` · `proposalConflict` · `proposalError` · `dayAvail` | 시간이 정해지는 길 |
 | `settings` | 이름 · 언어 · 모드 · 주 시작 · 알림 · **자동 확정(기본 꺼짐)** · 글자 크기 |

@@ -31,7 +31,7 @@
 
 ```jsonc
 {
-  "intent": "meeting",              // "schedule" | "todo" | "memo" | "meeting" | "chat"
+  "intent": "meeting",              // "schedule" | "todo" | "meeting" | "chat"
   "reply":  "회의로 정리했어요.",
   "items": [                        // ParsedItem[] — backend/app/schemas/items.py
     { "category": "meeting", "title": "미팅",
@@ -42,7 +42,9 @@
 ```
 
 - **`items` 는 복수다.** 한 문장에서 여러 건이 나오면 각자의 `category` 로 온다
-  ("회의 잡고 자료도 준비해야 해" → `meeting` + `todo`). 프론트는 전부 각자의 뷰로 배정한다.
+  ("회의 잡고 자료도 준비해야 해" → `meeting` + `todo`). 다만 **갈 곳이 있는 갈래는 하나뿐이다** —
+  시각이 있는 것만 캘린더에 앉고, `todo` 는 담을 표가 없어 화면이 "담아 두는 곳은 아직
+  없어요" 라고 말한다(`nav.ts` 의 `DEST`).
 - **`intent` 는 첫 항목의 갈래일 뿐이다.** 여러 건이면 뜻이 흐려지므로 화면은 쓰지 않는다 —
   각 항목의 `category` 를 본다.
 - **`reply` 는 AI 가 쓴 문장이 아니다.** 항목 수·갈래로 서버가 만든 한 줄이거나 `ask` 다.
@@ -57,9 +59,14 @@
 | category | 필수 | 선택 |
 |---|---|---|
 | `schedule` | `title`, `start`(ISO) | `end`, `location` |
-| `meeting`  | `title`, `start`(ISO) | `participants[]`, `summary`, `notes` |
+| `meeting`  | `title`, `start`(ISO) | `end`, `participants[]`, `summary`, `notes` |
 | `todo`     | `title` | `due`(ISO), `priority`(high/mid/low) |
-| `memo`     | `content` | `title`, `tags[]` |
+
+> 갈래는 셋이다. `memo` 가 있었지만 화면이 그것을 '할 일' 로 접어 담았고 그 할 일은 담을
+> 곳이 없어 사라졌다 — 뽑아 놓고 버리는 갈래였다(`docs/24` §25).
+>
+> `end` 는 사용자가 말했을 때만 온다. 화면은 없을 때만 한 시간으로 둔다 — 한동안 이 칸을
+> 아예 읽지 않아 "2시부터 5시까지" 가 2~3시로 앉았다.
 
 필수가 비면 Pydantic 이 `model_validator` 에서 튕긴다(`backend/app/schemas/items.py`).
 **이 클래스를 `ai/router.py` 가 그대로 import 한다** — 스키마를 두 벌로 관리하지 않는다.

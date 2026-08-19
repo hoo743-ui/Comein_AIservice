@@ -2,7 +2,7 @@
 
 > **Come in. Your workspace is thinking for you.**
 
-자연어 대화 한 줄로 **일정 · 메모 · 할 일 · 회의**를 관리하는 AI Workspace입니다.
+말 한 줄로 **일정이 잡히고**, 사람들과 **시간이 맞춰지는** AI Workspace입니다.
 
 ## Overview
 
