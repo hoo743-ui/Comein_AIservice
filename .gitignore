@@ -19,7 +19,10 @@ lib64/
 # 예외: 프론트엔드 소스의 lib 디렉터리는 파이썬 규칙에서 제외
 !frontend/src/lib/
 !frontend/src/lib/**
-parts/
+# buildout 산물. 루트에만 있으므로 루트로 못 박는다 —
+# 못 박기 전에는 frontend/src/app/workspace/parts/ 9개 파일(3,057줄)을 통째로 삼켰고,
+# 그 커밋은 만든 사람의 로컬에서만 빌드됐다(docs/24 §25).
+/parts/
 sdist/
 var/
 wheels/
