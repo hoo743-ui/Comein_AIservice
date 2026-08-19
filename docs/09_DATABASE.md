@@ -7,6 +7,11 @@
 >
 > `CLAUDE.md §7` 의 표는 **설계 어휘**다(Conversation·Message·Memo·Meeting·Reminder…).
 > 아래는 실제로 만들어진 것이고, 둘은 다르다 — 그 차이를 마지막 절에 적어 둔다.
+>
+> **어느 프로젝트에 어디까지 올라가 있는지**는 [`scripts/check_schema.sql`](../scripts/check_schema.sql)
+> 를 SQL Editor 에 붙여넣으면 한 줄씩 OK/MISSING 으로 나온다. 이 문서가 그리는 것은
+> '올리면 이렇게 된다' 이지 '지금 그렇다' 가 아니다 — 그 둘을 눈으로 구별할 방법이
+> 없어서 앱을 써 보다 터져야 알던 자리였다.
 
 DB 는 Supabase(Postgres)다. **프론트가 직접 붙는다** — 백엔드는 이 DB 에 접속하지 않는다
 ([`06_BACKEND.md`](./06_BACKEND.md)). 그래서 권한은 애플리케이션 코드가 아니라
