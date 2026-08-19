@@ -298,7 +298,7 @@ export function RoomTimeline({ event, day, onDay, mySchedules, avail, proposal, 
   );
 }
 
-export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, summaryError }: {
+export function EventPanel({ event, participants, contacts, messages, myName, lang, focusChat, proposal, proposalBusy, proposalError, onAnswerProposal, summary, summaryAuto, summaryBusy, onRename, onSummarize, onClose, onSend, onAddParticipant, onRemoveParticipant, onRespond, backLabel, onBack, timeline, onEditMessage, onDeleteMessage, onDelete, summaryError }: {
   event: Schedule;
   participants: EventParticipant[];
   contacts: Contact[];
@@ -334,6 +334,8 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   /** 내 말 고치기·지우기 */
   onEditMessage?: (id: string, text: string) => void;
   onDeleteMessage?: (id: string) => void;
+  /** 이 자리를 없앤다 — 주최자에게만 보인다. 없으면 손잡이를 그리지 않는다. */
+  onDelete?: () => void;
 }) {
   const en = lang === "en";
   const [adding, setAdding] = React.useState(false);
@@ -400,6 +402,10 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
   // 이름 제안 — 한 번 답하면 이 방에서는 다시 묻지 않는다.
   const [nameDone, setNameDone] = React.useState(false);
   React.useEffect(() => { setNameDone(false); }, [event.id]);
+  // 지울까요 — 물음은 이 방에 매인다. 다른 자리로 옮겨 갔는데 물음이 따라가면
+  // 그 다음 '삭제' 는 사람이 뜻하지 않은 것을 지운다.
+  const [askDel, setAskDel] = React.useState(false);
+  React.useEffect(() => { setAskDel(false); }, [event.id]);
   /** 권할 만한 이름인가. 이미 그 이름이거나, 내가 주최자가 아니거나, 답했으면 묻지 않는다. */
   const suggestedName = React.useMemo(() => {
     const t = summary?.title?.trim();
@@ -628,6 +634,7 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
         )}
       </div>
 
+
       {/* 대화 ‖ 함께 보는 일정 — 여럿이 모인 자리에서만 둘로 나뉜다.
           말과 시간이 한 화면에 있어야 "그럼 금요일 저녁 어때?" 가 손이 닿는 거리에서 끝난다.
           오른쪽은 곁들이는 작은 달력이 아니라 '이 대화와 이어진 시간' 이 서는 자리다 —
@@ -738,6 +745,39 @@ export function EventPanel({ event, participants, contacts, messages, myName, la
           >‹</button>
         )}
       </div>
+      {/* 없애기 — 만들 수는 있는데 지울 수가 없었다. 되돌리기는 캡처 직후 영수증에만
+          있었고, 그 줄이 사라지고 나면 일정은 화면에서 영영 지워지지 않았다.
+
+          왜 여기인가 — 닫기(×) 옆이 아니라 맨 아래다. 파괴적인 손잡이가 매일 누르는
+          손잡이 옆에 서면 언젠가 잘못 눌린다.
+
+          왜 한 번 더 묻는가 — 그룹은 없애도 일정이 남지만(Groups.tsx), 일정은 방과
+          그 안의 말까지 함께 지운다(events 의 on delete cascade). 되돌릴 수 없는 것만
+          묻는다. 화면을 덮는 경고창은 띄우지 않는다 — 그 자리에서 한 번(§3, Chat.tsx). */}
+      {iAmOwner && onDelete && (
+        <div className="rmg-evdel">
+          {!askDel ? (
+            <button type="button" className="rmg-ppl-act" onClick={() => setAskDel(true)}>
+              {en ? "Delete event" : "일정 없애기"}
+            </button>
+          ) : (
+            <span className="rmg-mg-ask">
+              <span className="rmg-mg-askq">
+                {en ? "Delete this event and its conversation?" : "이 자리와 대화까지 지울까요?"}
+              </span>
+              <button type="button" className="rmg-ppl-make" onClick={() => setAskDel(false)}>
+                {en ? "Cancel" : "취소"}
+              </button>
+              <button type="button" className="rmg-mg-del" onClick={() => { setAskDel(false); onDelete(); }}>
+                {en ? "Delete" : "삭제"}
+              </button>
+            </span>
+          )}
+          <p className="rmg-drawer-empty">
+            {en ? "The conversation goes with it. This cannot be undone." : "이 자리의 대화도 함께 사라져요. 되돌릴 수 없습니다."}
+          </p>
+        </div>
+      )}
     </aside>
   );
 }

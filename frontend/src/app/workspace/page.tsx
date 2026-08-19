@@ -1460,6 +1460,9 @@ export default function Reimagine() {
             void answerProposal(openEventData.id, p.id, r).finally(() => setProposalBusy(false));
           }}
           onClose={closeEvent}
+          // 주최자에게만 보인다(EventPanel 이 iAmOwner 로 가린다). 지우면 방과 말이
+          // 함께 사라지고, 서버가 거절하면 스토어가 통째로 되돌린다.
+          onDelete={() => { removeSchedule(openEventData.id); closeEvent(); }}
           onSend={(text) => sendEventMessageAndMaybePropose(openEventData.id, text)}
           onEditMessage={(id, text) => void editMessage(id, text)}
           onDeleteMessage={(id) => void deleteMessage(id)}
@@ -1690,7 +1693,14 @@ export default function Reimagine() {
                 <button
                   key={n.key}
                   type="button"
-                  onClick={() => { setPanel(null); setView(n.key); }}
+                  onClick={() => {
+                    setPanel(null);
+                    setView(n.key);
+                    // '오늘' 은 오늘로 돌아온다. 캘린더에서 다른 날을 보다 오면 그 날이 그대로
+                    // 남았는데, 이 화면은 그 위에 대고 "오늘의 맥락"·"오늘은 비어 있어요" 라고
+                    // 말한다 — 이름이 오늘인 자리가 오늘이 아닌 하루를 오늘이라고 부르고 있었다.
+                    if (n.key === "today") setCalDay(new Date());
+                  }}
                   className={`rmg-railbtn ${on ? "on" : ""}`}
                   style={{ ["--i" as string]: i } as React.CSSProperties}
                   aria-label={t.viewLabel(n.key)}

@@ -1191,6 +1191,14 @@ html { font-size: 17px; }
 .rmg-ppl-act { border: 1px solid var(--hair); background: color-mix(in srgb, var(--surface) 55%, transparent); color: var(--muted); font: inherit; font-size: 0.76rem; font-weight: 500; padding: 4px 11px; border-radius: 999px; cursor: pointer; flex-shrink: 0; transition: color 170ms ease-out, border-color 170ms ease-out; }
 .rmg-ppl-act:hover { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 22%, var(--hair)); }
 .rmg-ppl-act.primary { color: var(--ink); border-color: color-mix(in srgb, var(--ink) 18%, var(--hair)); }
+/* 알약은 알약으로 남는다 — 세로로 쌓이는 칸(그룹 화면·패널 본문)에 놓이면 flex 의 기본
+   stretch 가 칸 폭만큼 늘려서 '알약'이 '띠'가 된다. 그룹 화면에서는 손잡이 셋이 나란히
+   전면 띠로 서 있었다: 이 화면에서 가장 크고 눈에 띄는 것이 '그룹 없애기' 였다는 뜻이다. */
+.rmg-evpanel > .rmg-ppl-act, .rmg-pwith > .rmg-ppl-act { align-self: flex-start; }
+/* 같은 자리에서 설명 한 줄은 손잡이 옆에 붙는 **주석**이지 '비었다'는 안내가 아니다.
+   가운데로 몰리면 왼쪽에 선 버튼과 축이 어긋나 두 개가 서로 다른 것에 대해 말하는 것처럼
+   읽힌다(.rmg-drawer-empty 의 기본은 텅 빈 칸 한가운데 서는 쪽이라 그렇게 되어 있다). */
+.rmg-pwith > .rmg-drawer-empty, .rmg-evdel > .rmg-drawer-empty { margin: 0; text-align: left; }
 
 /* 내 핸들 — 한 줄. 라벨·값·복사가 한 덩어리로 붙는다. 검색창 위에 놓여
    '여기는 사람을 주고받는 자리' 라는 것을 조용히 말한다. */
@@ -1533,8 +1541,15 @@ html { font-size: 17px; }
 /* ── 대화 ‖ 함께 보는 하루 ──
    여럿이 모인 자리에서만 둘로 나뉜다. 대화가 주인공이고 하루는 곁에 선다. */
 .rmg-evsplit { display: flex; flex-direction: column; flex: 1; min-height: 0; }
-/* 대화 | 손잡이 | 일정. 가운데가 먼저 줄고, 오른쪽은 읽을 수 있는 최소 폭을 지킨다. */
-.rmg-evsplit[data-split="true"] { display: grid; grid-template-columns: minmax(0, 1fr) 9px var(--tl-w, 380px); gap: 0; }
+/* 대화 | 손잡이 | 일정. 가운데가 먼저 줄고, 오른쪽은 읽을 수 있는 최소 폭을 지킨다.
+
+   행에 minmax(0, 1fr) 을 두는 이유 — 이게 없으면 암묵적 행이 auto(=max-content)라
+   안의 말이 길어질수록 칸이 함께 자란다. 패널은 max-height 로 잘려 있고 overflow 는
+   visible 이라, 넘친 만큼이 **아래에서 조용히 사라졌다** — 그 사라진 자리에 있던 것이
+   메시지 입력칸이었다. 창이 낮으면(≈950px 이하) 일정 대화에서 말을 칠 수가 없었다.
+   말 칸이 스크롤되게 하려면 그 조상 어디에도 '내용만큼 자라는 칸'이 없어야 한다. */
+.rmg-evsplit[data-split="true"] { display: grid; grid-template-columns: minmax(0, 1fr) 9px var(--tl-w, 380px);
+  grid-template-rows: minmax(0, 1fr); gap: 0; }
 .rmg-evsplit[data-split="true"][data-tlopen="false"] { grid-template-columns: minmax(0, 1fr) auto; }
 .rmg-evsplit[data-split="true"] .rmg-drawer-chat { min-width: 0; padding-right: var(--sp-2); }
 .rmg-evtl { position: relative; min-width: 0; padding-left: var(--sp-4); display: flex; flex-direction: column; }
@@ -1791,6 +1806,15 @@ html { font-size: 17px; }
 .rmg-mg-del { border: 1px solid color-mix(in srgb, var(--ink) 18%, var(--hair)); background: none; font: inherit;
   font-size: 0.76rem; font-weight: 500; color: var(--ink); padding: 3px 10px; border-radius: 999px; cursor: pointer; }
 .rmg-mg-del:hover { background: color-mix(in srgb, var(--ink) 7%, transparent); }
+
+/* 없애기 줄 — 패널의 맨 아래, 위와 선 하나로 갈라 둔다.
+   물러나 있어야 하는 손잡이다: 평소엔 다른 작은 버튼들과 같은 무게로 서 있고,
+   위험은 색이 아니라 **한 번 더 묻는 것**으로 말한다(빨간 버튼을 두지 않는 이유). */
+.rmg-evdel { display: flex; flex-direction: column; align-items: flex-start; gap: 6px;
+  padding-top: var(--sp-2); border-top: 1px solid var(--hair); }
+/* 물음이 길어 한 줄에 안 들어가면 접히게 둔다 — 잘려 나가는 것보다 낫다. */
+.rmg-evdel .rmg-mg-ask { flex-wrap: wrap; }
+.rmg-evdel .rmg-mg-askq { white-space: normal; }
 
 /* 인라인 수정 — 자리를 옮기지 않는다. 그 줄이 그대로 입력칸이 된다. */
 .rmg-mg-edit { display: flex; flex-direction: column; gap: 6px; }

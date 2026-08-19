@@ -378,10 +378,22 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
   const lay = React.useMemo(() => layoutSpans(spans), [spans]);
   const canvasH = (TT_TO - TT_FROM) * TT_ROW;
 
+  /** 굴려서 날을 넘겼을 때 어느 끝에 세울 것인가. 버튼으로 넘어왔으면 null 이다. */
+  const edge = React.useRef<"top" | "bottom" | null>(null);
+
   // 열자마자 지금 시각이 보이게 — 하루의 시작(06:00)부터 훑어 내려오게 하지 않는다.
+  //
+  // 자리를 잡는 일이 **여기 한 곳**에 있어야 하는 이유 — 굴려서 넘어온 경우를 onWheel 쪽에서
+  // 따로 잡으면 둘이 경쟁한다. 실제로 그랬다: onWheel 의 rAF 가 React 의 리렌더보다 먼저
+  // 돌아 옛 화면 위에 자리를 잡고, 뒤늦게 이 효과가 그것을 덮었다. 그래서 위로 거슬러
+  // 올라가면 전날의 **23시**가 아니라 00시에 서 있었다 — 읽던 방향이 끊긴 것이다.
   React.useEffect(() => {
     const el = scrollRef.current;
     if (!el) return;
+    const from = edge.current;
+    edge.current = null;
+    // 다음 날은 위에서부터, 전날은 아래에서부터 — 읽던 방향이 이어진다.
+    if (from) { el.scrollTop = from === "top" ? 0 : el.scrollHeight; return; }
     const target = nowInRange ? timeToPosition(nowMin) : spans.length ? eventToPosition(spans[0]) : 0;
     el.scrollTop = Math.max(0, target - el.clientHeight / 3);
   }, [day]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -403,14 +415,10 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
     turning.current = true;
     const next = new Date(day);
     next.setDate(next.getDate() + dir);
+    edge.current = dir > 0 ? "top" : "bottom";   // 자리는 위 효과가 잡는다
     onDay(next);
-    // 다음 날은 위에서부터, 전날은 아래에서부터 — 읽던 방향이 이어진다.
-    requestAnimationFrame(() => {
-      const box = scrollRef.current;
-      if (box) box.scrollTop = dir > 0 ? 0 : box.scrollHeight;
-      // 한 번의 손짓이 여러 날을 넘기지 않게 잠깐 잠근다.
-      window.setTimeout(() => { turning.current = false; }, 320);
-    });
+    // 한 번의 손짓이 여러 날을 넘기지 않게 잠깐 잠근다.
+    window.setTimeout(() => { turning.current = false; }, 320);
   };
 
   const submit = (h: number) => {
