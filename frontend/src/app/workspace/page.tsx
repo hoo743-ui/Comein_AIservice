@@ -16,7 +16,7 @@ import { loadMarks, markCleared, splitByMark, unmark, type ClearMarks } from "@/
 import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
 // 백엔드 주소는 환경변수로 — 배포(Vercel)에서 localhost 를 부르면 안 된다.
-import { API_BASE } from "@/lib/api";
+import { postJson, wakeAi } from "@/lib/api";
 import { useRemoteSync } from "@/lib/useRemoteSync";
 import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationState, pairSlots, recordSuggestion, saveConversationState, signOutRemote } from "@/lib/remote";
 import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Group, Schedule } from "@/lib/types";
@@ -191,6 +191,8 @@ export default function Reimagine() {
   >(null);
   const [flashOut, setFlashOut] = React.useState(false);
   const [organizing, setOrganizing] = React.useState(false);
+  // 오래 걸리는 중인가 — 자던 백엔드가 깨어나는 몇십 초를 '멈춘 화면' 으로 두지 않는다.
+  const [waking, setWaking] = React.useState(false);
   // 'AI 에 닿지 못했다' 를 따로 쥐던 값이 있었다. 세팅만 하고 읽는 곳이 없었다 —
   // 그 사실은 아래 catch 의 스침 줄이 그 자리에서 이미 말한다(§25).
   const [weather, setWeather] = React.useState<{ temp: number; condition: string } | null>(null);
@@ -215,6 +217,7 @@ export default function Reimagine() {
 
   const seq = React.useRef(0);
   const orgTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wakeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   const railTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -244,6 +247,16 @@ export default function Reimagine() {
   }, []);
 
   React.useEffect(() => () => { if (railTimer.current) clearTimeout(railTimer.current); }, []);
+
+  /** 문을 열자마자 AI 쪽 문도 두드려 둔다.
+   *
+   *  백엔드는 무료 티어라 15분 무요청이면 잠든다. 깨어나는 데 드는 수십 초를 여태
+   *  **사용자가 첫 줄을 넣은 뒤에** 쓰고 있었다 — 화면에 처음 말을 거는 그 순간이
+   *  하필 가장 오래 걸리는 순간이었던 셈이다.
+   *
+   *  그 시간을 사람이 화면을 읽는 동안으로 옮긴다. 답을 기다리지 않고, 실패도 삼킨다 —
+   *  깨우지 못했다고 해서 화면이 할 말이 생기는 것은 아니다(그때는 캡처가 제 자리에서 말한다). */
+  React.useEffect(() => { wakeAi(); }, []);
 
   // 탭 전환 크로스페이드 — 이전 뷰를 잠깐 페이드아웃한 뒤 새 뷰로 교체(툭 끊기지 않게)
   React.useEffect(() => {
@@ -414,15 +427,19 @@ export default function Reimagine() {
     setOrganizing(true);
     setFlash(null);
 
+    // 넉넉히 4초. 그 안에 오면 아무 말도 하지 않는다 — 평소 2초 남짓이라, 그때마다
+    // "깨우는 중" 이 스쳤다 사라지면 없는 문제를 있는 것처럼 말하는 셈이다.
+    // 넘어가면 그때부터 사정을 말한다: 기다리는 사람에게 필요한 건 진행 막대가 아니라 이유다.
+    setWaking(false);
+    if (wakeTimer.current) clearTimeout(wakeTimer.current);
+    wakeTimer.current = setTimeout(() => setWaking(true), 4000);
+
     // 답을 기다리던 질문이 있었다면 이번 한 줄이 그 답이다 — 물어본 쪽이 함께 가야 말이 된다.
     const pending = pendingAsk.current;
     pendingAsk.current = null;
 
     try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
+      const res = await postJson("/api/chat", {
           message: t,
           // 화면만 아는 것들. 서버 시계는 UTC 로 돌고 사용자는 제 시간대로 말한다.
           // 지금은 벽시계 + 오프셋으로 적는다(toISOString 이 아니다 — localIsoNow 의 주석 참고).
@@ -431,7 +448,6 @@ export default function Reimagine() {
             tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
             ...(pending ? { pending } : {}),
           },
-        }),
       });
       if (!res.ok) throw new Error(`API ${res.status}`);
 
@@ -564,6 +580,9 @@ export default function Reimagine() {
       // "AI 가 갑자기 멍청해진 것" 처럼 보였다(docs/24 §8.2 에 기록된 그 함정).
       // 그래서 방금 정리한 그 줄 위에, 그 자리에서 말해 준다 — 따로 알림을 띄우지 않는다.
       console.error("AI 파싱 실패 → 로컬 폴백:", err);
+      // 상한에 걸려 우리가 끊은 것과, 닿지 못한 것은 사용자에게 다른 사실이다.
+      // 전자는 "기다렸는데 끝내 답이 없었다" 이고, 후자는 "애초에 닿지 않았다" 이다.
+      const timedOut = (err as any)?.name === "AbortError";
       const rows = file([{ title: t, kind: classify(t), time: parseTime(t), note: "" }]);
       const head = rows[0];
       // 이 한 줄은 한 줄로만 서고 넘치면 뒤가 잘린다(rmg-flash-text). 그래서 순서가 중요하다:
@@ -572,10 +591,12 @@ export default function Reimagine() {
       showFlash(
         rows,
         lang === "en"
-          ? `Filed here only — AI is unreachable · ${head?.title ?? ""}`
-          : `AI 없이 정리했어요 — 이 화면에만 남아요 · ${head?.title ?? ""}`,
+          ? `${timedOut ? "AI didn't answer in time" : "AI is unreachable"} — filed here only · ${head?.title ?? ""}`
+          : `${timedOut ? "AI 가 끝내 답하지 않았어요" : "AI 없이 정리했어요"} — 이 화면에만 남아요 · ${head?.title ?? ""}`,
       );
     } finally {
+      if (wakeTimer.current) { clearTimeout(wakeTimer.current); wakeTimer.current = null; }
+      setWaking(false);
       ignite();
     }
   };
@@ -824,19 +845,15 @@ export default function Reimagine() {
               .slice(-8)
               .map((m) => `${m.senderId === ME_ID ? (st.settings.name || "나") : (st.contacts.find((c) => c.id === m.senderId)?.name ?? "상대")}: ${m.content}`)
           : [];
-        const res = await fetch(`${API_BASE}/api/chat`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          // 캡처 바와 **같은 것을 보낸다.** 예전에는 여기만 `{message}` 뿐이라, 같은 문장이
-          // 어느 칸에 들어가느냐에 따라 다른 AI 를 만났다(방에서는 서버 시계=UTC 로 떨어졌다).
-          body: JSON.stringify({
+        // 캡처 바와 **같은 것을 보낸다.** 예전에는 여기만 `{message}` 뿐이라, 같은 문장이
+        // 어느 칸에 들어가느냐에 따라 다른 AI 를 만났다(방에서는 서버 시계=UTC 로 떨어졌다).
+        const res = await postJson("/api/chat", {
             message: text,
             context: {
               now: localIsoNow(),
               tz: Intl.DateTimeFormat().resolvedOptions().timeZone,
               ...(thread.length ? { thread } : {}),
             },
-          }),
         });
         if (!res.ok) return;
         const data = await res.json();
@@ -900,14 +917,10 @@ export default function Reimagine() {
     try {
       // /api/chat 이 아니라 /api/summary 다. 그쪽은 한 마디를 항목으로 가르는 파서라
       // 대화를 통째로 넣으면 요약 대신 "N건을 정리했어요" 가 돌아온다(실제로 그랬다).
-      const res = await fetch(`${API_BASE}/api/summary`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        // 지금이 언제인지 함께 보낸다 — 요약은 **뒤늦게 온 사람**이 읽는 글인데,
-        // 대화 속의 "내일 3시" 는 말한 그 순간에만 뜻이 있다. 기준이 없으면 그 말을
-        // 그대로 옮길 수밖에 없고, 읽는 사람은 어느 내일인지 알 수 없다.
-        body: JSON.stringify({ transcript, title: ev?.title ?? null, lang: st.settings.language, now: localIsoNow() }),
-      });
+      // 지금이 언제인지 함께 보낸다 — 요약은 **뒤늦게 온 사람**이 읽는 글인데,
+      // 대화 속의 "내일 3시" 는 말한 그 순간에만 뜻이 있다. 기준이 없으면 그 말을
+      // 그대로 옮길 수밖에 없고, 읽는 사람은 어느 내일인지 알 수 없다.
+      const res = await postJson("/api/summary", { transcript, title: ev?.title ?? null, lang: st.settings.language, now: localIsoNow() });
       if (!res.ok) {
         fail(lang0 === "en" ? "Couldn't read the conversation. Try again." : "대화를 정리하지 못했어요. 잠시 뒤 다시 눌러 주세요.");
         return;
@@ -2150,7 +2163,7 @@ export default function Reimagine() {
         {!panel && organizing && !flash && (
           <div className="rmg-working" role="status" aria-live="polite">
             <span className="rmg-working-mark" aria-hidden />
-            <span className="rmg-working-t">{t.working}</span>
+            <span className="rmg-working-t">{waking ? t.waking : t.working}</span>
           </div>
         )}
 

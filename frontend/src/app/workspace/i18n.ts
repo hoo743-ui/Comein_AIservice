@@ -47,6 +47,8 @@ export function L(lang: Lang) {
     organizing: en ? "Organizing" : "정리 중",
     /* 처리 중 한 줄 — 상태를 알리되 재촉하지 않는다. 문장으로 두면 기계의 로그가 아니라 곁의 말이 된다. */
     working: en ? "Sorting this out" : "내용을 정리하고 있어요",
+    // 오래 걸릴 때만 이 말로 바뀐다. 사과가 아니라 사정이다 — 무엇이 걸리는지 알면 기다려진다.
+    waking: en ? "Waking the AI — the first call takes a moment" : "AI 를 깨우는 중이에요 — 처음 한 번은 조금 걸려요",
     open: en ? "Open" : "열기",
     undo: en ? "Undo" : "되돌리기",
     startingSoon: en ? "Starting soon" : "곧 시작하는 일정",
