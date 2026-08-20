@@ -1,0 +1,590 @@
+<meta charset="utf-8" />
+<title>Comein · 사용 가이드</title>
+<style>
+  /* ── Comein 사용 가이드 · 인쇄본 ────────────────────────────────────────
+     화면(워크스페이스)의 라이트 토큰을 그대로 쓴다. 따로 만든 색이 하나도 없어야
+     인쇄물과 제품이 같은 물건으로 읽힌다. (frontend/src/app/workspace/styles.ts) */
+  :root {
+    --paper:   #F7F6F3;
+    --surface: #FCFBF9;
+    --ink:     #26221D;
+    --muted:   #6E675C;
+    --faint:   #A9A294;
+    --hair:    #E7E2D8;
+    --accent:  #8C7E6E;
+  }
+
+  @page { size: A4; margin: 0; }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: #E9E7E2; }
+  body {
+    font-family: "Pretendard Variable", Pretendard, -apple-system, "Segoe UI",
+                 "Malgun Gothic", "맑은 고딕", system-ui, sans-serif;
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    font-size: 10.2pt;
+    line-height: 1.62;
+    letter-spacing: -0.005em;
+  }
+
+  /* 페이지 하나하나를 직접 세운다 — 브라우저의 자동 분할에 맡기면 표와 카드가
+     페이지 경계에서 잘린다. 잘린 표가 있는 문서는 그 자체로 덜 만든 물건으로 읽힌다. */
+  .page {
+    position: relative;
+    width: 210mm; height: 297mm;
+    padding: 22mm 20mm 18mm;
+    background: var(--paper);
+    page-break-after: always;
+    break-after: page;
+    overflow: hidden;
+  }
+  .page:last-child { page-break-after: auto; break-after: auto; }
+
+  @media screen {
+    .page { margin: 0 auto 10mm; box-shadow: 0 2px 24px rgba(0,0,0,0.13); }
+  }
+
+  /* 쪽 아래 — 어느 문서의 몇 쪽인지. 표지에는 두지 않는다. */
+  .foot {
+    position: absolute; left: 20mm; right: 20mm; bottom: 12mm;
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding-top: 4mm; border-top: 0.5pt solid var(--hair);
+    font-size: 7.6pt; letter-spacing: 0.06em; color: var(--faint);
+  }
+  .foot .n { font-variant-numeric: tabular-nums; }
+
+  /* ── 표지 ── */
+  .cover { display: flex; flex-direction: column; }
+  .cover-mark { display: flex; align-items: center; gap: 9mm; }
+  .cover-door { width: 22mm; height: 28mm; flex: 0 0 auto; }
+  .cover-name { margin: 0; font-size: 34pt; font-weight: 300; letter-spacing: -0.04em; line-height: 1; }
+  .cover-tag { margin: 3.5mm 0 0; font-size: 10pt; font-weight: 300; color: var(--muted); letter-spacing: 0; }
+  /* 표지의 무게중심 — 위에서 약 38% 지점. 바닥으로 밀면 가운데가 통째로 비고,
+     붙이면 마크와 문장이 한 덩어리로 뭉친다. */
+  .cover-mid { margin-top: 58mm; }
+  .cover-kind {
+    display: inline-block; padding: 1.6mm 4mm; margin-bottom: 7mm;
+    border: 0.6pt solid var(--accent); border-radius: 999px;
+    font-size: 8pt; font-weight: 600; letter-spacing: 0.18em; color: var(--accent);
+  }
+  .cover-line { margin: 0; font-size: 20pt; font-weight: 300; line-height: 1.42; letter-spacing: -0.025em; }
+  .cover-line b { font-weight: 600; }
+  .cover-sub { margin: 6mm 0 0; font-size: 10.5pt; font-weight: 300; color: var(--muted); max-width: 118mm; }
+  .cover-meta {
+    margin-top: 14mm; padding-top: 5mm; border-top: 0.5pt solid var(--hair);
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6mm;
+  }
+  .cover-meta dt { font-size: 7.6pt; font-weight: 600; letter-spacing: 0.14em; color: var(--faint); text-transform: uppercase; }
+  .cover-meta dd { margin: 1.6mm 0 0; font-size: 9.4pt; }
+
+  /* ── 공통 타이포 ── */
+  .eyebrow {
+    margin: 0 0 3mm; font-size: 7.8pt; font-weight: 600;
+    letter-spacing: 0.18em; text-transform: uppercase; color: var(--accent);
+  }
+  h2 { margin: 0 0 4mm; font-size: 18pt; font-weight: 300; letter-spacing: -0.03em; line-height: 1.2; }
+  h3 { margin: 0 0 2mm; font-size: 11.4pt; font-weight: 600; letter-spacing: -0.015em; }
+  .lead { margin: 0 0 8mm; font-size: 10.6pt; font-weight: 300; color: var(--muted); max-width: 150mm; }
+  p { margin: 0 0 3.4mm; }
+  .hr { height: 0.5pt; background: var(--hair); margin: 7mm 0; }
+  strong { font-weight: 600; }
+  .q { color: var(--ink); }
+
+  /* ── 걸음 카드 ── */
+  .steps { display: flex; flex-direction: column; gap: 5.5mm; }
+  .step { position: relative; padding-left: 13mm; break-inside: avoid; }
+  .step-n {
+    position: absolute; left: 0; top: 0.4mm;
+    width: 8.4mm; height: 8.4mm; border-radius: 50%;
+    border: 0.7pt solid var(--accent); color: var(--accent);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 8.4pt; font-weight: 600; font-variant-numeric: tabular-nums;
+  }
+  .step-body { margin: 1.2mm 0 0; color: var(--muted); font-weight: 300; }
+  .eg {
+    margin: 2.4mm 0 0; padding: 2.4mm 4mm;
+    background: var(--surface); border-left: 1.4pt solid var(--accent);
+    font-size: 9.2pt; color: var(--ink);
+  }
+  .eg span { color: var(--faint); font-weight: 600; letter-spacing: 0.08em; margin-right: 2mm; font-size: 7.8pt; }
+
+  /* ── 표 ── */
+  table { width: 100%; border-collapse: collapse; font-size: 9.4pt; break-inside: avoid; }
+  th, td { text-align: left; padding: 2.8mm 3mm; border-bottom: 0.5pt solid var(--hair); vertical-align: top; }
+  thead th { font-size: 7.8pt; font-weight: 600; letter-spacing: 0.12em; text-transform: uppercase; color: var(--faint); border-bottom: 0.8pt solid var(--accent); }
+  td.k { font-weight: 600; white-space: nowrap; width: 34mm; }
+  td.m { color: var(--muted); }
+
+  /* ── 레이아웃 조각 ── */
+  .two { display: grid; grid-template-columns: 1fr 1fr; gap: 7mm; }
+  .card { padding: 5mm 5.5mm; background: var(--surface); border: 0.5pt solid var(--hair); break-inside: avoid; }
+  .card h3 { margin-bottom: 1.6mm; }
+  .card p { margin: 0; font-size: 9.4pt; color: var(--muted); font-weight: 300; }
+
+  /* 화면 구조 도식 */
+  .layout { display: grid; grid-template-columns: 26mm 1fr; gap: 3mm; height: 52mm; margin: 2mm 0 4mm; }
+  .layout .rail, .layout .canvas { border: 0.6pt solid var(--hair); background: var(--surface); padding: 4mm; }
+  .layout .rail { display: flex; flex-direction: column; gap: 2.6mm; font-size: 8.4pt; color: var(--muted); }
+  .layout .rail .on { color: var(--ink); font-weight: 600; }
+  .layout .rail .sp { margin-top: auto; }
+  .layout .canvas { display: flex; flex-direction: column; }
+  .layout .canvas .cap {
+    margin-top: auto; border: 0.6pt solid var(--hair); border-radius: 2mm;
+    padding: 3mm 4mm; font-size: 8.6pt; color: var(--faint); background: var(--paper);
+  }
+  .layout .canvas .t { font-size: 13pt; font-weight: 300; letter-spacing: -0.02em; }
+  .layout .canvas .s { font-size: 8.6pt; color: var(--muted); margin-top: 1.5mm; }
+
+  /* 시나리오 흐름 */
+  .flow { display: flex; flex-direction: column; gap: 0; margin: 3mm 0 0; }
+  .flow-row { display: grid; grid-template-columns: 30mm 1fr; gap: 4mm; padding: 3mm 0; border-top: 0.5pt solid var(--hair); break-inside: avoid; }
+  .flow-row:first-child { border-top: 0; padding-top: 0; }
+  .flow-who { font-size: 7.8pt; font-weight: 600; letter-spacing: 0.1em; text-transform: uppercase; color: var(--faint); padding-top: 0.8mm; }
+  .flow-what { font-size: 9.6pt; }
+  .flow-what em { font-style: normal; color: var(--muted); font-weight: 300; display: block; margin-top: 1mm; font-size: 9pt; }
+
+  /* 시나리오 쪽만 조인다 — 셋을 두 쪽으로 가르면 '흐름' 이 흐름으로 안 읽힌다. */
+  .page.tight .lead { margin-bottom: 5mm; }
+  .page.tight .hr { margin: 4.5mm 0; }
+  .page.tight .flow-row { padding: 2.3mm 0; }
+
+  .kbd {
+    display: inline-block; padding: 0.4mm 1.8mm; border: 0.5pt solid var(--hair);
+    border-radius: 1mm; background: var(--surface); font-size: 8.6pt; font-weight: 600;
+  }
+  .note { font-size: 9pt; color: var(--muted); font-weight: 300; }
+</style>
+
+<!-- ══════════════════════ 1. 표지 ══════════════════════ -->
+<section class="page cover">
+  <div class="cover-mark">
+    <svg class="cover-door" viewBox="0 0 40 52" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="34" height="46" rx="2.5" stroke="#8C7E6E" stroke-width="1.4" />
+      <path d="M20 7 L31 10 V42 L20 45 Z" fill="#8C7E6E" fill-opacity="0.10" stroke="#8C7E6E" stroke-width="1.4" />
+      <circle cx="23.5" cy="26" r="1.1" fill="#8C7E6E" />
+    </svg>
+    <div>
+      <p class="cover-name">Comein</p>
+      <p class="cover-tag">Scattered thoughts become structured flow.</p>
+    </div>
+  </div>
+
+  <div class="cover-mid">
+    <span class="cover-kind">사용 가이드</span>
+    <p class="cover-line">
+      말 한 줄이면<br /><b>워크스페이스가 대신 정리합니다.</b>
+    </p>
+    <p class="cover-sub">
+      Comein 은 일을 <em>관리</em>하게 만드는 도구가 아니라, 일이 <em>스스로 정리되게</em> 만드는 공간입니다.
+      이 문서는 그 공간을 처음 여는 사람을 위한 안내서입니다.
+    </p>
+
+    <dl class="cover-meta">
+      <div><dt>제품</dt><dd>대화형 AI 워크스페이스</dd></div>
+      <div><dt>구성</dt><dd>Landing · Experience · Workspace</dd></div>
+      <div><dt>문서</dt><dd>사용 가이드 v1</dd></div>
+    </dl>
+  </div>
+</section>
+
+<!-- ══════════════════════ 2. 한 장 요약 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">한 장 요약</p>
+  <h2>들어오세요.<br />당신의 워크스페이스가 대신 생각합니다.</h2>
+  <p class="lead">
+    기존 생산성 앱은 사용자가 직접 입력하고 분류해야 하는 <strong>빈 사무실</strong>이었습니다.
+    Comein 에서는 <strong>말만 하면 됩니다.</strong> 나머지는 워크스페이스가 생각합니다.
+  </p>
+
+  <div class="two">
+    <div class="card">
+      <h3>사용자가 들어오는 문</h3>
+      <p>출근하듯 들어오면, 오늘의 일정과 답을 기다리는 것들이 이미 정리되어 기다리고 있습니다.</p>
+    </div>
+    <div class="card">
+      <h3>AI 가 들어오는 문</h3>
+      <p>AI 가 업무 공간 안으로 들어와, 옆자리 동료처럼 대화하며 일을 처리합니다.</p>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">무엇이 다른가</p>
+  <table>
+    <thead>
+      <tr><th></th><th>Notion · Todoist</th><th>Calendar</th><th>ChatGPT</th><th>Comein</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="k">입력 방식</td><td class="m">직접 작성</td><td class="m">직접 작성</td><td class="m">자연어</td><td><strong>자연어</strong></td></tr>
+      <tr><td class="k">데이터 관리</td><td class="m">사용자가 직접</td><td class="m">사용자가 직접</td><td class="m">휘발</td><td><strong>AI 가 자동 저장·분류</strong></td></tr>
+      <tr><td class="k">기능 연결</td><td class="m">별도 도구</td><td class="m">일정만</td><td class="m">없음</td><td><strong>일정 ↔ 사람 ↔ 대화</strong></td></tr>
+      <tr><td class="k">능동성</td><td class="m">없음</td><td class="m">알림만</td><td class="m">없음</td><td><strong>충돌 감지 · 시간 추천</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">쓰고 난 뒤에 남는 느낌</p>
+  <p style="font-size:13pt; font-weight:300; letter-spacing:-0.02em; line-height:1.5; margin:0;">
+    “나는 아무것도 정리하지 않았는데, 알아서 정리되어 있었다.”<br />
+    <span class="note">— 그 느낌이 곧 이 제품입니다.</span>
+  </p>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">2</span></div>
+</section>
+
+<!-- ══════════════════════ 3. 화면 구조 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">화면 구조</p>
+  <h2>화면은 셋뿐입니다</h2>
+  <p class="lead">
+    갈래마다 방을 하나씩 주면 사용자가 <strong>분류를 의식하게</strong> 됩니다.
+    Comein 은 화면을 셋으로 접고, 그 사이를 페이지 이동 없이 오갑니다 — “다른 페이지”가 아니라 “한 공간의 재구성”입니다.
+  </p>
+
+  <div class="layout">
+    <div class="rail">
+      <div style="font-weight:600; color:var(--ink); letter-spacing:-0.02em;">Comein</div>
+      <div class="on">· 오늘</div>
+      <div>· 캘린더</div>
+      <div>· 사람</div>
+      <div class="sp">· 설정</div>
+      <div>· 나가기</div>
+    </div>
+    <div class="canvas">
+      <div class="t">오늘</div>
+      <div class="s">답을 기다리는 것 · 오늘의 맥락 · 다가오는 순간</div>
+      <div class="cap">무엇이든 적어보세요 — 나머지는 정리해 둘게요</div>
+    </div>
+  </div>
+  <p class="note" style="margin-bottom:7mm;">
+    왼쪽 <strong>슬림 레일</strong>은 늘 같은 자리에 있고, 오른쪽 <strong>단일 캔버스</strong>만 바뀝니다.
+    아래 <strong>캡처 바</strong>는 어느 화면에서든 <span class="kbd">⌘K</span> 로 열립니다.
+  </p>
+
+  <table>
+    <thead><tr><th>화면</th><th>답하는 질문</th><th>여기서 하는 일</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">오늘</td>
+        <td class="m">지금 무엇을 알아야 하나</td>
+        <td>답을 기다리는 것, 다가오는 순간, 오늘의 흐름. AI 가 오늘을 실제로 읽고 한 줄로 말합니다.</td>
+      </tr>
+      <tr>
+        <td class="k">캘린더</td>
+        <td class="m">그날은 어떤 모양인가</td>
+        <td>월 달력과 24시간 원. 날짜가 기억나지 않으면 말로 찾습니다.</td>
+      </tr>
+      <tr>
+        <td class="k">사람</td>
+        <td class="m">누구와 무엇을 하고 있나</td>
+        <td>나눈 말과 함께하는 일정이 한 화면에. 그룹으로 묶어 두면 자리마다 다시 고르지 않습니다.</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">들어오는 길</p>
+  <table>
+    <tbody>
+      <tr><td class="k">Landing</td><td>Comein 이 무엇인가 — 철학만. 기능 설명은 하지 않습니다.</td></tr>
+      <tr><td class="k">Experience</td><td>문을 열고 들어서는 순간. 옆에서 <strong>말 한 줄이 자리가 되는 과정</strong>을 세 걸음으로 보여 줍니다.</td></tr>
+      <tr><td class="k">Workspace</td><td>실제로 일하는 곳. 감탄시키는 곳이 아니라 <strong>명확한</strong> 곳입니다.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">3</span></div>
+</section>
+
+<!-- ══════════════════════ 4. 아홉 걸음 ① 둘러보기 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">아홉 걸음 · 첫째 막</p>
+  <h2>둘러보기</h2>
+  <p class="lead">
+    처음 들어오면 오른쪽에 문이 하나 서 있습니다. 누르면 열리고, 그 뒤로 이 아홉 걸음이 실제 화면 위에서 한 곳씩 짚어 줍니다.
+    언제든 <span class="kbd">←</span> <span class="kbd">→</span> 로 옮기고 <span class="kbd">Esc</span> 로 나갑니다.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">1</div>
+      <h3>오늘</h3>
+      <p class="step-body">
+        오늘 해야 할 일과 지금 필요한 정보를 한곳에서 봅니다. 인사말 아래 한 줄은 AI 가 오늘을 실제로 읽고 하는 말이에요 —
+        답하지 않은 초대, 곧 시작하는 일, 숨 돌릴 틈 없이 붙은 회의 같은 것들.
+      </p>
+      <p class="eg"><span>예</span>다가오는 순간 · 14:00 캡스톤 중간발표</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">2</div>
+      <h3>캘린더</h3>
+      <p class="step-body">
+        날짜를 고르면 그날의 24시간이 열립니다. 날짜가 기억나지 않으면 ‘찾기’를 눌러 말로 옮겨 가세요.
+      </p>
+      <p class="eg"><span>예</span>찾기 → “다음 학기”, “8월 둘째 주”, “회의 있는 날”</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">3</div>
+      <h3>24시간 시간 지도</h3>
+      <p class="step-body">
+        일정이 하루의 어느 자리에 놓여 있는지, 그리고 어디가 비어 있는지 한눈에 봅니다.
+        막대가 아니라 원입니다 — 하루는 끝에서 다시 시작하니까요.
+      </p>
+      <p class="eg"><span>예</span>15:00 회의는 원의 3시~4시 구간을 채웁니다</p>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+  <p class="note">
+    가이드는 언제든 <strong>설정 → 이 가이드 다시 보기</strong> 로 다시 열 수 있습니다.
+    각 걸음은 자기 실물이 지금 있는지를 스스로 알아서, 없으면 그리로 가는 길을 가리키며 언제 생기는지 말해 줍니다 —
+    <strong>없는 것을 있는 척 그리지 않습니다.</strong>
+  </p>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">4</span></div>
+</section>
+
+<!-- ══════════════════════ 5. 아홉 걸음 ② 함께 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">아홉 걸음 · 둘째 막</p>
+  <h2>함께</h2>
+  <p class="lead">
+    혼자 쓰는 일정표는 이미 많습니다. Comein 이 답하려는 것은 <strong>둘 이상이 시간을 맞출 때</strong> 벌어지는 일입니다.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">4</div>
+      <h3>사람</h3>
+      <p class="step-body">
+        @핸들이 곧 초대코드입니다. 내 핸들을 알려 주고 상대 핸들로 찾아 청하면, 상대가 받았을 때 이어집니다.
+        <strong>상대의 승낙 없이 누군가가 목록에 들어오는 일은 없습니다.</strong>
+      </p>
+      <p class="eg"><span>예</span>내 핸들 @hoo743 · 검색창에 @fapp1004 → 요청</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">5</div>
+      <h3>사람 하나, 한 화면</h3>
+      <p class="step-body">
+        사람을 고르면 나눈 말과 함께하는 일정이 한 화면에 섭니다. AI 는 뒤에서 조용히 듣다가 시간 이야기가 오가면 후보를 한 줄로 권하고,
+        정리는 정말로 정해졌을 때만 합니다 — 말이 오갈 때마다 요약하지 않아요.
+      </p>
+      <p class="eg"><span>예</span>“금요일 저녁 어때?” → 금 19:00 · 둘 다 비어 있어요 &nbsp;[캘린더에 추가]</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">6</div>
+      <h3>일정 안에서 대화</h3>
+      <p class="step-body">
+        같은 일정의 사람들이 그 방을 함께 씁니다. 시각을 말하면 참여자들의 달력을 맞춰 보고 근거와 함께 시간을 권해요.
+        <strong>누가 그때 무엇을 하는지는 말하지 않습니다</strong> — 되는지 안 되는지까지만.
+      </p>
+      <p class="eg"><span>예</span>“그럼 목요일 4시 어때?” → 목 16:00 · 2명 모두 충돌 없음</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">7</div>
+      <h3>답을 기다리는 것</h3>
+      <p class="step-body">
+        누군가 나를 부르거나 시간을 내밀면 화면 맨 위에 한 줄이 섭니다 — <strong>팝업으로 가로막지 않아요.</strong>
+        누르면 그 일정이 열리고 거기에 ‘동의 · 다른 시간’ 이 있습니다. 시간은 전원이 동의해야 비로소 앉습니다.
+      </p>
+      <p class="eg"><span>예</span>“팀 회의” — 8월 20일 14:00 로 제안됐어요. 괜찮으세요? &nbsp;[열어 보기]</p>
+    </div>
+  </div>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">5</span></div>
+</section>
+
+<!-- ══════════════════════ 6. 아홉 걸음 ③ 맡기기 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">아홉 걸음 · 셋째 막</p>
+  <h2>맡기기</h2>
+  <p class="lead">
+    앞의 일곱이 “이렇게 움직입니다” 였다면, 마지막 둘은 <strong>“그 움직임을 당신이 정합니다”</strong> 입니다.
+  </p>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-n">8</div>
+      <h3>말하면 됩니다</h3>
+      <p class="step-body">
+        한 줄로 적으면 제자리에 놓입니다. 다만 확정하진 않아요 — 그 자리에서 확정하거나 없던 일로 되돌리면 됩니다.
+        어느 화면에서든 <span class="kbd">⌘K</span> 로 이 칸이 열립니다.
+      </p>
+      <p class="eg"><span>예</span>“내일 3시 교수님 미팅 잡아줘” → 정리했어요 · 확정 / 되돌리기</p>
+    </div>
+
+    <div class="step">
+      <div class="step-n">9</div>
+      <h3>맡기는 정도는 당신이</h3>
+      <p class="step-body">
+        테마 · 언어 · 글자 크기, 그리고 얼마나 맡길지. <strong>‘자동 확정’ 은 기본으로 꺼져 있습니다</strong> —
+        AI 가 읽은 것은 당신의 확인을 기다립니다. 로그인해야 이 워크스페이스가 이 브라우저 밖으로 나갑니다.
+      </p>
+      <p class="eg"><span>예</span>설정 → AI 자동 확정 · 계정 · 이 가이드 다시 보기</p>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">맡기는 정도</p>
+  <table>
+    <thead><tr><th>설정</th><th>기본값</th><th>켜면</th></tr></thead>
+    <tbody>
+      <tr><td class="k">AI 자동 확정</td><td class="m">꺼짐</td><td>AI 가 읽은 일정이 확인 없이 바로 확정됩니다. 꺼져 있으면 <strong>제안(pending)</strong> 으로 앉아 사람의 손을 기다립니다.</td></tr>
+      <tr><td class="k">언어</td><td class="m">한국어</td><td>한국어 · English. AI 의 되묻는 말과 요약까지 함께 바뀝니다.</td></tr>
+      <tr><td class="k">테마</td><td class="m">시스템</td><td>라이트 · 다크 · 시스템. 어느 쪽이든 같은 온도로 맞춰 두었습니다.</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">6</span></div>
+</section>
+
+<!-- ══════════════════════ 7. 대표 시나리오 ══════════════════════ -->
+<section class="page tight">
+  <p class="eyebrow">대표 시나리오</p>
+  <h2>실제로는 이렇게 흘러갑니다</h2>
+  <p class="lead">세 가지 모두 지금 실제로 도는 흐름입니다.</p>
+
+  <h3 style="margin-bottom:1mm;">하나 · 말 한 줄이 일정이 된다</h3>
+  <div class="flow">
+    <div class="flow-row"><div class="flow-who">사람</div><div class="flow-what">“다음 주 화요일 3시에 교수님 미팅 잡아줘”</div></div>
+    <div class="flow-row"><div class="flow-who">AI</div><div class="flow-what">한 프롬프트가 분류와 추출을 함께 합니다<em>갈래 · 제목 · 시각 · 참여자 · 중요도를 한 번에</em></div></div>
+    <div class="flow-row"><div class="flow-who">화면</div><div class="flow-what">캘린더에 <strong>제안</strong>으로 앉습니다<em>원과 시간표에서 점선으로 구분됩니다</em></div></div>
+    <div class="flow-row"><div class="flow-who">사람</div><div class="flow-what">확정 · 또는 되돌리기<em>확정은 언제나 사람이 합니다</em></div></div>
+  </div>
+
+  <div class="hr"></div>
+
+  <h3 style="margin-bottom:1mm;">둘 · 모르면 지어내지 않는다</h3>
+  <div class="flow">
+    <div class="flow-row"><div class="flow-who">사람</div><div class="flow-what">“교수님 미팅 잡아줘” <em>— 시각이 없습니다</em></div></div>
+    <div class="flow-row"><div class="flow-who">AI</div><div class="flow-what">항목을 세우지 않고 되묻습니다<em>“언제로 잡을까요?”</em></div></div>
+    <div class="flow-row"><div class="flow-who">사람</div><div class="flow-what">“내일 4시”</div></div>
+    <div class="flow-row"><div class="flow-who">AI</div><div class="flow-what">다음 한 마디가 앞의 답이 되어 이어집니다<em>없는 시각을 지어내 앉히는 일은 하지 않습니다</em></div></div>
+  </div>
+
+  <div class="hr"></div>
+
+  <h3 style="margin-bottom:1mm;">셋 · 둘이서 시간 맞추기</h3>
+  <div class="flow">
+    <div class="flow-row"><div class="flow-who">대화</div><div class="flow-what">일정 방에서 시각 이야기가 오갑니다</div></div>
+    <div class="flow-row"><div class="flow-who">서버</div><div class="flow-what">양쪽 달력을 대조해 후보를 권합니다<em>충돌 판정은 DB 안에서 — 남의 일정 내용은 밖으로 나오지 않습니다</em></div></div>
+    <div class="flow-row"><div class="flow-who">모두</div><div class="flow-what">화면 맨 위 한 줄로 물어보고, <strong>전원이 동의해야</strong> 일정이 앉습니다</div></div>
+    <div class="flow-row"><div class="flow-who">그 뒤</div><div class="flow-what">뒤늦게 온 사람을 위해 대화를 한 번 정리해 둡니다</div></div>
+  </div>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">7</span></div>
+</section>
+
+<!-- ══════════════════════ 8. 원칙 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">약속</p>
+  <h2>이 제품이 지키는 것</h2>
+  <p class="lead">기능 목록보다 이 넷이 Comein 을 Comein 답게 만듭니다.</p>
+
+  <div class="two" style="gap:6mm;">
+    <div class="card">
+      <h3>확정은 사람이 합니다</h3>
+      <p>AI 가 읽은 것은 <strong>제안</strong>으로 앉습니다. 자동 확정은 기본으로 꺼져 있고, 켜는 것도 끄는 것도 사용자의 몫입니다.</p>
+    </div>
+    <div class="card">
+      <h3>모르면 되묻습니다</h3>
+      <p>시각처럼 지어내야 하는 것이 비면 항목을 만들지 않고 한 줄로 물어봅니다. <strong>침묵도 정답</strong>이라고 적어 두었습니다.</p>
+    </div>
+    <div class="card">
+      <h3>남의 사정은 말하지 않습니다</h3>
+      <p>시간을 맞출 때 상대가 <em>그때 무엇을 하는지</em>는 끝까지 밝히지 않습니다. 되는지 안 되는지, 겹친 사람이 몇 명인지까지입니다.</p>
+    </div>
+    <div class="card">
+      <h3>하지 않은 일을 했다고 말하지 않습니다</h3>
+      <p>담을 곳이 없는 갈래는 “담아 두는 곳은 아직 없어요” 라고 <strong>그대로 말합니다.</strong> 화면이 하지 않은 일을 했다고 말하지 않습니다.</p>
+    </div>
+  </div>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">디자인이 답해야 하는 한 가지 질문</p>
+  <p style="font-size:14pt; font-weight:300; letter-spacing:-0.025em; line-height:1.5; margin:0 0 4mm;">
+    “이것은 사용자가 <b>생각하도록</b> 돕는가,<br />아니면 <b>소프트웨어를 조작하게</b> 만드는가?”
+  </p>
+  <p class="note">소프트웨어를 조작하게 만든다면 — 잘못된 디자인입니다. 다시 만듭니다.</p>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow">빠른 참조</p>
+  <table>
+    <tbody>
+      <tr><td class="k"><span class="kbd">⌘K</span> / <span class="kbd">Ctrl K</span></td><td>어느 화면에서든 캡처 바를 엽니다</td></tr>
+      <tr><td class="k"><span class="kbd">←</span> <span class="kbd">→</span> · <span class="kbd">Esc</span></td><td>가이드 걸음 이동 · 나가기</td></tr>
+      <tr><td class="k">@핸들</td><td>나를 찾는 이름이자 초대코드. 30일에 한 번 바꿀 수 있습니다</td></tr>
+      <tr><td class="k">제안 / 확정</td><td>점선은 아직 제안, 실선은 확정된 일정입니다</td></tr>
+    </tbody>
+  </table>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">8</span></div>
+</section>
+
+<!-- ══════════════════════ 9. 부록 ══════════════════════ -->
+<section class="page">
+  <p class="eyebrow">부록</p>
+  <h2>무엇이 뒤에서 도는가</h2>
+  <p class="lead">
+    쓰는 데 알 필요는 없지만, 왜 이렇게 빠르고 왜 이렇게 조용한지에 대한 답입니다.
+  </p>
+
+  <p class="eyebrow" style="color:var(--faint);">길이 둘이다</p>
+  <table style="margin-bottom:7mm;">
+    <thead><tr><th>하는 일</th><th>어디로 가는가</th><th>왜</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="k">자연어 파싱</td>
+        <td>화면 → 파싱 서버 → LLM</td>
+        <td class="m">AI 키는 브라우저에 둘 수 없습니다. 이 길만 서버를 거칩니다.</td>
+      </tr>
+      <tr>
+        <td class="k">저장 · 조회 · 실시간</td>
+        <td>화면 → 데이터베이스 <strong>직행</strong></td>
+        <td class="m">공유 일정과 대화는 행 단위 권한과 실시간이 핵심입니다. 서버를 한 번 더 거치면 실시간이 끊깁니다.</td>
+      </tr>
+    </tbody>
+  </table>
+  <p class="note" style="margin-bottom:7mm;">
+    이렇게 가른 결과 — <strong>파싱 서버가 자고 있어도 일정과 대화는 그려집니다.</strong>
+    느려지는 것은 캡처 바의 AI 파싱뿐이고, 그때는 화면이 “AI 를 깨우는 중이에요” 라고 사정을 말합니다.
+  </p>
+
+  <div class="hr"></div>
+
+  <p class="eyebrow" style="color:var(--faint);">사람이 지키지 않아도 되는 것들</p>
+  <table>
+    <tbody>
+      <tr><td class="k">권한</td><td>id 를 알아도 남의 것은 보이지 않습니다. 판정은 데이터베이스 안에 있습니다.</td></tr>
+      <tr><td class="k">충돌 감지</td><td>누가 언제 비는지도 데이터베이스 안에서 계산합니다 — 내용은 밖으로 나오지 않습니다.</td></tr>
+      <tr><td class="k">일정과 방</td><td>일정을 만들면 그 방과 참여자가 함께 생깁니다. 사람이 잊어도 구조가 기억합니다.</td></tr>
+      <tr><td class="k">AI 가 흔들릴 때</td><td>한 모델이 답하지 않으면 다른 모델로 넘어가고, 그마저 닿지 않으면 화면이 스스로 정리한 뒤 <strong>저장되지 않았다는 사실을 그 자리에서 말합니다.</strong></td></tr>
+    </tbody>
+  </table>
+
+  <div class="hr"></div>
+
+  <div style="display:flex; align-items:center; gap:6mm;">
+    <svg style="width:13mm; height:17mm; flex:0 0 auto;" viewBox="0 0 40 52" fill="none" aria-hidden="true">
+      <rect x="3" y="3" width="34" height="46" rx="2.5" stroke="#8C7E6E" stroke-width="1.4" />
+      <path d="M20 7 L31 10 V42 L20 45 Z" fill="#8C7E6E" fill-opacity="0.10" stroke="#8C7E6E" stroke-width="1.4" />
+      <circle cx="23.5" cy="26" r="1.1" fill="#8C7E6E" />
+    </svg>
+    <p style="margin:0; font-size:12.5pt; font-weight:300; letter-spacing:-0.02em; line-height:1.5;">
+      생각은 흩어집니다. 질서는 만들어집니다.<br />
+      <span class="note" style="font-size:9.6pt;">Scattered thoughts become structured flow.</span>
+    </p>
+  </div>
+
+  <div class="foot"><span>Comein · 사용 가이드</span><span class="n">9</span></div>
+</section>
