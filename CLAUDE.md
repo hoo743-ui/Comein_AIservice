@@ -41,7 +41,8 @@ Comein은 또 하나의 챗봇도, 대시보드도, 노트앱도 아니다. **�
 
 1. **Landing** — 철학을 소개한다. 기능 설명 X. "Comein이 무엇인가"만 감정적으로. *갤러리에 들어서는 느낌.* 초점은 정체성.
 2. **Experience** — 문을 열고 **들어서는 순간**. 로그인 화면이 아니다: 로고가 떠오르고 → 문이 서고 → 문이 열리며 Co(ntext)·Me(mory)·In(sight) 세 갈래가 펼쳐지고 → 그 빛에서 인증 카드가 태어난다. 여기서 파는 것은 기능이 아니라 **온도**다 — "여기는 조용한 곳이구나". 이미 들어온 사람에게는 카드 대신 문이 열린다.
-   > 한때 이 자리는 **변환 시연**(`생각 → AI 이해 → 회의 → 캘린더 → Todo → 메모`)이었다. 만들지 않았고, 그 사이 메모는 걷혔으며 Todo 는 아직 갈 곳이 없어 그 사슬 자체가 낡았다. 되살릴지 말지는 `docs/16_TASK.md` 에 배경과 함께 적어 둔다 — **북극성이라도 없는 것을 있다고 말하지 않는다.**
+   그리고 로그인 칸 옆에서 **무엇을 해 주는지**를 세 걸음으로 말한다: `말 한 줄 → AI 가 시각을 읽는다 → 캘린더에 제안으로 앉는다(확정은 사람이)`. 문 앞에서 기다리게 하지 않고, 로그인 칸을 읽는 그 시간에 함께 읽히게 둔다.
+   > 한때 이 사슬은 `생각 → AI 이해 → 회의 → 캘린더 → Todo → 메모` 였다. 메모는 걷혔고 할 일은 담을 곳이 없어 **지금 실제로 되는 것**으로 다시 썼다 — 없는 것을 시연하면 이 화면이 곧 첫 번째 거짓말이 된다.
 3. **Workspace** — 실제로 일하는 곳(시간을 보내는 곳). *감탄시키는 곳이 아님.* 참신함보다 **명확함**. 즉시 배울 만큼 익숙하되, 틀림없이 Comein다운. 인지 부하 최소, AI가 조용히 정리. 살아있되 산만하지 않게.
 
 ### Workspace Principles
@@ -76,7 +77,7 @@ Calm · Flow · Thought · Focus · Space · Editorial · Premium · Invisible A
 ### Success Metric
 
 - 랜딩을 보면 → **철학**을 기억한다.
-- Experience를 지나면 → **온도**를 느낀다("문을 열고 들어왔다").
+- Experience를 지나면 → **온도**를 느끼고("문을 열고 들어왔다"), **변환**을 한 번 본다(말 한 줄 → 자리).
 - 워크스페이스를 쓰면 → 소프트웨어를 의식하지 않는다. 그냥 **생각한다.**
 
 ---
@@ -464,39 +465,38 @@ POST /api/chat  →  ai/router.py:route()
 
 ## 10. Git 규칙
 
-### 브랜치 전략
+### 브랜치 전략 — 줄기는 하나다
 
-- **main** — 최종 제출 및 안정화 브랜치 (직접 작업 금지)
-- **develop** — 개발 통합 브랜치
-- **feature/** — 기능 개발 브랜치
+- **main** — 유일한 통합 브랜치. 여기가 언제나 도는 상태다
+- **feature/** · **fix/** — 작업 브랜치. 하나를 끝내면 PR 로 main 에 올리고 지운다
 
-```
-feature/frontend
-feature/backend-api
-feature/ai-model
-feature/preprocessing
-```
+> **develop 을 걷었다(2026-08-20).** 한동안 표에는 `feature/* → develop → main` 이 적혀
+> 있었지만 실제로는 아무도 그렇게 하지 않았다 — `develop` 은 main 보다 한참 뒤에 서 있었고
+> main 에 없는 커밋이 **하나도** 없었다. 지나가지 않는 중간역을 표에 두면 다음 사람은
+> 그 역에서 기다린다. 통합은 main 한 곳에서 한다.
 
 ### 워크플로우
 
 ```bash
-# 1. develop 최신화
-git switch develop
-git pull origin develop
+# 1. main 최신화
+git switch main
+git pull origin main
 
-# 2. 기능 브랜치 생성
-git switch -c feature/기능명
+# 2. 작업 브랜치 (feat 이면 feature/, 고침이면 fix/)
+git switch -c fix/무엇을-고치는가
 
 # 3. 역할별 폴더에서 개발 (frontend/ | backend/ | ai/)
 
 # 4. 커밋 & 푸시
 git add .
-git commit -m "feat: 기능 설명"
-git push origin feature/기능명
+git commit -m "fix: 무엇을 왜 고쳤는가"
+git push -u origin fix/무엇을-고치는가
 
-# 5. PR: feature/* → develop
-# 6. 통합 완료 후 PR: develop → main
+# 5. PR: 작업 브랜치 → main
 ```
+
+> main 에 직접 커밋하지 않는다. 브랜치가 하나로 줄었다고 해서 문턱까지 없앤 것은 아니다 —
+> 리뷰가 붙을 자리는 PR 하나로 족하다.
 
 ### Commit Convention
 

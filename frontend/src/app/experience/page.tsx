@@ -32,6 +32,40 @@ const TRIAD = [
   { frag: "In", rest: "sight", desc: "정리된 통찰로 돌려드려요." },
 ];
 
+/** 변환 — 말 한 줄이 자리를 얻기까지의 세 걸음.
+ *
+ *  이 화면은 오랫동안 "여기는 어떤 곳인가" 에만 답했다(로고·문·Co·Me·In). 정작
+ *  "무엇을 해 주는가" 는 들어와 봐야 알 수 있었다. 그 한 칸을 여기서 채운다.
+ *
+ *  **지금 실제로 되는 것만 적는다.** 한때 §0 은 여기에 `생각 → AI 이해 → 회의 →
+ *  캘린더 → Todo → 메모` 를 약속했는데, 메모는 걷혔고 할 일은 담을 곳이 없다 —
+ *  없는 것을 시연하면 이 화면이 곧 첫 번째 거짓말이 된다.
+ *
+ *  세 줄 모두 코드로 확인한 동작이다: 끝 시각을 말하지 않으면 한 시간으로 두고
+ *  (`workspace/page.tsx` 의 `p.end ?? +1h`), 자동 확정이 꺼져 있으면 제안으로 앉는다
+ *  (`asProposal = !settings.autoConfirm`, 기본값 꺼짐). */
+const FLOW = [
+  { eye: "말 한 줄", body: "“내일 3시에 교수님 미팅 잡아줘”", said: true },
+  { eye: "AI 가 읽는다", body: "내일 · 15:00 – 16:00 · 교수님 미팅", said: false },
+  { eye: "자리에 앉는다", body: "캘린더에 제안으로 — 확정은 당신이", said: false },
+];
+
+/** 세 걸음이 차례로 선다. 한 번만 — 로그인 칸 옆에서 무언가 계속 움직이면 그건 안내가
+ *  아니라 방해다. 선 다음에는 그대로 머물러 읽히기만 한다. */
+function Flow() {
+  return (
+    <ol className="opn-flow">
+      {FLOW.map((f, i) => (
+        <li key={f.eye} className={`opn-flow-step opn-f${i}`}>
+          <span className="opn-flow-dot" aria-hidden />
+          <span className="opn-flow-eye">{f.eye}</span>
+          <span className={`opn-flow-body ${f.said ? "said" : ""}`}>{f.body}</span>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** 주소가 로그인 칸을 직접 청했는가(?auth=1) — 계정을 바꾸러 온 사람.
  *  useSearchParams 대신 직접 읽는다: 그쪽은 Suspense 경계를 요구해 정적 렌더가 풀린다. */
 const wantsAuthCard = () => new URLSearchParams(window.location.search).get("auth") === "1";
@@ -225,10 +259,14 @@ export default function Opening() {
 
         {(phase === "auth" || phase === "entering") && (
           <div className="opn-authwrap">
+            {/* 왼쪽 칸 — 여기에는 Co·Me·In 이 한 번 더 서 있었다. 리빌에서 방금 크게 지나간
+                것을 작게 되풀이하는 자리였고, 그동안 "무엇을 해 주는가" 는 아무도 말하지
+                않았다. 되풀이를 걷고 그 자리를 변환에 준다 — 문 앞에서 기다리게 하지 않고,
+                로그인 칸을 읽는 그 시간에 함께 읽히게. */}
             <aside className="opn-brand" aria-hidden>
               <p className="opn-brand-logo">Comein</p>
               <p className="opn-brand-tag">Scattered thoughts become structured flow.</p>
-              <Triad />
+              <Flow />
             </aside>
 
             <div className="opn-card">
@@ -458,7 +496,7 @@ const CSS = `
 .opn.phase-entering .opn-logo, .opn.phase-entering .opn-tag, .opn.phase-entering .opn-door { display: none; }
 .opn-reveal { position: relative; z-index: 2; margin-top: clamp(18px, 3.2vh, 34px); width: 100%; display: flex; justify-content: center; }
 
-/* 세 가지 리스트 — 리빌·브랜드 공용 */
+/* 세 가지 리스트 — 리빌에서만 쓴다(브랜드 칸은 변환이 가져갔다). */
 .opn-tree-list { position: relative; list-style: none; margin: 0; padding: 0; display: inline-block; text-align: left; }
 .opn-tree-item { position: relative; padding: clamp(6px, 1.2vh, 10px) 0 clamp(6px, 1.2vh, 10px) 30px; }
 .opn-tree-item::before { content: ""; position: absolute; left: 9px; top: 0; bottom: 0; width: 1.5px; background: color-mix(in srgb, var(--accent) 45%, var(--hair)); }
@@ -481,6 +519,34 @@ const CSS = `
 @keyframes opn-word-in { from { opacity: 0; transform: translateY(12px); filter: blur(3px); } to { opacity: 1; transform: translateY(0); filter: blur(0); } }
 @keyframes opn-branch-in { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: translateX(0); } }
 
+/* ── 변환 — 말 한 줄이 자리를 얻기까지 ──
+   Triad 와 같은 어휘를 쓴다(세로 실선 + 점). 새 조형을 하나 더 들이지 않는다. */
+.opn-flow { list-style: none; margin: 0; padding: 0; }
+.opn-flow-step { position: relative; padding: 0 0 clamp(15px, 2.6vh, 22px) 24px; }
+.opn-flow-step:last-child { padding-bottom: 0; }
+/* 걸음과 걸음을 잇는 선. 마지막 걸음 아래로는 이어지지 않는다 — 거기서 끝나니까. */
+.opn-flow-step::before { content: ""; position: absolute; left: 5px; top: 14px; bottom: 0; width: 1.5px;
+  background: color-mix(in srgb, var(--accent) 40%, var(--hair)); }
+.opn-flow-step:last-child::before { display: none; }
+.opn-flow-dot { position: absolute; left: 0; top: 4px; width: 11px; height: 11px; border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--accent) 55%, var(--hair)); background: var(--paper); }
+/* 마지막 점만 채운다 — 여기가 도착이라는 것을 색 하나로 말한다. */
+.opn-flow-step:last-child .opn-flow-dot { background: color-mix(in srgb, var(--accent) 60%, var(--paper)); }
+/* 걸음의 이름은 --muted 로. --faint 는 이 바탕(#141210) 위에서 2.62:1 이라 사실상 읽히지
+   않는다 — 세 걸음의 이름이 안 읽히면 남는 건 예문 세 줄이고, 그건 변환이 아니라 나열이다.
+   (같은 이유로 로그인 카드의 'or continue with' 도 --muted 로 옮긴 적이 있다.) */
+.opn-flow-eye { display: block; font-size: 0.68rem; font-weight: 600; letter-spacing: 0.14em;
+  text-transform: uppercase; color: var(--muted); }
+.opn-flow-body { display: block; margin-top: 5px; font-size: clamp(0.88rem, 1.6vw, 0.98rem);
+  font-weight: 300; line-height: 1.45; color: color-mix(in srgb, var(--ink) 80%, transparent); }
+/* 사람이 한 말만 또렷하게 — 나머지는 그 말이 어떻게 바뀌는지를 보여 주는 그림자다. */
+.opn-flow-body.said { color: var(--ink); font-weight: 400; }
+.opn-flow-step { opacity: 0; animation: opn-flow-in 0.8s cubic-bezier(0.22,1,0.36,1) both; }
+.opn-f0 { animation-delay: 0.55s; }
+.opn-f1 { animation-delay: 1.15s; }
+.opn-f2 { animation-delay: 1.75s; }
+@keyframes opn-flow-in { from { opacity: 0; transform: translateY(9px); } to { opacity: 1; transform: none; } }
+
 /* 인증 — 가로 2단: 브랜드(좌) + 로그인(우). 세로로 길지 않게 여백(가로)을 쓴다. */
 /* 두 단은 가운데가 아니라 '윗줄'로 맞춘다 — Comein 이 카드의 첫 줄과 같은 높이에 서야
    두 덩어리가 나란히 놓인 하나로 읽힌다. 가운데 정렬은 카드 길이가 바뀔 때마다 로고가 떠다닌다. */
@@ -490,11 +556,13 @@ const CSS = `
 .opn-brand { text-align: left; padding-top: 26px; }
 .opn-brand-logo { margin: 0; font-size: clamp(2.85rem, 6vw, 4.05rem); font-weight: 400; line-height: 1; letter-spacing: -0.038em; color: var(--ink); text-shadow: 0 0 56px var(--glow); }
 .opn-brand-tag { margin: 20px 0 26px; font-size: clamp(0.86rem, 1.6vw, 0.98rem); font-weight: 300; color: var(--muted); }
-.opn-brand .opn-tree-word { font-size: clamp(1.05rem, 2.4vw, 1.35rem); }
-.opn-brand .opn-tree-desc { font-size: clamp(0.8rem, 1.5vw, 0.9rem); }
+/* 좁은 폭 — 예전에는 왼쪽 칸을 통째로 숨겼다. 그러면 이 화면에서 "무엇을 해 주는가" 를
+   말하는 자리가 **모바일에만 없어진다** — 처음 보여 주는 자리가 대개 남의 폰인데.
+   로고와 태그라인만 걷고(카드가 이미 브랜드를 이고 있다) 변환은 카드 아래로 내린다. */
 @media (max-width: 800px) {
   .opn-authwrap { grid-template-columns: 1fr; gap: 0; width: min(360px, 90vw); }
-  .opn-brand { display: none; }
+  .opn-brand { order: 2; padding-top: clamp(26px, 4vh, 34px); }
+  .opn-brand-logo, .opn-brand-tag { display: none; }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -503,6 +571,8 @@ const CSS = `
   .opn-logo { opacity: 1; transform: none; }
   /* 리빌 — 모션 없이도 세 단어가 정적으로 보인다 */
   .opn-reveal .opn-tree-item { animation: none; opacity: 1; transform: none; filter: none; }
+  /* 변환도 같다 — 걸음이 서는 순서는 모션이 아니라 선과 점이 이미 말하고 있다. */
+  .opn-flow-step { animation: none; opacity: 1; transform: none; }
   .opn-authwrap { animation: none; }
   .opn-flash { display: none; }
 }
