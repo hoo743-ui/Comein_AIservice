@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+import { THRESHOLD_KEY } from "@/lib/entry";
 import { refreshSession, signInWithPassword, signInWithProvider, signUpWithPassword } from "@/lib/remote";
 
 /**
@@ -10,6 +11,11 @@ import { refreshSession, signInWithPassword, signInWithProvider, signUpWithPassw
  * 로고 페이드 → (호흡) → 문 등장 → (호흡) → 문이 천천히 열리며 보라 빛이 번짐
  *  → 빛에서 인증 카드가 태어남 → 로그인 → 문이 다시 열리며 워크스페이스로.
  * 문(Door)이 시그니처. 보라 = 지능. 모든 움직임은 느리고 차분하고 의도적으로.
+ *
+ * 누가 이 인트로를 보는가 — 이 주소를 '처음 여는' 사람 전부다. 로그인 여부로 가르지 않는다.
+ * 건너뛰는 길은 둘뿐이다: ?auth=1(계정을 바꾸러 온 사람)과, 이 탭이 이미 문을 지나온 경우
+ * (워크스페이스에서 뒤로가기·새로고침으로 되돌아온 사람). 로그인해 있는 사람에게는
+ * 인트로 끝에서 로그인 카드 대신 문이 열린다.
  */
 
 type Phase = "logo" | "door" | "open" | "reveal" | "auth" | "entering";
@@ -25,6 +31,20 @@ const TRIAD = [
   { frag: "Me", rest: "mory", desc: "중요한 것을 기억하고," },
   { frag: "In", rest: "sight", desc: "정리된 통찰로 돌려드려요." },
 ];
+
+/** 주소가 로그인 칸을 직접 청했는가(?auth=1) — 계정을 바꾸러 온 사람.
+ *  useSearchParams 대신 직접 읽는다: 그쪽은 Suspense 경계를 요구해 정적 렌더가 풀린다. */
+const wantsAuthCard = () => new URLSearchParams(window.location.search).get("auth") === "1";
+
+/** 이 '탭' 이 이미 문을 지나왔는가.
+ *
+ *  sessionStorage 라서 탭 하나의 기억이다 — 그게 정확히 우리가 묻고 싶은 것이다.
+ *  뒤로가기·새로고침으로 워크스페이스에서 되돌아온 사람에게는 남아 있고,
+ *  새 탭·북마크·주소 직접 입력·랜딩의 '들어가기' 로 처음 들어서는 사람에게는 비어 있다.
+ *  (워크스페이스의 markEntered 와 아래 cross() 가 함께 세우고, '나가기' 가 지운다.) */
+const cameFromWorkspace = () => {
+  try { return sessionStorage.getItem(THRESHOLD_KEY) === "1"; } catch { return false; }
+};
 
 /** Context·Memory·Insight — Comein 아래로 뻗는 세 가지. 부모 클래스로 크기·모션을 다르게 준다. */
 function Triad() {
@@ -51,12 +71,20 @@ export default function Opening() {
   const [err, setErr] = React.useState<string | null>(null);
   // 인트로를 걷어내는 중 — 로고·문이 옅어지는 짧은 한 순간.
   const [skipping, setSkipping] = React.useState(false);
+  // 세션이 살아 있는가. null 은 '아직 모른다' — 인트로가 끝나는 자리에서 쓰인다.
+  const [signedIn, setSignedIn] = React.useState<boolean | null>(null);
+
+  // 인트로의 네 걸음(문·열림·리빌·인증)을 세워 둔 타이머. 건너갈 때 함께 끈다.
+  const intro = React.useRef<number[]>([]);
+  const stopIntro = React.useCallback(() => {
+    intro.current.forEach(clearTimeout);
+    intro.current = [];
+  }, []);
 
   React.useEffect(() => {
     // 곧바로 로그인 칸을 여는 길. 워크스페이스에서 '나가기' 로 온 사람은 인트로를 보러
     // 온 것이 아니다 — 계정을 바꾸거나 다시 들어오려는 것이다.
-    // useSearchParams 대신 여기서 읽는다: 그쪽은 Suspense 경계를 요구해 정적 렌더가 풀린다.
-    if (new URLSearchParams(window.location.search).get("auth") === "1") {
+    if (wantsAuthCard()) {
       setPhase("auth");
       return;
     }
@@ -67,34 +95,57 @@ export default function Opening() {
     const t = reduce
       ? { door: 200, open: 500, reveal: 900, auth: 3200 }
       : { door: 2000, open: 3800, reveal: 5000, auth: 8200 };
-    const timers = [
-      setTimeout(() => setPhase("door"), t.door),
-      setTimeout(() => setPhase("open"), t.open),
-      setTimeout(() => setPhase("reveal"), t.reveal),
-      setTimeout(() => setPhase("auth"), t.auth),
+    intro.current = [
+      window.setTimeout(() => setPhase("door"), t.door),
+      window.setTimeout(() => setPhase("open"), t.open),
+      window.setTimeout(() => setPhase("reveal"), t.reveal),
+      window.setTimeout(() => setPhase("auth"), t.auth),
     ];
-    return () => timers.forEach(clearTimeout);
-  }, []);
+    return stopIntro;
+  }, [stopIntro]);
 
+  // 문은 한 번만 열린다 — 아래 두 훅과 skip() 이 같은 순간에 겹쳐 부를 수 있어서,
+  // 막아 두지 않으면 워크스페이스로 두 번 밀린다.
+  const crossed = React.useRef(false);
   const cross = React.useCallback(() => {
+    if (crossed.current) return;
+    crossed.current = true;
+    // 인트로 타이머를 먼저 끈다. 남겨 두면 건너가는 중에 그 타이머들이 깨어나 phase 를
+    // 도로 door·open·reveal 로 덮어써, 빛이 앞으로 나오다 말고 로고가 다시 떠오른다
+    // (reduced-motion 에선 타이머가 200·500·900ms 라 1300ms 의 건넘 안에서 반드시 그랬다).
+    stopIntro();
     // 문이 다시 열리고 빛이 앞으로 — 워크스페이스로 건너간다(문턱은 이 순간이 대신함).
     setPhase("entering");
-    try { sessionStorage.setItem("comein:reimagine", "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
+    try { sessionStorage.setItem(THRESHOLD_KEY, "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
     setTimeout(() => router.push("/workspace"), 1300);
-  }, [router]);
+  }, [router, stopIntro]);
 
-  /** 이미 들어와 있는 사람은 인트로 앞에 다시 세우지 않는다.
+  /** 이미 들어와 있는 사람 — 다만 '어디서 왔는가' 를 함께 묻는다.
    *
-   *  이 화면은 로그인하지 않은 사람을 위한 관문이다. 그런데 세션이 살아 있는 사람이
-   *  주소를 다시 열면(새로고침·북마크·뒤로가기) 여기 서서 "로그인하세요" 를 다시 봤다 —
-   *  이미 로그인해 있는데도. 그건 처음 화면으로 되돌아간 것과 같다.
-   *  ?auth=1 로 온 사람은 예외다: 계정을 바꾸러 온 사람에게서 로그인 칸을 뺏지 않는다. */
+   *  세션만 보고 곧바로 건너뛰면, 이 주소를 처음 연 사람에게서도 인트로를 통째로 뺏는다.
+   *  실제로 그랬다: 로고·문·리빌이 한 프레임도 뜨지 않고 플래시 한 번 뒤 워크스페이스로
+   *  넘어갔다 — 만드는 사람은 늘 로그인해 있어서 그게 사라진 줄도 몰랐다.
+   *
+   *  그래서 이 탭이 문을 지나온 적이 있는지를 함께 본다. 뒤로가기·새로고침으로 되돌아온
+   *  사람만 그냥 통과시킨다(그 사람에게 인트로는 되감기이지 첫인상이 아니다).
+   *  처음 들어서는 사람은 인트로를 다 본다 — 그 끝을 아래 훅이 맡는다.
+   *  ?auth=1 은 예외: 계정을 바꾸러 온 사람에게서 로그인 칸을 뺏지 않는다. */
   React.useEffect(() => {
-    if (new URLSearchParams(window.location.search).get("auth") === "1") return;
+    if (wantsAuthCard()) return;
     let gone = false;
-    void refreshSession().then((uid) => { if (uid && !gone) cross(); }).catch(() => {});
+    void refreshSession().then((uid) => {
+      if (gone) return;
+      setSignedIn(!!uid);
+      if (uid && cameFromWorkspace()) cross();
+    }).catch(() => {});
     return () => { gone = true; };
   }, [cross]);
+
+  /** 인트로가 끝나는 자리 — 이미 로그인해 있는 사람에게 로그인 칸을 다시 내밀지 않는다.
+   *  보여 줄 것(인트로)은 다 보여 주고, 마지막에 카드 대신 문이 열린다. */
+  React.useEffect(() => {
+    if (phase === "auth" && signedIn && !wantsAuthCard()) cross();
+  }, [phase, signedIn, cross]);
 
   /** 건너뛰기 — 인트로만 넘긴다. 다른 페이지로 내보내지 않고, 이 화면의 로그인 카드로 바로 간다.
    *  이미 들어와 있으면 그대로 통과. */
@@ -116,12 +167,12 @@ export default function Opening() {
     try {
       // 이 순간이 곧 '문턱' — 제공자를 거쳐 돌아온 워크스페이스가 우리를 다시 문 앞에
       // 세우지 않게(플래그가 없으면 /workspace 는 /experience 로 되돌린다).
-      try { sessionStorage.setItem("comein:reimagine", "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
+      try { sessionStorage.setItem(THRESHOLD_KEY, "1"); sessionStorage.setItem("comein:justEntered", "1"); } catch {}
       const { error } = await signInWithProvider(p, `${window.location.origin}/workspace`);
       if (error) throw error;
     } catch (e: any) {
       // 나가지 못했으면 문턱도 되돌린다 — 아직 들어온 게 아니다.
-      try { sessionStorage.removeItem("comein:reimagine"); sessionStorage.removeItem("comein:justEntered"); } catch {}
+      try { sessionStorage.removeItem(THRESHOLD_KEY); sessionStorage.removeItem("comein:justEntered"); } catch {}
       setErr(e?.message ?? "연결에 문제가 생겼어요."); setBusy(null);
     }
   };
