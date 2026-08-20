@@ -1635,8 +1635,15 @@ html { font-size: 17px; }
    둘이 쌓이면 그 틀이 남는 높이를 나눠 갖게 되고, 짧은 화면에서는 대화 칸이 17px 까지
    짓눌려 입력칸이 아래 일정 위로 흘러넘쳤다. 쌓인 뒤에는 각자 제 높이대로 선다.
    컨테이너 쿼리는 자기 컨테이너 자신을 고칠 수 없어, 쌓이는 경우를 여기서 짚는다:
-   캘린더의 오른쪽 칸은 420px 라 언제나 쌓이고, 사람 화면은 1420px 아래에서 쌓인다. */
-.rmg-pagebody[data-view="calendar"][data-aside="true"] .rmg-evpanel { position: static; max-height: none; }
+   캘린더의 오른쪽 칸은 420px, 오늘의 오른쪽 칸도 416px 라 **화면이 아무리 넓어도 언제나**
+   쌓이고, 사람 화면은 1420px 아래에서 쌓인다.
+
+   '오늘' 이 이 목록에서 빠져 있었다. 그래서 알림 줄의 '열어 보기' 로 일정을 열면 —
+   그 길로만 오늘 화면에 이 패널이 선다 — 대화 칸(1fr)이 0px 로 짓눌리고, min-height 220px
+   가 그 0px 밖으로 흘러 아래의 하루 위에 그대로 겹쳐 그려졌다. 화면 폭이 1420px 을 넘으면
+   아래 미디어 쿼리도 비켜 가서, 넓은 화면일수록 더 확실히 겹쳤다. */
+.rmg-pagebody[data-view="calendar"][data-aside="true"] .rmg-evpanel,
+.rmg-pagebody[data-view="today"][data-aside="true"] .rmg-evpanel { position: static; max-height: none; }
 @media (max-width: 1420px) {
   .rmg-evpanel:has(.rmg-evsplit[data-split="true"]) { position: static; max-height: none; }
 }
