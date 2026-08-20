@@ -1,7 +1,7 @@
 # 09. Database — 실제로 도는 스키마
 
 > **진실은 이 문서가 아니라 [`supabase/migrations/`](../supabase/migrations) 다.**
-> 0001~0016 을 순서대로 올리면 지금 도는 DB 가 된다. 이 문서는 그 16개 파일을 처음 읽는 사람이
+> 0001~0019 를 순서대로 올리면 지금 도는 DB 가 된다. 이 문서는 그 19개 파일을 처음 읽는 사람이
 > **무엇이 어디 있는지** 알 수 있게 짚어 주는 안내지, 별도의 설계도가 아니다.
 > 어긋나면 마이그레이션이 맞고 이 문서가 틀렸다.
 >
@@ -40,7 +40,7 @@ auth.users ─┬─< profiles (1:1 · handle)
                                         handle_history (놓아준 이름은 아무도 못 가져간다)
 ```
 
-## 2. 표 14개 — 어느 마이그레이션에서 왔나
+## 2. 표 17개 — 어느 마이그레이션에서 왔나
 
 | 표 | 파일 | 무엇 |
 |---|---|---|
@@ -58,6 +58,9 @@ auth.users ─┬─< profiles (1:1 · handle)
 | `ai_suggestions` | 0010 | AI 가 권한 시각과 그 답. 같은 것을 두 번 권하지 않기 위해 |
 | `connection_requests` | 0013 | 청함. 상대가 받아야 `connections` 가 된다 |
 | `handle_history` | 0014 | 놓아준 이름. 30일에 한 번만 바꿀 수 있고, 놓은 이름은 아무도 가져가지 못한다 |
+| `groups` | 0017 | 같은 사람들이 다시 모이는 묶음. 자리마다 다시 고르지 않게 |
+| `group_members` | 0017 | 그 묶음의 사람들. 일정은 `events.group_id` 로 묶음을 가리킨다 |
+| `person_labels` | 0019 | **내가** 그 사람을 부르는 이름. 핸들도 표시 이름도 내 것이 아니다 |
 
 `dm_key` 는 두 uid 를 정렬해 이은 값이다 — **누가 먼저 말을 걸든 같은 방으로 수렴한다.**
 
@@ -76,7 +79,7 @@ auth.users ─┬─< profiles (1:1 · handle)
 
 ## 4. RLS — id 를 알아도 남의 것은 못 본다
 
-13개 표에 정책 31개. 핵심은 셋이다.
+16개 표에 정책 36개. 핵심은 셋이다.
 
 ```sql
 -- 참여한 일정만 보인다. 고치고 지우는 건 주최자만.
@@ -94,7 +97,7 @@ messages_insert with check (sender_id = auth.uid() and public.is_room_member(roo
 insert/update 정책이 없다 — 아래 함수들만이 제안을 만들고 바꾼다. 아무나 직접 `status` 를
 `confirmed` 로 적을 수 있으면 '전원 동의' 는 약속이 아니게 된다.
 
-## 5. 창구 — 표를 직접 만지지 않고 부르는 함수 35개
+## 5. 창구 — 표를 직접 만지지 않고 부르는 함수 41개
 
 권한 판정과 약속이 여기 있다. 화면은 표가 아니라 이 함수들을 부른다.
 
@@ -138,7 +141,7 @@ insert/update 정책이 없다 — 아래 함수들만이 제안을 만들고 �
 
 ## 6. Realtime — 새로고침 없이 따라오게
 
-표 11개가 `supabase_realtime` publication 에 올라가 있고 `replica identity full` 이다.
+표 13개가 `supabase_realtime` publication 에 올라가 있고 `replica identity full` 이다.
 
 ```
 events · event_participants · chat_messages · chat_rooms · chat_room_members

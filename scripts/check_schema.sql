@@ -102,7 +102,11 @@ checked(seq, migration, looked_for, present) as (
          and exists (select 1 from fns where name = 'sync_group_calendar')),
 
     (18, '0018 event_priority', 'events.priority 칸',
-         exists (select 1 from cols where table_name = 'events' and column_name = 'priority'))
+         exists (select 1 from cols where table_name = 'events' and column_name = 'priority')),
+
+    (19, '0019 person_labels', '표 person_labels, 함수 tg_person_label_touch',
+         exists (select 1 from tbls where table_name = 'person_labels')
+         and exists (select 1 from fns where name = 'tg_person_label_touch'))
 )
 select
   seq,

@@ -18,12 +18,12 @@
 
 ---
 
-## 1. Information Architecture — 4개의 순간
+## 1. Information Architecture — 3개의 순간
 
 | # | 순간 | 라우트 | 답하는 질문 | 유일한 목표 | 주 액션(하나) |
 |---|------|--------|-------------|-------------|----------------|
 | 1 | **Landing** | `/` | "Comein이 무엇인가?" | 정체성·철학을 각인 | **들어가기** (→ Experience) · **바로 입장** (→ Experience `?auth=1`) |
-| 2 | **Experience** | `/experience` | "내 생각이 어떻게 정리되지?" | 변환 시연 → 로그인 | Co·me·in 시네마틱 리빌 후 **로그인** (→ Workspace) · Skip 허용 |
+| 2 | **Experience** | `/experience` | "여기는 어떤 곳인가?" | 들어서는 온도 → 로그인 | Co·me·in 시네마틱 리빌 후 **로그인** (→ Workspace) · 건너뛰기 허용 |
 | 3 | **Workspace** | `/workspace` | "지금 무엇을, 무엇을 할까?" | 일이 스스로 정리되게 | **캡처 바** (항상) |
 
 > **문은 하나다(2026-08-13).** 예전에는 `/enter` 가 "간편 소셜 로그인" 으로 따로 서 있었다.
@@ -39,8 +39,7 @@
 
 ```
 Landing      ▁            정체성만. 기능 0.
-Experience   ▁▁▁          변환 1개를 눈으로. 기능은 '결과'로만 암시.
-Enter        ▁            입장 수단만. 정보 최소.
+Experience   ▁▁           들어서는 온도. 기능은 한 줄(Co·Me·In)로만 암시.
 Workspace    ▁▁▁▁▁▁       비로소 전체 기능·데이터.
 ```
 
@@ -48,26 +47,33 @@ Workspace    ▁▁▁▁▁▁       비로소 전체 기능·데이터.
 
 ## 2. 흐름 & 분기 (Flow)
 
+> 아래 셋은 **지금 도는 그대로**다. 한때 여기에는 `Enter` 를 지나가는 도식과
+> `seen_experience` 플래그가 그려져 있었는데, 바로 위(§문은 하나다)에서 걷어냈다고 적어 놓고
+> 도식만 남아 있었다 — 같은 문서가 스스로와 어긋나 있었던 셈이다.
+
 ### 첫 방문 (모르는 사용자) — 이해가 목적
 ```
-Landing ──Come in──▶ Experience ──Come in──▶ Enter ──Continue with──▶ Workspace
-   │                     │
-   └─ "how it works" ────┘   (Experience로 직행)
+Landing ──들어가기──▶ Experience(인트로 8.2초 → 로그인) ──▶ Workspace
+                          └─ 건너뛰기 ─▶ 로그인 칸으로 바로
 ```
 
 ### 재방문 (아는 사용자) — 최단 경로
 ```
-Landing ──Come in──▶ Enter ──▶ Workspace      (Experience 건너뜀; 세션/방문 플래그로 판단)
+Landing ──바로 입장──▶ Experience?auth=1(인트로 없이 로그인 칸) ──▶ Workspace
 ```
 
-### 인증된 사용자 — 즉시 작업
+### 이미 들어와 있는 사람 — 즉시 작업
 ```
-(any) ──▶ Workspace        (세션 유효 시 Landing/Enter를 지나치지 않고 바로)
+Experience ──▶ Workspace   (이 탭이 문을 지나온 적이 있으면 인트로 없이 통과.
+                            처음 여는 사람은 인트로를 다 보고, 끝에서 카드 대신 문이 열린다)
 ```
 
-### 분기 규칙 (IA 레벨, 구현은 이후)
-- `seen_experience` (localStorage): 있으면 Landing의 CTA는 Experience를 건너뛰고 Enter로.
-- `session` (auth): 있으면 Enter를 건너뛰고 Workspace로.
+### 분기 규칙 (지금 도는 것)
+- `comein:reimagine` (sessionStorage, `lib/entry.ts` 의 `THRESHOLD_KEY`): 이 **탭**이 문을 지나왔는가.
+  있으면 `/experience` 가 인트로 없이 통과시킨다(뒤로가기·새로고침).
+- `comein:entered` (localStorage, `ENTERED_KEY`): 이 **브라우저**가 한 번이라도 들어왔는가.
+  `/workspace` 의 문턱 판정이 쓴다(`entryVerdict`).
+- `session` (auth): 있으면 인트로 끝에서 로그인 칸 대신 문이 열린다.
 - **딥링크 존중:** 특정 기능 URL로 들어오면 인증 후 **그 자리로 복귀**(Enter는 통과 지점일 뿐, 목적지를 가로채지 않음).
 - **막다른 길 없음:** 모든 노드에서 앞으로 갈 단 하나의 명확한 길. 뒤로가기는 브라우저에 위임(별도 UI 뒤로가기 버튼 없음 — 조용함 유지).
 
@@ -79,17 +85,18 @@ Landing ──Come in──▶ Enter ──▶ Workspace      (Experience 건너
 
 | 전환 | 모션 언어 | 이어받는 요소(연속성) |
 |------|-----------|------------------------|
-| Landing → Experience | 철학 한 줄만 남기고 주변이 페이드아웃 → 생각 문장으로 **모프** | **철학 줄** 위치 유지 후 변형 |
-| Experience → Enter | 정리된 결과물이 뒤로 물러나며(scale↓·blur) **문 마크가 전면**으로 | **문 마크** 부상 |
-| Enter → Workspace | **문턱 디졸브** — 문이 열리듯 화면이 밝아지며 확장(opacity+scale 1.04) 후 캔버스 등장 | **문 마크 → 슬림 레일**의 마크로 자리 이동 |
+| Landing → Experience | 철학 한 줄만 남기고 주변이 페이드아웃 → 로고로 이어받음 | **철학 줄** 위치 유지 후 변형 |
+| Experience 안(인트로) | 로고 → 문 등장 → 문이 열리며 보라 빛 → 리빌(Co·Me·In) → 빛에서 카드가 태어남 | **문** 이 장면을 잇는다 |
+| Experience → Workspace | **문턱 디졸브** — 빛이 앞으로 나오며 화면이 밝아지고(opacity+scale 1.045) 캔버스가 받는다 | **문 마크 → 슬림 레일**의 마크로 자리 이동 |
 | Workspace 내부(뷰 전환) | 페이지 이동 없음. 중앙만 **크로스페이드**(레일·척추 고정) | 레일·캡처 바 상시 유지 |
 
-**핵심:** Enter→Workspace의 "문턱"은 **별도 페이지가 아니라 전환 그 자체**다. 지금 워크스페이스 안에 있는 threshold 오버레이를 이 **연결 전환**으로 승격시킨다(입장 직후 1회 재생).
+**핵심:** "문턱" 은 **별도 페이지가 아니라 전환 그 자체**다. `/experience` 의 `phase-entering` 이
+그 역할을 하고, 워크스페이스는 `comein:justEntered` 를 보고 받는 쪽 연출을 한 번만 재생한다.
 
 ### 공유 앵커의 이동(모션 continuity)
 ```
-[문 마크]  Landing 중앙 → Experience 상단 → Enter 중앙 → Workspace 레일 상단
-[철학 줄]  Landing 히어로 → Experience 시작 문장 → (Enter 서브카피) → Workspace 진입 순간
+[문 마크]  Landing 중앙 → Experience 중앙(인트로) → Workspace 레일 상단
+[철학 줄]  Landing 히어로 → Experience 태그라인 → Workspace 진입 순간
 ```
 같은 요소가 화면을 가로질러 **자리만 옮기므로**, 사용자는 "새 페이지"가 아니라 "같은 공간이 재구성"되는 것으로 인지한다.
 
@@ -98,15 +105,17 @@ Landing ──Come in──▶ Enter ──▶ Workspace      (Experience 건너
 ## 4. 성공 기준 (이 여정이 맞는지 판단)
 
 - Landing을 본 사람은 **철학**을 한 문장으로 말할 수 있다.
-- Experience를 본 사람은 "**내가 정리 안 해도 정리된다**"를 이해한다.
-- Enter는 **망설임 0** — 폼도, 선택 피로도 없다(소셜 3개, Sign in/up 구분 없음).
+- Experience를 지난 사람은 "**여기는 조용한 곳이구나**"를 느낀다(이 화면은 아직 무엇을 하는지
+  설명하지 않는다 — 그 약속은 `docs/16_TASK.md` 의 '변환 시연' 에 미결로 남아 있다).
+- 로그인은 **망설임 0** — 이메일·비밀번호가 위, 소셜이 아래. 이미 들어와 있으면 카드가 아예 서지 않는다.
 - Workspace 도달 후, 사용자는 **여정을 기억하지 못한다**. 그냥 자기 공간에 있다.
 
 ---
 
-## 5. 구현 순서 (다음 단계 · 화면 재디자인 아님)
+## 5. 남은 것
 
-1. **라우팅/분기 로직** — 위 플래그(`seen_experience`, `session`, 딥링크 복귀)만 배선.
-2. **전환 계층** — 노드 간 공통 트랜지션 컴포넌트(디졸브·앵커 이동) 1개.
-3. **threshold를 Enter→Workspace 전환으로 이관.**
-4. 이후에야 개별 화면 디테일을 다듬는다.
+1~3번(라우팅 분기 · 전환 계층 · 문턱 이관)은 **했다.** 분기는 §2 의 세 플래그로,
+문턱은 `phase-entering` + `comein:justEntered` 로 돌고 있다.
+
+남은 것은 하나다 — **Experience 가 아직 '무엇을 하는 곳인지' 는 말하지 않는다.**
+온도만 전하고 변환은 보여 주지 않는다. 되살릴지 말지는 `docs/16_TASK.md` 에 적어 두었다.
