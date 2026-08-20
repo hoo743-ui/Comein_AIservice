@@ -1343,7 +1343,14 @@ html { font-size: 17px; }
 /* ── 답을 기다리는 것 ──
    상대가 부르거나 시간을 내밀었는데 내가 아직 답하지 않은 자리. 배너가 아니라 한 줄이다:
    가로막지 않고, 화면 맨 위 기준선 위에 조용히 서 있다가 누르면 그 일정이 열린다. */
-.rmg-await { display: flex; flex-direction: column; gap: 1px; margin-top: var(--sp-2); }
+.rmg-await { display: flex; flex-direction: column; margin-top: var(--sp-2); }
+.rmg-await-list { display: flex; flex-direction: column; gap: 1px; }
+/* 접어 둔 나머지를 여는 손잡이 — 줄이 아니라 곁말이다. 줄들의 아래 선에 조용히 붙는다.
+   초점·누름은 .rmg button 이 이미 맡고 있어 여기서 다시 적지 않는다. */
+.rmg-await-more { align-self: flex-start; margin-top: 6px; padding: 2px 0; border: 0; background: transparent;
+  font: inherit; font-size: 0.76rem; letter-spacing: 0.02em; color: var(--faint); cursor: pointer;
+  transition: color 0.32s cubic-bezier(0.22,1,0.36,1); }
+.rmg-await-more:hover { color: color-mix(in srgb, var(--ink) 70%, transparent); }
 .rmg-await-row { display: flex; align-items: center; gap: var(--sp-1); width: 100%;
   padding: 10px var(--sp-1) 10px 0; border: 0; border-top: 1px solid var(--hair); background: transparent;
   font: inherit; font-size: 0.86rem; color: var(--ink); text-align: left; cursor: pointer;

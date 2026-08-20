@@ -1472,6 +1472,9 @@ export default function Reimagine() {
   }, [lang, contacts, sharedEventsWith, selectPerson]);
 
   /** 답을 기다리는 것 — 판단은 lib/awaiting 이 한다(§39). 화면은 한 줄씩 눕히기만 한다. */
+  /** 접힌 채로 시작한다 — 첫 줄 하나면 '답할 것이 있다' 는 사실은 이미 전해진다.
+   *  펼침은 이 화면에 머무는 동안만 기억한다(다시 들어오면 다시 접힌다). */
+  const [awaitOpen, setAwaitOpen] = React.useState(false);
   const awaiting = React.useMemo(
     () => pendingAnswers({
       proposals, eventParticipants, schedules, lang,
@@ -1903,22 +1906,42 @@ export default function Reimagine() {
             )}
           </header>
 
-          {/* 답을 기다리는 것 — 조용하지만 먼저 온다. 누르면 그 일정이 열린다. */}
+          {/* 답을 기다리는 것 — 조용하지만 먼저 온다. 누르면 그 일정이 열린다.
+
+              여럿이면 첫 줄만 세운다. 셋이 한꺼번에 서면 그 아래 하루가 통째로 밀려 내려가고,
+              세 줄 다 같은 무게라 무엇이 급한지도 알 수 없었다. 가장 위의 하나는 늘 읽히게 두고
+              나머지는 '+N개 더' 뒤로 접는다 — 숨기는 게 아니라 순서를 세우는 것이다.
+              (알림함이나 별도 탭으로 빼지 않는 이유: 이 줄들은 원래 '가서 봐야 알던' 것이라
+               보이지 않게 된 순간 없던 때로 돌아간다. 뷰는 셋이라는 규칙도 그대로 지킨다.) */}
           {panel !== "settings" && awaiting.length > 0 && (
-            <div className="rmg-await rmg-a1" role="list" data-tour="await">
-              {awaiting.map((a) => (
+            <div className="rmg-await rmg-a1" data-tour="await">
+              <div className="rmg-await-list" role="list">
+                {(awaitOpen ? awaiting : awaiting.slice(0, 1)).map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    role="listitem"
+                    className={`rmg-await-row ${a.kind}`}
+                    onClick={() => openEvent(a.eventId)}
+                  >
+                    <span className="rmg-await-dot" aria-hidden />
+                    <span className="rmg-await-text">{a.text}</span>
+                    <span className="rmg-await-go">{lang === "en" ? "Open" : "열어 보기"}</span>
+                  </button>
+                ))}
+              </div>
+              {awaiting.length > 1 && (
                 <button
-                  key={a.key}
                   type="button"
-                  role="listitem"
-                  className={`rmg-await-row ${a.kind}`}
-                  onClick={() => openEvent(a.eventId)}
+                  className="rmg-await-more"
+                  onClick={() => setAwaitOpen((v) => !v)}
+                  aria-expanded={awaitOpen}
                 >
-                  <span className="rmg-await-dot" aria-hidden />
-                  <span className="rmg-await-text">{a.text}</span>
-                  <span className="rmg-await-go">{lang === "en" ? "Open" : "열어 보기"}</span>
+                  {awaitOpen
+                    ? (lang === "en" ? "Collapse" : "접기")
+                    : (lang === "en" ? `+${awaiting.length - 1} more` : `+${awaiting.length - 1}개 더`)}
                 </button>
-              ))}
+              )}
             </div>
           )}
 
