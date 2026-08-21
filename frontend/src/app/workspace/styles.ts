@@ -223,6 +223,13 @@ html { font-size: 17px; }
 .rmg-flash-act.primary { color: var(--ink); background: color-mix(in srgb, var(--ink) 8%, transparent); }
 .rmg-flash-act.primary:hover { background: color-mix(in srgb, var(--ink) 14%, transparent); }
 .rmg-flash-act:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+/* 닫기 — 손잡이들 끝에 붙는 가장 조용한 것. 낱말이 아니라 표식으로 둔다:
+   '확정'·'되돌리기' 와 같은 무게로 서면 셋 중 무엇이 본래 할 일인지 흐려진다. */
+.rmg-flash-x { display: grid; place-items: center; width: 24px; height: 24px; align-self: center; border: 0; background: none;
+  color: var(--faint); cursor: pointer; border-radius: 7px; flex-shrink: 0; margin-left: -2px;
+  transition: color 0.2s, background 0.2s; }
+.rmg-flash-x:hover { color: var(--ink); background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-flash-x:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { .rmg-flash { animation: none; transition: opacity 0.5s ease; } }
 
 /* ③-b 알아챈 것 — AI 가 읽은 것을 말하고 한 번의 행동을 권한다.
@@ -632,6 +639,9 @@ html { font-size: 17px; }
 .rmg-calday-time { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-size: 0.82rem; font-weight: 450; letter-spacing: -0.01em; line-height: 1.4; color: var(--muted); min-width: 3.6em; }
 .rmg-calday-title { font-size: 0.86rem; font-weight: 300; color: var(--ink); line-height: 1.4; }
 .rmg-calday-empty { font-size: 0.82rem; color: var(--faint); padding: 4px 0; }
+/* 같은 시각이 셋 이상 — 한 줄로 접힌 것. '외 N건' 부분만 한 겹 옅게 두어
+   제목과 개수가 한 낱말로 붙어 읽히지 않게 한다. */
+.rmg-calday-fold .rmg-calday-title { color: color-mix(in srgb, var(--ink) 74%, transparent); }
 
 /* 전체 화면 란 — 가로 옵션에서 여는 캘린더/설정 (모달 아님, 캔버스를 채우는 큰 판) */
 /* 패널 — Workspace 가 한 겹 확장되는 레이어. 좌측에서 슬라이드 + 은은한 깊이(블러·섀도우). transform/opacity 중심(60fps). */
@@ -875,6 +885,23 @@ html { font-size: 17px; }
 .rmg-ctx-k { font-size: 0.8rem; font-weight: 500; letter-spacing: 0.02em; color: var(--muted); }
 .rmg-ctx-v { font-size: 1.06rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); line-height: 1.5; }
 .rmg-ctx-v em { font-family: inherit; font-variant-numeric: proportional-nums; font-feature-settings: "tnum" 0; font-style: normal; font-weight: 450; letter-spacing: -0.01em; color: var(--muted); }
+/* 다가오는 순간 — 이 줄만 손잡이다(눌러서 그 자리로 간다).
+   버튼처럼 보이게 만들지 않는다: 테두리도 배경도 없이, 손이 닿을 때만 바탕이 한 겹 든다.
+   나머지 맥락 줄들과 같은 것으로 읽히되 누를 수 있다는 것만 알면 된다. */
+.rmg-ctx-next { display: flex; flex-direction: column; align-items: flex-start; gap: 3px;
+  width: 100%; border: 0; background: none; font: inherit; text-align: left; cursor: pointer;
+  margin: -6px -10px; padding: 6px 10px; border-radius: var(--r-sm);
+  transition: background 160ms ease-out; }
+.rmg-ctx-next:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.rmg-ctx-next:focus-visible { outline: 2px solid color-mix(in srgb, var(--accent) 55%, transparent); outline-offset: 2px; }
+.rmg-ctx-next-head { font-size: 1.06rem; font-weight: 300; letter-spacing: -0.01em; color: var(--ink); line-height: 1.5; }
+/* 남은 시간 · 사람 수 · 장소 — 한 겹 옅게. 무엇이 다가오는지가 먼저 읽혀야 한다. */
+.rmg-ctx-next-tail { display: flex; align-items: center; gap: 7px; flex-wrap: wrap;
+  font-size: 0.82rem; font-weight: 300; color: var(--faint); letter-spacing: 0; }
+/* 아직 답하지 않은 제안 — 색으로 소리치지 않고 테두리 한 겹으로만 앞에 선다. */
+.rmg-ctx-next-pend { padding: 1px 7px; border-radius: 999px; font-size: 0.72rem; font-weight: 450;
+  color: color-mix(in srgb, var(--ink) 62%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ink) 16%, var(--hair)); }
 /* 좁은 폭 — 라벨과 값을 나란히 두면 값 칸이 6.5em 남짓으로 짜부라져
    "예정된 / 일정이 / 없어요" 처럼 한두 글자씩 끊긴다. 그때는 위아래로 쌓는다. */
 @media (max-width: 700px) {

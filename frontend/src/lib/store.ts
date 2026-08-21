@@ -157,25 +157,13 @@ const seedChatMessages: ChatMessage[] = [];
 // 그리지 않는다 — 남겨 두면 '있는 것처럼 보이는' 코드가 된다.
 
 // ── 설정 ──
-export type Language = "ko" | "en";
-/** 사용자 Context. 실제 값과 해석 규칙은 `lib/mode.ts` 가 쥔다 —
- *  화면은 그쪽 훅(useCurrentMode)으로만 읽고, 여기는 저장되는 자리일 뿐이다.
- *  (예전 값 office·general 은 normalizeMode 가 흡수한다.) */
-export type Mode = UserMode;
-/** 글자 크기 배율. 칸이 아니라 연속값 — 사람마다 편한 크기가 세 칸에 딱 떨어지지 않는다. */
-export type TextScale = number;
-export const TEXT_SCALE_MIN = 0.9;
-export const TEXT_SCALE_MAX = 1.4;
-
-export interface Settings {
-  name: string;
-  language: Language;
-  mode: Mode; // 사용 유형 — 기본 장소 프리셋/라벨에 반영
-  weekStart: "sun" | "mon";
-  notifications: boolean;
-  autoConfirm: boolean; // AI 제안 일정을 자동 확정할지
-  textScale: TextScale; // 전체 글자 크기 배율
-}
+// 모양은 `lib/settings.ts` 가 갖는다(store 와 prefs 가 서로를 부르지 않게 떼어 둔 잎사귀).
+// 여기서 그대로 다시 내보내므로 `@/lib/store` 에서 가져다 쓰던 곳은 고칠 것이 없다.
+export { TEXT_SCALE_MAX, TEXT_SCALE_MIN } from "./settings";
+export type { Language, Mode, Settings, TextScale } from "./settings";
+// 이 파일 안에서도 쓰므로 한 번 더 들여온다 — 위의 `export type ... from` 은 밖으로
+// 내보내기만 할 뿐, 이 모듈의 이름 공간에는 들어오지 않는다.
+import type { Settings } from "./settings";
 
 // ── 스토어 ─────────────────────────────────────────────
 interface WorkspaceState {

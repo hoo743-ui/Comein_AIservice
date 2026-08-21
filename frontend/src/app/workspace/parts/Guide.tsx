@@ -101,17 +101,41 @@ export function GuideTour({ steps, index, lang, onIndex, onClose }: {
     if (Math.abs(w - box.w) > 1 || Math.abs(h - box.h) > 1) setBox({ w, h });
   });
 
-  // 카드는 대상 옆에 서되 화면 밖으로 나가지 않는다. 오른쪽이 좁으면 왼쪽으로 돈다.
+  // 카드는 대상 **옆**에 서되 화면 밖으로 나가지 않는다. 오른쪽이 좁으면 왼쪽으로 돈다.
+  //
+  // 옆이 둘 다 좁으면 위나 아래로 돈다 — 예전에는 이때 그냥 화면 안으로 죄어 넣었고,
+  // 그 결과 카드가 **자기가 가리키는 것 위에** 앉았다. 첫 걸음이 특히 그랬다: 대상이
+  // 작업면 폭을 거의 다 쓰는 블록이라 좌우 어디에도 자리가 없어서, "인사말 아래 한 줄은
+  // AI 가 오늘을 읽고 하는 말이에요" 라고 설명하면서 정확히 그 줄을 덮고 있었다.
+  // 가리키는 것을 가리는 안내는 안내가 아니다.
   const card = (() => {
     const { w: W, h: H } = box;
     const M = 20;
+    const VW = window.innerWidth, VH = window.innerHeight;
     // 화면이 카드보다 낮으면 위쪽에 붙인다 — 가운데 맞추려다 위아래가 같이 잘린다.
-    const clampTop = (t: number) => (window.innerHeight - H - M < M ? M : Math.max(M, Math.min(t, window.innerHeight - H - M)));
-    if (!rect) return { left: window.innerWidth / 2 - W / 2, top: clampTop(window.innerHeight / 2 - H / 2) };
-    let left = rect.right + M;
-    if (left + W > window.innerWidth - M) left = rect.left - W - M;
-    if (left < M) left = Math.min(Math.max(M, rect.left), window.innerWidth - W - M);
-    return { left, top: clampTop(rect.top + rect.height / 2 - H / 2) };
+    const clampTop = (t: number) => (VH - H - M < M ? M : Math.max(M, Math.min(t, VH - H - M)));
+    const clampLeft = (l: number) => (VW - W - M < M ? M : Math.max(M, Math.min(l, VW - W - M)));
+    if (!rect) return { left: VW / 2 - W / 2, top: clampTop(VH / 2 - H / 2) };
+
+    // ① 오른쪽 — 대상 옆, 세로는 대상 가운데에 맞춘다.
+    if (rect.right + M + W <= VW - M) {
+      return { left: rect.right + M, top: clampTop(rect.top + rect.height / 2 - H / 2) };
+    }
+    // ② 왼쪽.
+    if (rect.left - M - W >= M) {
+      return { left: rect.left - M - W, top: clampTop(rect.top + rect.height / 2 - H / 2) };
+    }
+    // ③ 아래 — 가로는 대상 왼쪽에 맞춰 세운다(가운데 정렬은 넓은 대상에서 어디를 가리키는지 흐려진다).
+    if (rect.bottom + M + H <= VH - M) {
+      return { left: clampLeft(rect.left), top: rect.bottom + M };
+    }
+    // ④ 위.
+    if (rect.top - M - H >= M) {
+      return { left: clampLeft(rect.left), top: rect.top - M - H };
+    }
+    // ⑤ 어디에도 자리가 없다(작은 창에서 큰 대상). 이때만 겹친다 —
+    //    겹치더라도 대상의 위쪽 절반은 남기는 쪽으로 붙인다.
+    return { left: clampLeft(rect.left), top: clampTop(rect.bottom - H) };
   })();
 
   return (

@@ -161,6 +161,9 @@ export function DayDial({ spans, day, now, lang, onOpenEvent }: {
   const [hover, setHover] = React.useState<string | null>(null);
   const [pinned, setPinned] = React.useState<string | null>(null);
   const activeId = pinned ?? hover;
+  /** 펴 둔 시각 묶음(자정으로부터의 분). 하루가 바뀌면 비운다. */
+  const [openDialTimes, setOpenDialTimes] = React.useState<Set<number>>(new Set());
+  React.useEffect(() => setOpenDialTimes(new Set()), [day]);
   React.useEffect(() => { setPinned(null); setHover(null); }, [day]);
 
   const timed = spans.filter((s) => !s.allDay);
@@ -327,6 +330,41 @@ export function DayDial({ spans, day, now, lang, onOpenEvent }: {
           {spans.map((s, i) => {
             // 캡처로 만들어진 임시 항목(r-…)은 아직 일정이 아니라 열 상세가 없다.
             const eventId = s.id.startsWith("r-") ? null : s.id;
+
+            // 같은 시각이 셋 이상 이어지면 첫 줄에서 한 번에 접는다(시간표·그날 목록과 같은 규칙).
+            // 이 목록은 원(다이얼)이 그린 것을 말로 옮긴 것이라, 원에서 한 겹으로 겹쳐 보이는
+            // 것을 여기서만 여섯 줄로 늘어놓으면 둘이 서로 다른 하루를 말하게 된다.
+            const sameTime = (a: Span, b: Span) => !a.allDay && !b.allDay && a.from === b.from;
+            const prevSame = i > 0 && sameTime(spans[i - 1], s);
+            let runLen = 1;
+            while (i + runLen < spans.length && sameTime(s, spans[i + runLen])) runLen++;
+            const foldHere = !prevSame && runLen >= TT_FOLD_FROM && !openDialTimes.has(s.from);
+            if (!prevSame && foldHere) {
+              return (
+                <li key={`fold-${s.from}`}>
+                  <button
+                    type="button"
+                    className="rmg-dial-keyrow rmg-dial-fold"
+                    aria-expanded={false}
+                    onClick={() => setOpenDialTimes((p) => new Set(p).add(s.from))}
+                  >
+                    <span className={`rmg-dial-chip h${hueOf.get(s.id) ?? 0}`} />
+                    <span className="rmg-dial-keytime">{hhmm(s.startAt)}</span>
+                    <span className="rmg-dial-keytitle">
+                      {lang === "en" ? `${s.title} +${runLen - 1} more` : `${s.title} 외 ${runLen - 1}건`}
+                    </span>
+                  </button>
+                </li>
+              );
+            }
+            // 접혀 있는 묶음의 나머지 줄들은 그리지 않는다 — 위의 한 줄이 대신 서 있다.
+            if (prevSame) {
+              let head = i;
+              while (head > 0 && sameTime(spans[head - 1], spans[head])) head--;
+              let len = 1;
+              while (head + len < spans.length && sameTime(spans[head], spans[head + len])) len++;
+              if (len >= TT_FOLD_FROM && !openDialTimes.has(spans[head].from)) return null;
+            }
             return (
               // 원은 눈으로 읽는 그림이고, 이 목록이 그 그림의 말(text alternative)이다.
               // 그래서 목록은 반드시 키보드로 닿아야 한다 — 캘린더에서 일정을 여는 길이

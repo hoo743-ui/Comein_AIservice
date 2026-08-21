@@ -19,11 +19,10 @@
  *   지금은 서버에 둘 자리가 없으므로 세션 안에서만 산다 — 없는 것을 있다고 하지 않는다.
  */
 
-import {
-  TEXT_SCALE_MAX, TEXT_SCALE_MIN,
-  type Settings,
-} from "./store";
-import { normalizeMode, USER_MODES } from "./mode";
+// store 가 아니라 잎사귀를 본다 — store 는 이 파일을 부르므로, 여기서 store 를 되부르면
+// 둘이 서로를 반쯤 초기화된 채로 보게 된다(`lib/settings.ts` 의 주석).
+import { TEXT_SCALE_MAX, TEXT_SCALE_MIN, type Settings } from "./settings";
+import { normalizeMode } from "./mode";
 
 const KEY = "comein:prefs";
 

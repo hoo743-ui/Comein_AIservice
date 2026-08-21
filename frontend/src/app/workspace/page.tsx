@@ -22,6 +22,8 @@ import { answerSuggestionForRoom, fetchAnsweredSuggestions, fetchConversationSta
 import type { ChatMessage, ConnectionRequest, Contact, EventParticipant, Group, Schedule } from "@/lib/types";
 import { ME_ID } from "@/lib/types";
 import { DEST, NAV, NAV_GAP, NAV_ROW, NAV_ROW_TOUCH, type Parsed, type Receipt, type View } from "./nav";
+// 겹친 것을 접는 기준은 시간표와 이 목록이 같은 값을 쓴다(화면마다 다른 수를 외우지 않게).
+import { TT_FOLD_FROM } from "./spans";
 import { L, type Lang } from "./i18n";
 import { WCODE, moodEn, weatherIconOf, weatherWord } from "./weather";
 import { classify, parseTime, toParsed } from "./capture";
@@ -327,6 +329,65 @@ export default function Reimagine() {
   }, [schedules, now]);
   const next = upcoming[0];
 
+  /**
+   * '다가오는 순간' 이 실제로 말해 주는 것들.
+   *
+   * 전에는 `15:00 · 미팅` 이 전부였다. 그건 캘린더를 열면 이미 아는 것이고, 이 줄이
+   * 있어야 할 이유가 되지 못한다. 사람이 그 자리를 앞두고 실제로 궁금해하는 것은
+   * **얼마나 남았나 · 누구와 · 어디서 · 내가 답을 했나** 넷이다.
+   *
+   * 규칙 둘 —
+   *  ① 없는 것은 적지 않는다. 장소가 비어 있으면 '장소 미정' 이라고 쓰지 않고 그 칸을
+   *     아예 만들지 않는다. 빈 칸을 채우려고 지어낸 말이 이 제품에서 가장 비싼 실수다.
+   *  ② 뒤에 붙는 것은 한 겹 옅게. 무엇이 다가오는지가 먼저 읽히고, 나머지는 그 다음이다.
+   */
+  const nextDetail = React.useMemo(() => {
+    if (!next || !now) return null;
+    const en = lang === "en";
+    const start = new Date(next.start);
+    const end = next.end ? new Date(next.end) : null;
+    const mins = Math.round((+start - +now) / 60000);
+
+    // 얼마나 남았나. 이미 시작했으면 남은 시간이 아니라 '진행 중' 이다 —
+    // 지나간 것을 "-30분 뒤" 라고 말하면 그 줄을 다시 믿지 않게 된다.
+    let when: string;
+    if (end && +now >= +start && +now < +end) when = en ? "Happening now" : "진행 중";
+    else if (mins <= 0) when = en ? "Starting now" : "지금";
+    else if (mins < 60) when = en ? `in ${mins} min` : `${mins}분 뒤`;
+    else if (mins < 60 * 24) {
+      const h = Math.floor(mins / 60), m = mins % 60;
+      when = en ? `in ${h}h${m ? ` ${m}m` : ""}` : `${h}시간${m ? ` ${m}분` : ""} 뒤`;
+    } else {
+      const d = Math.round(mins / (60 * 24));
+      when = en ? `in ${d} day${d > 1 ? "s" : ""}` : `${d}일 뒤`;
+    }
+
+    const n = participantsOf(next.id).length;
+    const tail = [
+      when,
+      // 혼자 있는 자리에 '1명' 이라고 적지 않는다. 그건 사람에 대한 정보가 아니다.
+      n > 1 ? (en ? `${n} people` : `${n}명`) : null,
+      next.location || null,
+    ].filter(Boolean) as string[];
+
+    // 날짜는 **오늘이 아닐 때만** 앞에 붙인다.
+    //
+    // 시각만 있으면 "15:00" 이 오늘인지 내일인지 알 길이 없다 — 이 줄은 '오늘의 맥락'
+    // 안에 있어서 더더욱 오늘로 읽히는데, 오늘 남은 일정이 없으면 여기 서는 것은 내일
+    // 것이다. 거꾸로 오늘 것에까지 날짜를 붙이면 '오늘' 화면에서 오늘을 두 번 말하게 된다.
+    const sameDay = start.getFullYear() === now.getFullYear()
+      && start.getMonth() === now.getMonth()
+      && start.getDate() === now.getDate();
+    const time = end ? `${fmtTime(next.start)}–${fmtTime(next.end!)}` : fmtTime(next.start);
+
+    return {
+      time: sameDay ? time : `${fmtDate(start)} ${time}`,
+      tail,
+      // 아직 확정하지 않은 제안이라면 그 사실이 시각보다 먼저다 — 이 줄을 보고 할 일이 생긴다.
+      pending: next.status === "pending",
+    };
+  }, [next, now, lang, participantsOf]);
+
   // 왼쪽 캘린더 — 실제 일정 + AI가 넣은 일정
   const calItems = React.useMemo(() => {
     const b = now ?? new Date(2026, 6, 8);
@@ -342,6 +403,30 @@ export default function Reimagine() {
       .filter((i) => `${i.date.getFullYear()}-${i.date.getMonth()}-${i.date.getDate()}` === k)
       .sort((a, b) => a.time.localeCompare(b.time));
   }, [calItems, calDay]);
+
+  /**
+   * 그날 목록을 **같은 시각끼리** 묶는다.
+   *
+   * 왜 — 같은 시각에 여러 개가 있으면 목록이 같은 시각을 몇 줄이고 되풀이한다(실제로
+   * "02:00 캡스톤" 이 여섯 줄이었다). 그 여섯 줄은 여섯 개의 다른 정보가 아니라 '이
+   * 시각이 붐빈다'는 한 가지 사실이고, 여섯 번 적는다고 더 알게 되는 것이 없다.
+   *
+   * 접는 기준(TT_FOLD_FROM = 3)은 시간표와 같은 값을 쓴다. 두 화면이 같은 하루를 두고
+   * 서로 다른 수에서 접으면, 사용자는 규칙이 아니라 화면마다의 버릇을 외워야 한다.
+   */
+  const dayGroups = React.useMemo(() => {
+    const out: { time: string; items: typeof dayItems }[] = [];
+    for (const it of dayItems) {
+      const tail = out[out.length - 1];
+      if (tail && tail.time === it.time) tail.items.push(it);
+      else out.push({ time: it.time, items: [it] });
+    }
+    return out;
+  }, [dayItems]);
+
+  /** 펴 둔 시각 묶음. 날이 바뀌면 비운다 — 어제 편 것을 오늘까지 들고 가지 않는다. */
+  const [openTimes, setOpenTimes] = React.useState<Set<string>>(new Set());
+  React.useEffect(() => setOpenTimes(new Set()), [calDay]);
 
   /** 달력에서 손을 올린 날의 일정 — 누르지 않고도 하루를 엿보게 한다. */
   const peekDay = React.useCallback((d: Date) => {
@@ -2001,18 +2086,44 @@ export default function Reimagine() {
                           {/* 눌러서 그 일정으로 간다. 예전에는 읽을 수만 있어서, 보고 나서
                               레일의 캘린더를 누르고 그 날을 다시 찾아 들어가야 했다 —
                               이미 눈앞에 있는 것을 찾으러 가는 걸음이었다. */}
-                          {dayItems.map((it, idx) => (
-                            <li key={idx}>
-                              <button
-                                type="button"
-                                className="rmg-calday-row"
-                                onClick={() => { carryEvent.current = it.id; setCalDay(it.date); setPanel(null); setView("calendar"); }}
-                              >
-                                <span className="rmg-calday-time">{it.time}</span>
-                                <span className="rmg-calday-title">{it.title}</span>
-                              </button>
-                            </li>
-                          ))}
+                          {dayGroups.map((g) => {
+                            // 셋 이상이 같은 시각에 있고 아직 펴지 않았다면 한 줄로 접는다.
+                            const fold = g.items.length >= TT_FOLD_FROM && !openTimes.has(g.time);
+                            if (fold) {
+                              const head = g.items[0];
+                              return (
+                                <li key={`g-${g.time}`}>
+                                  <button
+                                    type="button"
+                                    className="rmg-calday-row rmg-calday-fold"
+                                    aria-expanded={false}
+                                    onClick={() => setOpenTimes((p) => new Set(p).add(g.time))}
+                                  >
+                                    <span className="rmg-calday-time">{g.time}</span>
+                                    <span className="rmg-calday-title">
+                                      {lang === "en"
+                                        ? `${head.title} +${g.items.length - 1} more`
+                                        : `${head.title} 외 ${g.items.length - 1}건`}
+                                    </span>
+                                  </button>
+                                </li>
+                              );
+                            }
+                            return g.items.map((it, idx) => (
+                              <li key={`${g.time}-${idx}`}>
+                                <button
+                                  type="button"
+                                  className="rmg-calday-row"
+                                  onClick={() => { carryEvent.current = it.id; setCalDay(it.date); setPanel(null); setView("calendar"); }}
+                                >
+                                  {/* 펼친 묶음에서는 시각을 첫 줄에만 — 같은 값을 세로로
+                                      되풀이하면 목록이 다시 시각으로 가득 찬다. */}
+                                  <span className="rmg-calday-time">{idx === 0 ? g.time : ""}</span>
+                                  <span className="rmg-calday-title">{it.title}</span>
+                                </button>
+                              </li>
+                            ));
+                          })}
                           {dayItems.length === 0 && <li className="rmg-calday-empty">{t.dayNoEvent}</li>}
                         </ul>
                       </div>
@@ -2042,9 +2153,29 @@ export default function Reimagine() {
                     <p className="rmg-eyebrow">{t.todaysContextEye}</p>
                     <div className="rmg-ctx-line">
                       <span className="rmg-ctx-k">{t.upNext}</span>
-                      <span className="rmg-ctx-v">
-                        {next ? <><em>{mounted ? fmtTime(next.start) : ""}</em> · {next.title}</> : t.noUpcoming}
-                      </span>
+                      {/* 눌러서 그 자리로 간다 — 무엇이 다가오는지 알려 주고는 거기 가는
+                          길을 막아 두지 않는다. 다가올 것이 없으면 손잡이도 없다. */}
+                      {next && nextDetail ? (
+                        <button
+                          type="button"
+                          className="rmg-ctx-v rmg-ctx-next"
+                          onClick={() => openEvent(next.id, true)}
+                        >
+                          <span className="rmg-ctx-next-head">
+                            <em>{mounted ? nextDetail.time : ""}</em> · {next.title}
+                          </span>
+                          {mounted && (nextDetail.tail.length > 0 || nextDetail.pending) && (
+                            <span className="rmg-ctx-next-tail">
+                              {nextDetail.pending && (
+                                <span className="rmg-ctx-next-pend">{lang === "en" ? "Proposed" : "제안"}</span>
+                              )}
+                              {nextDetail.tail.join(" · ")}
+                            </span>
+                          )}
+                        </button>
+                      ) : (
+                        <span className="rmg-ctx-v">{t.noUpcoming}</span>
+                      )}
                     </div>
                     {/* 같은 하루가 Context 마다 다른 이름으로 불린다 — 학업의 흐름 · 업무의 흐름 · 생활의 흐름.
                         화면을 복제하지 않는다. 이 한 줄이 설정에게 이름을 물어볼 뿐이다. */}
@@ -2211,6 +2342,23 @@ export default function Reimagine() {
                   }}
                 >
                   {t.undo}
+                </button>
+                {/* 닫기 — 이 줄만 치운다(일정은 그대로 둔다).
+                    확정을 기다리는 제안은 스스로 사라지지 않게 두었다. 조용히 사라지면
+                    확정이라는 절차가 있으나 마나 해지기 때문이다. 그런데 그 결과, 지금
+                    답하고 싶지 않은 사람에게는 **치울 방법이 아예 없었다** — 화면 위쪽에
+                    계속 남아 다음에 하는 일마다 끼어들었다.
+                    닫아도 잃는 것은 없다: 대기 중인 제안은 화면 맨 위 '답을 기다리는 것'
+                    줄과 캘린더의 점선에 그대로 서 있다. 여기서 치우는 것은 알림이지
+                    일정이 아니다. */}
+                <button
+                  type="button"
+                  className="rmg-flash-x"
+                  aria-label={lang === "en" ? "Dismiss" : "닫기"}
+                  title={lang === "en" ? "Hides this line — the event stays" : "이 줄만 치웁니다 — 일정은 그대로예요"}
+                  onClick={() => setFlash(null)}
+                >
+                  <X className="rmg-note-xic" />
                 </button>
               </>
             )}
