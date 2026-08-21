@@ -140,19 +140,25 @@ Comein의 로고는 살짝 열린 문이다.
 
 ## 2. 팀 구성 & R&R
 
-| 역할 | 인원 | 담당 영역 | 작업 폴더 |
+> 팀장 이정우 · 팀원 류서준 · 박시현 · 박수훈 (4인). 아래는 **실제로 나눠 맡은 대로**다 —
+> 한때 이 표에는 "AI 엔지니어 A/B" 로 둘을 갈라 두었지만, Memory·Embedding·RAG 를 붙이지
+> 않기로 하면서(§5) 나눌 일이 없어졌다. 없는 자리를 표에 남겨 두면 다음 사람이 그 자리를
+> 찾는다.
+
+| 역할 | 담당 | 담당 영역 | 작업 폴더 |
 |------|------|-----------|-----------|
-| 기획 (PM) | 1 | 제품 기획, UX 플로우, 와이어프레임, 일정 관리, 테스트 시나리오 | `docs/` |
-| AI 엔지니어 A | 1 | AI Router, Intent Classifier, Parser/Schedule/Conflict Agent, 프롬프트 설계 | `ai/` |
-| AI 엔지니어 B | 1 | Memory 시스템, Embedding/RAG, Memo/Todo/Meeting/Summary Agent, AI 평가 | `ai/` |
-| 풀스택 | 1 | Next.js 프론트, FastAPI 백엔드, DB, 인증, 배포, 외부 API 연동 | `frontend/`, `backend/` |
+| 기획 · PM | 박수훈 | 제품 기획, UX 플로우, 와이어프레임, 일정 관리, 테스트 시나리오 | `docs/` |
+| 프론트엔드 | 박시현 · 박수훈 | Next.js 화면, 워크스페이스 모듈, Supabase 직접 연동 | `frontend/` |
+| 백엔드 | 이정우 | FastAPI(무상태 파싱), DB 스키마·RLS, 배포 | `backend/`, `supabase/` |
+| AI | 류서준 | Router 프롬프트, Provider 폴백, 파싱 정확도 검증 | `ai/`, `scripts/` |
 
 ### 협업 규칙
 
-- AI ↔ 백엔드 경계는 **API JSON Schema로 고정** → 병렬 개발 가능
-- AI 엔지니어 2명은 Agent 단위 분업 + 프롬프트 상호 크로스 리뷰
-- 기획자가 v0.dev 등으로 화면 시안 선(先)프로토타이핑 → 풀스택 병목 방지
-- 주 1회 통합 테스트 데이 (전체 시퀀스 기준 E2E 점검)
+- AI ↔ 프론트 경계는 **JSON Schema(`AiResult`)로 고정** → 서로의 내부 구현에 의존하지 않는다
+- 이 문서와 `docs/24_AI_PIPELINE_STATUS.md` 를 단일 기준으로 두고 결정 이력을 남긴다
+- 교수님 멘토링 2회를 거쳐 우선순위를 재조정했다
+- 매 push 마다 GitHub Actions(`ci.yml`)가 clone → install → 타입검사 → 테스트 → 빌드를 돌린다
+  — "내 컴퓨터에선 됐는데" 를 저장소가 대신 확인한다(`docs/24` §25)
 
 ---
 

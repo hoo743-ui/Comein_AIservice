@@ -1,0 +1,3190 @@
+{
+  "base_url": "https://comein-aiservice.onrender.com",
+  "anchor": "2026-08-24T09:00:00+09:00",
+  "cold_start_sec": 0.4,
+  "total": {
+    "n": 100,
+    "pass": 97,
+    "accuracy": 97.0
+  },
+  "groups": {
+    "single": {
+      "label": "단일 일정 (문어체)",
+      "n": 18,
+      "pass": 18,
+      "accuracy": 100.0
+    },
+    "meeting": {
+      "label": "회의 · 참여자 추출",
+      "n": 16,
+      "pass": 16,
+      "accuracy": 100.0
+    },
+    "casual": {
+      "label": "구어체 · 오타",
+      "n": 40,
+      "pass": 39,
+      "accuracy": 97.5
+    },
+    "ask": {
+      "label": "정보 부족 (되묻기)",
+      "n": 14,
+      "pass": 13,
+      "accuracy": 92.9
+    },
+    "edge": {
+      "label": "애매 · 엣지케이스",
+      "n": 12,
+      "pass": 11,
+      "accuracy": 91.7
+    }
+  },
+  "cases": [
+    {
+      "id": "A01",
+      "group": "single",
+      "message": "다음주 화요일 저녁 7시 저녁 약속",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-01T19:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "저녁 약속",
+            "content": null,
+            "start": "2026-09-01T19:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A02",
+      "group": "single",
+      "message": "내일 오전 10시 치과 예약",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T10:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "치과 예약",
+            "content": null,
+            "start": "2026-08-25T10:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A03",
+      "group": "single",
+      "message": "8월 28일 오후 3시 팀 발표",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-08-28T15:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "팀 발표",
+            "content": null,
+            "start": "2026-08-28T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A04",
+      "group": "single",
+      "message": "모레 저녁 8시 영화 보러 가기",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-26T20:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "영화 보러 가기",
+            "content": null,
+            "start": "2026-08-26T20:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A05",
+      "group": "single",
+      "message": "다음 주 월요일 아침 9시 스터디",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-08-31T09:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "스터디",
+            "content": null,
+            "start": "2026-08-31T09:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A06",
+      "group": "single",
+      "message": "이번 주 금요일 오후 2시 병원 진료",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-28T14:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "병원 진료",
+            "content": null,
+            "start": "2026-08-28T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A07",
+      "group": "single",
+      "message": "오늘 저녁 7시 30분 저녁 식사",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-24T19:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "저녁 식사",
+            "content": null,
+            "start": "2026-08-24T19:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A08",
+      "group": "single",
+      "message": "9월 3일 오전 11시 면접",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-03T11:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "면접",
+            "content": null,
+            "start": "2026-09-03T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A09",
+      "group": "single",
+      "message": "내일 오후 4시부터 6시까지 알바",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T16:00",
+        "end": "2026-08-25T18:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "알바",
+            "content": null,
+            "start": "2026-08-25T16:00:00+09:00",
+            "end": "2026-08-25T18:00:00+09:00",
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A10",
+      "group": "single",
+      "message": "다음 주 수요일 오후 1시 도서관 책 반납",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-02T13:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "도서관 책 반납",
+            "content": null,
+            "start": "2026-09-02T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A11",
+      "group": "single",
+      "message": "8월 30일 오후 5시 친구 생일 파티",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-30T17:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "친구 생일 파티",
+            "content": null,
+            "start": "2026-08-30T17:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A12",
+      "group": "single",
+      "message": "이번 주 목요일 오전 9시 30분 전공 강의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-27T09:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "전공 강의",
+            "content": null,
+            "start": "2026-08-27T09:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A13",
+      "group": "single",
+      "message": "내일 정오에 점심 약속",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T12:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "점심 약속",
+            "content": null,
+            "start": "2026-08-25T12:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A14",
+      "group": "single",
+      "message": "9월 5일 오후 6시 콘서트 관람",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-05T18:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "콘서트 관람",
+            "content": null,
+            "start": "2026-09-05T18:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A15",
+      "group": "single",
+      "message": "다음 주 목요일 오후 2시 30분 진로 상담",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-09-03T14:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "진로 상담",
+            "content": null,
+            "start": "2026-09-03T14:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A16",
+      "group": "single",
+      "message": "모레 오전 8시 헬스장 가기",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-26T08:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "헬스장 가기",
+            "content": null,
+            "start": "2026-08-26T08:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A17",
+      "group": "single",
+      "message": "8월 27일 저녁 7시 동아리 모임",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-08-27T19:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "동아리 모임",
+            "content": null,
+            "start": "2026-08-27T19:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "A18",
+      "group": "single",
+      "message": "내일 밤 9시 온라인 강의 수강",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T21:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "온라인 강의 수강",
+            "content": null,
+            "start": "2026-08-25T21:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B01",
+      "group": "meeting",
+      "message": "내일 오후 2시 시현이랑 서준이랑 캡스톤 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T14:00",
+        "participants": [
+          "시현",
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "캡스톤 회의",
+            "content": null,
+            "start": "2026-08-25T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현",
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B02",
+      "group": "meeting",
+      "message": "다음 주 월요일 오전 10시 정우님과 기획 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-31T10:00",
+        "participants": [
+          "정우"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "기획 회의",
+            "content": null,
+            "start": "2026-08-31T10:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "정우"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B03",
+      "group": "meeting",
+      "message": "8월 28일 오후 4시 수훈이랑 코드 리뷰 미팅",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-28T16:00",
+        "participants": [
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "코드 리뷰 미팅",
+            "content": null,
+            "start": "2026-08-28T16:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B04",
+      "group": "meeting",
+      "message": "모레 오전 11시 팀 전체 회의, 서준 시현 수훈 참석",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-26T11:00",
+        "participants": [
+          "서준",
+          "시현",
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "팀 전체 회의",
+            "content": null,
+            "start": "2026-08-26T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "서준",
+              "시현",
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B05",
+      "group": "meeting",
+      "message": "오늘 오후 5시 교수님과 논문 미팅",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-24T17:00",
+        "participants": [
+          "교수"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "논문 미팅",
+            "content": null,
+            "start": "2026-08-24T17:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "교수님"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B06",
+      "group": "meeting",
+      "message": "내일 오전 9시 30분 시현이랑 디자인 리뷰 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T09:30",
+        "participants": [
+          "시현"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "디자인 리뷰 회의",
+            "content": null,
+            "start": "2026-08-25T09:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B07",
+      "group": "meeting",
+      "message": "다음 주 화요일 오후 3시 정우랑 서준이랑 스프린트 회고",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-09-01T15:00",
+        "participants": [
+          "정우",
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "스프린트 회고",
+            "content": null,
+            "start": "2026-09-01T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "정우",
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B08",
+      "group": "meeting",
+      "message": "9월 2일 오후 1시 클라이언트 미팅",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-09-02T13:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "클라이언트 미팅",
+            "content": null,
+            "start": "2026-09-02T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B09",
+      "group": "meeting",
+      "message": "이번 주 금요일 오후 2시 수훈이랑 발표 준비 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-28T14:00",
+        "participants": [
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "발표 준비 회의",
+            "content": null,
+            "start": "2026-08-28T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B10",
+      "group": "meeting",
+      "message": "내일 저녁 7시 스터디 모임, 시현이랑 정우 참석",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-25T19:00",
+        "participants": [
+          "시현",
+          "정우"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "스터디 모임",
+            "content": null,
+            "start": "2026-08-25T19:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현",
+              "정우"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B11",
+      "group": "meeting",
+      "message": "모레 오후 3시 30분 서준이랑 백엔드 싱크",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-26T15:30",
+        "participants": [
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "백엔드 싱크",
+            "content": null,
+            "start": "2026-08-26T15:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B12",
+      "group": "meeting",
+      "message": "다음 주 수요일 오전 10시 30분 전체 스탠드업 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-09-02T10:30"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "전체 스탠드업 회의",
+            "content": null,
+            "start": "2026-09-02T10:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B13",
+      "group": "meeting",
+      "message": "8월 29일 오후 2시 시현 서준 수훈과 중간 점검 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-29T14:00",
+        "participants": [
+          "시현",
+          "서준",
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "중간 점검 회의",
+            "content": null,
+            "start": "2026-08-29T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현",
+              "서준",
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B14",
+      "group": "meeting",
+      "message": "오늘 오후 4시 정우와 1:1 미팅",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-24T16:00",
+        "participants": [
+          "정우"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "1:1 미팅",
+            "content": null,
+            "start": "2026-08-24T16:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "정우"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B15",
+      "group": "meeting",
+      "message": "내일 오후 1시 마케팅팀과 협업 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T13:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "협업 회의",
+            "content": null,
+            "start": "2026-08-25T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "마케팅팀"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "B16",
+      "group": "meeting",
+      "message": "다음 주 금요일 오전 11시 수훈이랑 서준이랑 최종 리허설",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-09-04T11:00",
+        "participants": [
+          "수훈",
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "최종 리허설",
+            "content": null,
+            "start": "2026-09-04T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈",
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C01",
+      "group": "casual",
+      "message": "낼 3시반에 교수님 미팅ㅋㅋ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-25T15:30"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "미팅",
+            "content": null,
+            "start": "2026-08-25T15:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "교수님"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C02",
+      "group": "casual",
+      "message": "낼 아침 9시 수업 있음",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T09:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "수업",
+            "content": null,
+            "start": "2026-08-25T09:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C03",
+      "group": "casual",
+      "message": "오늘 저녁 6시 밥약 ㅇㅇ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-24T18:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "밥약",
+            "content": null,
+            "start": "2026-08-24T18:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C04",
+      "group": "casual",
+      "message": "낼모레 오후 2시에 알바 감",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-26T14:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "알바 감",
+            "content": null,
+            "start": "2026-08-26T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C05",
+      "group": "casual",
+      "message": "담주 화욜 저녁 8시 약속 잡아줘",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-01T20:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "약속",
+            "content": null,
+            "start": "2026-09-01T20:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C06",
+      "group": "casual",
+      "message": "낼 오전 11시 은행 가야됨",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T11:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "은행 가야됨",
+            "content": null,
+            "start": "2026-08-25T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C07",
+      "group": "casual",
+      "message": "이번주 금욜 저녁 7시 술약속ㅋ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-28T19:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "술약속",
+            "content": null,
+            "start": "2026-08-28T19:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C08",
+      "group": "casual",
+      "message": "낼 저녁 6시반 헬스 ㄱㄱ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T18:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "헬스",
+            "content": null,
+            "start": "2026-08-25T18:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C09",
+      "group": "casual",
+      "message": "모레 오전 10시 미용실 예약함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-26T10:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "미용실 예약",
+            "content": null,
+            "start": "2026-08-26T10:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C10",
+      "group": "casual",
+      "message": "담주 목욜 오후 3시 시험임",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-03T15:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "시험",
+            "content": null,
+            "start": "2026-09-03T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C11",
+      "group": "casual",
+      "message": "낼 밤 10시에 넷플 보기로 함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T22:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "넷플 보기",
+            "content": null,
+            "start": "2026-08-25T22:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C12",
+      "group": "casual",
+      "message": "오늘 오후 3시 과제 제출 마감이야",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "todo"
+        ],
+        "start": "2026-08-24T15:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "과제 제출 마감",
+            "content": null,
+            "start": "2026-08-24T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C13",
+      "group": "casual",
+      "message": "낼 12시에 점심먹기로 했어",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T12:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "점심",
+            "content": null,
+            "start": "2026-08-25T12:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C14",
+      "group": "casual",
+      "message": "담주 월욜 아침 8시반 출발",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-31T08:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "출발",
+            "content": null,
+            "start": "2026-08-31T08:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C15",
+      "group": "casual",
+      "message": "이번주 토욜 오후 1시 소개팅ㅎㅎ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-29T13:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "소개팅",
+            "content": null,
+            "start": "2026-08-29T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C16",
+      "group": "casual",
+      "message": "낼 오후 5시 택배 받아야함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "todo"
+        ],
+        "start": "2026-08-25T17:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "택배 받기",
+            "content": null,
+            "start": "2026-08-25T17:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C17",
+      "group": "casual",
+      "message": "모레 저녁 7시 부모님이랑 저녁",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-26T19:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "저녁",
+            "content": null,
+            "start": "2026-08-26T19:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "부모님"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": false,
+      "why": "기대 schedule@2026-08-26T19:00 · 받은 갈래 meeting"
+    },
+    {
+      "id": "C18",
+      "group": "casual",
+      "message": "담주 수욜 오후 4시 상담 있음ㅠ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-09-02T16:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "상담",
+            "content": null,
+            "start": "2026-09-02T16:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C19",
+      "group": "casual",
+      "message": "낼 아침 7시에 기상 알람 맞춰놨음",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "todo"
+        ],
+        "start": "2026-08-25T07:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "기상 알람",
+            "content": null,
+            "start": "2026-08-25T07:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C20",
+      "group": "casual",
+      "message": "이번주 일욜 오전 11시 등산 ㄱ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-30T11:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "등산",
+            "content": null,
+            "start": "2026-08-30T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C21",
+      "group": "casual",
+      "message": "낼 오후 2시반 도서관 감",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T14:30"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "도서관",
+            "content": null,
+            "start": "2026-08-25T14:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C22",
+      "group": "casual",
+      "message": "담주 금욜 저녁 6시 회식이래",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-09-04T18:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "회식",
+            "content": null,
+            "start": "2026-09-04T18:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C23",
+      "group": "casual",
+      "message": "모레 오후 1시 자소서 첨삭받기로 함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "meeting"
+        ],
+        "start": "2026-08-26T13:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "자소서 첨삭",
+            "content": null,
+            "start": "2026-08-26T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C24",
+      "group": "casual",
+      "message": "낼 오전 9시부터 11시까지 시험봄",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule"
+        ],
+        "start": "2026-08-25T09:00",
+        "end": "2026-08-25T11:00"
+      },
+      "response": {
+        "intent": "schedule",
+        "reply": "일정으로 정리했어요.",
+        "items": [
+          {
+            "category": "schedule",
+            "title": "시험",
+            "content": null,
+            "start": "2026-08-25T09:00:00+09:00",
+            "end": "2026-08-25T11:00:00+09:00",
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C25",
+      "group": "casual",
+      "message": "오늘 밤 11시에 마감 제출해야돼",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "schedule",
+          "todo"
+        ],
+        "start": "2026-08-24T23:00"
+      },
+      "response": {
+        "intent": "todo",
+        "reply": "할 일로 정리했어요.",
+        "items": [
+          {
+            "category": "todo",
+            "title": "마감 제출",
+            "content": null,
+            "start": null,
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": "2026-08-24T23:00:00+09:00",
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C26",
+      "group": "casual",
+      "message": "낼 2시에 시현이랑 회의ㄱㄱ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T14:00",
+        "participants": [
+          "시현"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "회의",
+            "content": null,
+            "start": "2026-08-25T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C27",
+      "group": "casual",
+      "message": "담주 월욜 10시에 서준이랑 미팅함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-31T10:00",
+        "participants": [
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "미팅",
+            "content": null,
+            "start": "2026-08-31T10:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C28",
+      "group": "casual",
+      "message": "모레 오후 4시 수훈이랑 회의 잡을게",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-26T16:00",
+        "participants": [
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "회의",
+            "content": null,
+            "start": "2026-08-26T16:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C29",
+      "group": "casual",
+      "message": "낼 저녁 8시 정우형이랑 통화하기로",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-25T20:00",
+        "participants": [
+          "정우"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "통화",
+            "content": null,
+            "start": "2026-08-25T20:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "정우형"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C30",
+      "group": "casual",
+      "message": "이번주 목욜 3시 팀회의ㅇㅋ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-27T15:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "팀회의",
+            "content": null,
+            "start": "2026-08-27T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C31",
+      "group": "casual",
+      "message": "낼 오전 10시반 시현이 서준이랑 캡스톤 얘기함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T10:30",
+        "participants": [
+          "시현",
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "캡스톤 얘기",
+            "content": null,
+            "start": "2026-08-25T10:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현",
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C32",
+      "group": "casual",
+      "message": "담주 화욜 오후 2시 교수님이랑 면담ㅠㅠ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-09-01T14:00",
+        "participants": [
+          "교수"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "면담",
+            "content": null,
+            "start": "2026-09-01T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "교수님"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C33",
+      "group": "casual",
+      "message": "모레 저녁 6시 동기들이랑 스터디",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-26T18:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "스터디",
+            "content": null,
+            "start": "2026-08-26T18:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "동기들"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C34",
+      "group": "casual",
+      "message": "낼 오후 5시 수훈이랑 발표연습 ㄱㄱ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-25T17:00",
+        "participants": [
+          "수훈"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "발표연습",
+            "content": null,
+            "start": "2026-08-25T17:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C35",
+      "group": "casual",
+      "message": "이번주 금욜 오전 11시 팀장님이랑 1대1",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-28T11:00",
+        "participants": [
+          "팀장"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "1대1",
+            "content": null,
+            "start": "2026-08-28T11:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "팀장님"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C36",
+      "group": "casual",
+      "message": "담주 수욜 1시에 서준이랑 정우랑 회고함",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-09-02T13:00",
+        "participants": [
+          "서준",
+          "정우"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "회고",
+            "content": null,
+            "start": "2026-09-02T13:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "서준",
+              "정우"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C37",
+      "group": "casual",
+      "message": "낼 아침 8시반 조별과제 모임임ㅜ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-25T08:30"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "조별과제 모임",
+            "content": null,
+            "start": "2026-08-25T08:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C38",
+      "group": "casual",
+      "message": "모레 오후 2시 시현이랑 디자인 얘기하기로",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-26T14:00",
+        "participants": [
+          "시현"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "디자인 얘기",
+            "content": null,
+            "start": "2026-08-26T14:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "시현"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C39",
+      "group": "casual",
+      "message": "이번주 토욜 오후 3시 스터디원들이랑 모임ㅇㅇ",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting",
+          "schedule"
+        ],
+        "start": "2026-08-29T15:00"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "스터디 모임",
+            "content": null,
+            "start": "2026-08-29T15:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "스터디원들"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "C40",
+      "group": "casual",
+      "message": "낼 저녁 7시반 수훈이 서준이랑 저녁먹으면서 회의",
+      "expect": {
+        "kind": "item",
+        "category": [
+          "meeting"
+        ],
+        "start": "2026-08-25T19:30",
+        "participants": [
+          "수훈",
+          "서준"
+        ]
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "저녁 식사 및 회의",
+            "content": null,
+            "start": "2026-08-25T19:30:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": [
+              "수훈",
+              "서준"
+            ],
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D01",
+      "group": "ask",
+      "message": "친구랑 저녁 약속 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "언제 몇 시로 잡을까요?",
+        "items": [],
+        "ask": "언제 몇 시로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D02",
+      "group": "ask",
+      "message": "교수님 미팅 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "교수님 미팅은 언제로 잡을까요?",
+        "items": [],
+        "ask": "교수님 미팅은 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D03",
+      "group": "ask",
+      "message": "회의 하나 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "회의를 언제로 잡을까요?",
+        "items": [],
+        "ask": "회의를 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D04",
+      "group": "ask",
+      "message": "다음 주에 스터디 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "언제 잡을까요?",
+        "items": [],
+        "ask": "언제 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D05",
+      "group": "ask",
+      "message": "내일 회의 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "몇 시로 잡을까요?",
+        "items": [],
+        "ask": "몇 시로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D06",
+      "group": "ask",
+      "message": "시현이랑 만나기로 했어",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "시현이와의 약속은 언제로 잡을까요?",
+        "items": [],
+        "ask": "시현이와의 약속은 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D07",
+      "group": "ask",
+      "message": "병원 예약해야 하는데",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "todo",
+        "reply": "할 일로 정리했어요.",
+        "items": [
+          {
+            "category": "todo",
+            "title": "병원 예약하기",
+            "content": null,
+            "start": null,
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": false,
+      "why": "되물어야 하는데 1건을 세웠다"
+    },
+    {
+      "id": "D08",
+      "group": "ask",
+      "message": "팀 회의 일정 좀 잡아줄래",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "팀 회의는 언제로 잡을까요?",
+        "items": [],
+        "ask": "팀 회의는 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D09",
+      "group": "ask",
+      "message": "저녁에 약속 있어",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "몇 시로 잡을까요?",
+        "items": [],
+        "ask": "몇 시로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D10",
+      "group": "ask",
+      "message": "다음 주 화요일에 미팅 있어",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "몇 시에 잡을까요?",
+        "items": [],
+        "ask": "몇 시에 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D11",
+      "group": "ask",
+      "message": "수훈이랑 서준이랑 회의 잡아줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "회의는 언제로 잡을까요?",
+        "items": [],
+        "ask": "회의는 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D12",
+      "group": "ask",
+      "message": "약속 하나 추가해줘",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "약속을 언제로 잡을까요?",
+        "items": [],
+        "ask": "약속을 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D13",
+      "group": "ask",
+      "message": "이번 주에 발표 준비 회의 잡자",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "발표 준비 회의는 언제로 잡을까요?",
+        "items": [],
+        "ask": "발표 준비 회의는 언제로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "D14",
+      "group": "ask",
+      "message": "낼모레 저녁 약속 ㅇㅇ",
+      "expect": {
+        "kind": "ask"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "저녁 약속은 몇 시로 잡을까요?",
+        "items": [],
+        "ask": "저녁 약속은 몇 시로 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E01",
+      "group": "edge",
+      "message": "회의는 낼모레로 미뤄야될듯",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "기존 일정 수정 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "몇 시로 미룰까요?",
+        "items": [],
+        "ask": "몇 시로 미룰까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E02",
+      "group": "edge",
+      "message": "내일 3시 회의 취소해줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "기존 일정 취소 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E03",
+      "group": "edge",
+      "message": "교수님 미팅 시간 4시로 바꿔줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "기존 일정 시각 변경 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "언제 잡을까요?",
+        "items": [],
+        "ask": "언제 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E04",
+      "group": "edge",
+      "message": "이번 주 일정 다 보여줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "조회 요청 — 파싱 대상이 아니다"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E05",
+      "group": "edge",
+      "message": "다음 주에 뭐 있지?",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "조회 요청 — 파싱 대상이 아니다"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E06",
+      "group": "edge",
+      "message": "내일 일정 지워줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "삭제 요청 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E07",
+      "group": "edge",
+      "message": "회의 30분 뒤로 미뤄줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "상대적 시각 이동 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "원래 회의 시간이 언제인가요?",
+        "items": [],
+        "ask": "원래 회의 시간이 언제인가요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E08",
+      "group": "edge",
+      "message": "지난주 회의록 요약해줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "요약은 /api/summary 의 일이다"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E09",
+      "group": "edge",
+      "message": "매주 월요일 10시 정기 회의 반복으로 등록해줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "반복 일정 — 현재 미지원"
+      },
+      "response": {
+        "intent": "meeting",
+        "reply": "회의로 정리했어요.",
+        "items": [
+          {
+            "category": "meeting",
+            "title": "정기 회의",
+            "content": null,
+            "start": "2026-08-24T10:00:00+09:00",
+            "end": null,
+            "location": null,
+            "participants": null,
+            "summary": null,
+            "notes": null,
+            "due": null,
+            "priority": null
+          }
+        ],
+        "ask": null
+      },
+      "pass": false,
+      "why": "없는 일정을 만들었다: 정기 회의"
+    },
+    {
+      "id": "E10",
+      "group": "edge",
+      "message": "내일 오후에 비는 시간 아무때나 잡아줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "자동 배치 — 현재 미지원"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "몇 시에 잡을까요?",
+        "items": [],
+        "ask": "몇 시에 잡을까요?"
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E11",
+      "group": "edge",
+      "message": "시현이 시간 언제 되는지 알려줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "가용성 조회 — DB 함수의 일이다"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    },
+    {
+      "id": "E12",
+      "group": "edge",
+      "message": "오늘 남은 일정 알림 보내줘",
+      "expect": {
+        "kind": "no_new_item",
+        "why": "리마인드 — 미구현(향후 과제)"
+      },
+      "response": {
+        "intent": "chat",
+        "reply": "네, 알겠어요.",
+        "items": [],
+        "ask": null
+      },
+      "pass": true,
+      "why": ""
+    }
+  ]
+}
