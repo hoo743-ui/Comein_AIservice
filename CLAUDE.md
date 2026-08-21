@@ -131,6 +131,7 @@ Comein의 로고는 살짝 열린 문이다.
 | ❗ 중요도 | AI 가 뽑던 값이 앉을 자리를 얻었다. 겹쳤을 때 무엇을 물을지 안다 | `0018` — `events.priority` + `lib/clash.ts` |
 | 🏷 부르는 이름 | 핸들도 표시 이름도 내 것이 아니다 — 내가 부르는 이름을 따로 둔다 | `0019` — `person_labels` |
 | 🔔 답을 기다리는 것 | 상대가 내민 시각·초대를 화면 맨 위 한 줄로. 팝업으로 가로막지 않는다 | `lib/awaiting.ts` — 새 표 없이 기존 것을 읽어 세운다 |
+| @ 사람 못 박기 | 캡처 바에서 `@핸들` 로 사람을 **고른다**. 고른 사람은 다시 추측하지 않고, 그 자리의 방에 시각을 내민다 | `lib/mention.ts` + `parts/CaptureBar.tsx` — 방·메시지는 기존 `ensureRoom`·`sendEventMessage` |
 
 > AI 가 뽑는 갈래는 셋이다 — `schedule` · `meeting` · `todo`(`backend/app/schemas/items.py`).
 > 화면은 그것을 둘로 접는다: 시간 위의 일은 캘린더로, 시간 밖의 일(할 일)은 **아직 갈 곳이 없다**.

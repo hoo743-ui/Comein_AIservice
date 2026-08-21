@@ -208,6 +208,7 @@ export default function Reimagine() {
   // 어디에도 남아 있지 않아 — 그 안에 들어 있던 날짜 탐색까지 통째로 닿을 수 없었다.
   // 탐색은 이제 캘린더 화면의 달력 머리에서 직접 연다(아래 onSearch).
   const [panel, setPanel] = React.useState<null | "settings">(null);
+
   // 오늘 화면 오른쪽의 문 — 누르면 열리는 연출이 한 번 재생된 뒤 그 자리에 안내가 펼쳐진다.
   const [doorOpening, setDoorOpening] = React.useState(false);
   const [tourStep, setTourStep] = React.useState<number | null>(null); // 진행 중인 가이드 단계
@@ -227,6 +228,24 @@ export default function Reimagine() {
   const wakeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const flashTimers = React.useRef<ReturnType<typeof setTimeout>[]>([]);
   const railTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * 화면을 옮기면 스침 줄은 걷는다.
+   *
+   * 확정을 기다리는 제안은 스스로 사라지지 않게 두었다 — 그래야 확정이라는 절차가 뜻을
+   * 갖는다. 그런데 그 줄은 화면 아래에 **고정**돼 있어서 다른 탭으로 옮겨도 따라왔다:
+   * 오늘에서 한 말이 캘린더와 사람 화면 위에까지 앉아 있는 셈이다. 방금 한 일에 대한
+   * 한 줄은 그 일을 한 자리에서만 뜻이 있다.
+   *
+   * 걷어도 잃는 것은 없다: 그 제안은 화면 맨 위 '답을 기다리는 것' 줄과 캘린더의 점선에
+   * 그대로 서 있다. 여기서 사라지는 것은 알림이지 일정이 아니다.
+   */
+  React.useEffect(() => {
+    for (const timer of flashTimers.current) clearTimeout(timer);
+    flashTimers.current = [];
+    setFlash(null);
+    setFlashOut(false);
+  }, [view, panel]);
 
   // 레일 확장: 호버 인텐트(살짝 지연 → 툴팁이 먼저 뜨고, 머무르면 열림). 첫실행 자동안내 중엔 무시.
   const openRail = React.useCallback(() => {
@@ -1276,10 +1295,30 @@ export default function Reimagine() {
       return best;
     };
 
+    /**
+     * 치운 자리는 목록에서도 물러난다.
+     *
+     * 접기(clearmark)는 원래 **방 안**에서 지난 말을 접는 장치였다. 목록의 휴지통을
+     * 거기 그대로 이으니, 누른 사람 눈에는 **아무 일도 일어나지 않았다** — 줄이 그대로
+     * 남아 있었기 때문이다. 손잡이가 하는 일이 보이지 않으면 그건 없는 손잡이다.
+     *
+     * 그래서 목록도 같은 표시를 읽는다: 접은 시각 뒤에 온 말이 하나도 없으면 그 줄은
+     * 세우지 않는다. 지운 것이 아니므로 **새 말이 오면 다시 올라온다** — 상대가 말을
+     * 걸었는데 내 화면에만 안 보이는 일은 만들지 않는다.
+     */
+    const isCleared = (roomId: string | undefined, last?: ChatMessage) => {
+      if (!roomId) return false;
+      const at = cleared[roomId];
+      if (!at) return false;
+      return !last || +new Date(last.createdAt) <= +new Date(at);
+    };
+
     const dm = new Map<string, { last?: ChatMessage; unread: number }>();
     for (const c of contacts as Contact[]) {
       const rid = chatRooms.find((r) => r.peerId === c.id)?.id;
-      dm.set(c.id, { last: lastOfRoom(rid), unread: rid ? unread[rid] ?? 0 : 0 });
+      const last = lastOfRoom(rid);
+      if (isCleared(rid, last)) continue;   // 이 갈래는 '대화 목록' 이라, 치운 자리는 서지 않는다
+      dm.set(c.id, { last, unread: rid ? unread[rid] ?? 0 : 0 });
     }
 
     const groups = schedules
@@ -1288,6 +1327,7 @@ export default function Reimagine() {
         if (parts.length < 2) return null;   // 나 혼자인 일정은 '대화'가 아니다
         const rid = chatRooms.find((r) => r.eventId === ev.id)?.id;
         const last = lastOfRoom(rid);
+        if (isCleared(rid, last)) return null;   // 자리 대화도 같은 규칙으로 물러난다
         return {
           id: ev.id, title: ev.title, count: parts.length, last,
           unread: rid ? unread[rid] ?? 0 : 0,
@@ -1298,7 +1338,7 @@ export default function Reimagine() {
       .sort((a: any, b: any) => b.at - a.at) as { id: string; title: string; count: number; last?: ChatMessage; unread: number; at: number }[];
 
     return { dm, groups };
-  }, [contacts, chatRooms, chatMessages, schedules, participantsOf, unread]);
+  }, [contacts, chatRooms, chatMessages, schedules, participantsOf, unread, cleared]);
 
   /** 이 방에서 빗금으로 부를 수 있는 것들.
    *  여기 있는 것은 **모두 다른 곳에도 손잡이가 있다** — 빗금은 지름길이지 유일한 문이 아니다. */
