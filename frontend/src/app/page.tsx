@@ -5,6 +5,8 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { ArrowRight, Moon, Sun } from "lucide-react";
 
+import { wakeAi } from "@/lib/api";
+
 /**
  * Comein · Landing — "Comein이 무엇인가"에만 답하는 갤러리형 정체성 화면.
  * 기능 설명 없음. 철학이 곧 히어로. 타이포·여백·절제만으로 프리미엄을 만든다. (DESIGN.md)
@@ -37,6 +39,14 @@ export default function Landing() {
 
   React.useEffect(() => {
     setMounted(true);
+    // 자는 백엔드를 **여기서부터** 두드린다.
+    //
+    // 예전에는 워크스페이스에 도착해서야 노크했다. 그런데 Render 무료 티어는 깨어나는 데
+    // 수십 초가 걸리고, 사용자는 그 수십 초를 '정리 중' 만 보며 기다렸다. 이 화면과
+    // Experience 를 지나오는 시간이 이미 그만큼 되므로, 그 시간을 깨우는 데 쓴다 —
+    // 기다림을 없앨 수는 없지만, 사람이 화면을 읽는 동안으로 옮길 수는 있다.
+    // 답을 기다리지 않는 노크라 실패해도 아무 일도 일어나지 않는다.
+    wakeAi();
     const t = setTimeout(() => setSettled(true), 80);
     return () => clearTimeout(t);
   }, []);

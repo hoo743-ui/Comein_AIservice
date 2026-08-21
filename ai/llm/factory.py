@@ -126,7 +126,20 @@ def _groq() -> LLMProvider | None:
 
 
 def get_provider(task: Task) -> LLMProvider:
-    """작업 유형에 맞는 Provider 인스턴스를 반환한다."""
+    """작업 유형에 맞는 Provider 인스턴스를 반환한다.
+
+    누가 먼저 답하는가는 `LLM_PRIMARY` 가 정한다(`gemini` | `groq`).
+
+    왜 고를 수 있게 두는가 — 무료 티어의 형편은 우리가 정하지 못한다. 2026-08-21 에
+    실측한 값이 그 이유다(따뜻한 서버, 같은 프롬프트):
+
+        groq    0.67 · 0.75 · 0.76초      3/3 성공
+        gemini  4.75 · 4.93 · 6.51초      1/3 은 503 high demand
+
+    503 이면 같은 곳에 한 번 더 묻고(0.6초 쉬고) 그다음 넘기므로, Gemini 가 앞에 서 있는
+    동안 한 줄을 넣고 기다리는 시간이 12~17초였다. 코드를 고쳐야만 바뀌는 값이었으면
+    데모 당일에 손댈 수 없다. 환경변수 한 줄로 되돌릴 수 있게 둔다.
+    """
     global _fallback_instance
 
     groq = _groq()
@@ -139,5 +152,12 @@ def get_provider(task: Task) -> LLMProvider:
         return _gemini()
 
     if _fallback_instance is None:
-        _fallback_instance = FallbackProvider(primary=_gemini(), secondary=groq)
+        want = os.getenv("LLM_PRIMARY", "gemini").strip().lower()
+        if want == "groq":
+            _fallback_instance = FallbackProvider(primary=groq, secondary=_gemini())
+        else:
+            if want not in ("", "gemini"):
+                logger.warning("LLM_PRIMARY=%r 는 모르는 값입니다 — gemini 로 갑니다.", want)
+            _fallback_instance = FallbackProvider(primary=_gemini(), secondary=groq)
+        logger.info("LLM 주 Provider: %s", _fallback_instance.primary.name)
     return _fallback_instance

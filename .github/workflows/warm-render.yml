@@ -24,9 +24,11 @@ name: warm-render
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   # UTC 기준. 00:00~13:00 UTC = 09:00~22:00 KST.
-  #   - cron: "*/10 0-13 * * *"
+  # ── 켜 둠 (2026-08-21, 학술제·심사 기간) ──
+  # 끝나면 아래 두 줄을 다시 주석 처리한다. 켜 두는 이유와 대가는 이 파일 맨 위에 있다.
+  schedule:
+    # UTC 기준. 00:00~13:00 UTC = 09:00~22:00 KST.
+    - cron: "*/10 0-13 * * *"
 
 jobs:
   warm:

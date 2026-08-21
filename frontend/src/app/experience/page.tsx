@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 
 import { THRESHOLD_KEY } from "@/lib/entry";
 import { refreshSession, signInWithPassword, signInWithProvider, signUpWithPassword } from "@/lib/remote";
+import { wakeAi } from "@/lib/api";
 
 /**
  * Comein · Opening — 로그인이 아니라 '들어서는 경험'.
@@ -116,6 +117,9 @@ export default function Opening() {
   }, []);
 
   React.useEffect(() => {
+    // 여기서도 한 번 더 두드린다 — 랜딩을 건너뛰고 바로 들어온 사람(재방문 · 링크)에게는
+    // 이 화면이 첫 화면이다. 노크는 값이 싸고, 두 번 해도 해롭지 않다.
+    wakeAi();
     // 곧바로 로그인 칸을 여는 길. 워크스페이스에서 '나가기' 로 온 사람은 인트로를 보러
     // 온 것이 아니다 — 계정을 바꾸거나 다시 들어오려는 것이다.
     if (wantsAuthCard()) {
