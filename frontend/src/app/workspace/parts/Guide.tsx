@@ -164,9 +164,14 @@ export function GuideTour({ steps, index, lang, onIndex, onClose }: {
             </button>
           </div>
         </div>
-        {/* 화살표로도 넘어간다는 것을 말해 준다 — 되던 일인데 아무도 몰랐다. */}
-        <p className="rmg-tour-keys" aria-hidden>{en ? "← → to move · Esc to leave" : "← → 로 이동 · Esc 로 나가기"}</p>
-        <button type="button" className="rmg-tour-skip" onClick={() => onClose(true)}>{en ? "Skip" : "건너뛰기"}</button>
+        {/* 꼬리 한 줄 — 왼쪽에 키보드 안내, 오른쪽에 건너뛰기.
+            건너뛰기는 전에 카드 오른쪽 위 모서리에 절대 위치로 떠 있었는데, 거기는 걸음
+            수(1 / 9)가 이미 서 있는 자리라 둘이 겹쳐 읽혔다. '다음' 아래로 내려 오른쪽
+            끝에 맞춘다 — 나가는 길은 나아가는 길 다음에 오는 것이 순서에도 맞는다. */}
+        <div className="rmg-tour-tail">
+          <p className="rmg-tour-keys" aria-hidden>{en ? "← → to move · Esc to leave" : "← → 로 이동 · Esc 로 나가기"}</p>
+          <button type="button" className="rmg-tour-skip" onClick={() => onClose(true)}>{en ? "Skip" : "건너뛰기"}</button>
+        </div>
       </div>
     </div>
   );

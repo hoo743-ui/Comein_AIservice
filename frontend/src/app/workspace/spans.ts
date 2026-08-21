@@ -84,11 +84,40 @@ export const TT_MIN_H = 24;             // 아주 짧은 일정도 제목이 깨
 
 export const TT_GAP = 6;                // 나란히 선 카드 사이
 
+/** 몇 개부터 접는가. 둘까지는 나란히 세워도 읽히고, 셋부터 글자가 먼저 무너진다. */
+export const TT_FOLD_FROM = 3;
+
+/** 서로 걸쳐 한 덩어리가 된 일정들. 접을 때는 이 덩어리가 통째로 한 칸이 된다. */
+export type SpanCluster = {
+  /** 덩어리를 부르는 이름 — 가장 먼저 시작하는 일정의 id */
+  id: string;
+  ids: string[];
+  /** 덩어리 전체가 차지하는 시간(분). 접힌 칸의 top/height 는 이것으로 그린다. */
+  from: number;
+  to: number;
+};
+
 /** 겹치는 일정을 가로로 나눈다.
  *  서로 걸치는 것끼리 한 덩어리로 묶고, 그 덩어리 안에서만 열을 쪼갠다 →
- *  하루에 겹치는 일정이 하나라도 있다고 해서 나머지 일정까지 좁아지지 않는다. */
+ *  하루에 겹치는 일정이 하나라도 있다고 해서 나머지 일정까지 좁아지지 않는다.
+ *
+ *  덩어리(cluster)를 함께 돌려주는 이유 — 셋 이상이 겹치면 열이 그만큼 좁아져서
+ *  제목이 한 글자씩 끊긴다. 그때는 나누는 대신 '외 N건' 한 칸으로 접고(TT_FOLD_FROM),
+ *  누르면 그 덩어리만 편다. 접는 판단은 그리는 쪽이 하고, 여기서는 무엇이 한 덩어리인지만
+ *  말한다 — 같은 계산을 두 곳에서 다시 하지 않게. */
 export function layoutSpans(spans: Span[]): Map<string, { col: number; cols: number }> {
+  return layoutClusters(spans).lay;
+}
+
+export function layoutClusters(spans: Span[]): {
+  lay: Map<string, { col: number; cols: number }>;
+  clusters: SpanCluster[];
+  /** 일정 id → 그 일정이 속한 덩어리 id */
+  clusterOf: Map<string, string>;
+} {
   const out = new Map<string, { col: number; cols: number }>();
+  const clusters: SpanCluster[] = [];
+  const clusterOf = new Map<string, string>();
   const sorted = [...spans].sort((a, b) => a.from - b.from || a.to - b.to);
   let cluster: Span[] = [];
   let clusterEnd = -1;
@@ -104,6 +133,15 @@ export function layoutSpans(spans: Span[]): Map<string, { col: number; cols: num
       colOf.set(s.id, c);
     }
     for (const s of cluster) out.set(s.id, { col: colOf.get(s.id) ?? 0, cols: colEnd.length });
+    // cluster 는 시작 시각 순으로 들어와 있다 — 첫 번째가 곧 덩어리의 이름이자 대표 제목이다.
+    const head = cluster[0];
+    clusters.push({
+      id: head.id,
+      ids: cluster.map((s) => s.id),
+      from: head.from,
+      to: cluster.reduce((mx, s) => Math.max(mx, s.to), head.to),
+    });
+    for (const s of cluster) clusterOf.set(s.id, head.id);
     cluster = [];
     clusterEnd = -1;
   };
@@ -114,7 +152,7 @@ export function layoutSpans(spans: Span[]): Map<string, { col: number; cols: num
     clusterEnd = Math.max(clusterEnd, s.to);
   }
   flush();
-  return out;
+  return { lay: out, clusters, clusterOf };
 }
 
 /** 그 날 자정으로부터의 분 → 캔버스 세로 위치(px) */

@@ -90,13 +90,15 @@ export function L(lang: Lang) {
     quietNote: (w: number) => (en ? `quiet for ${w} week${w > 1 ? "s" : ""}` : `${w}주째 조용해요`),
     setName: en ? "Name" : "이름", setNameD: en ? "Display name in greetings and profile" : "인사와 프로필에 쓰이는 표시 이름",
     setLang: en ? "Language" : "언어", setLangD: en ? "Interface language" : "인터페이스 언어",
-    setMode: en ? "Usage type" : "사용 유형", setModeD: en ? "Reflected in default places & labels" : "기본 장소·라벨 프리셋에 반영",
+    setMode: en ? "Usage type" : "사용 유형", setModeD: en ? "Renames today's flow and the categories events fall into" : "오늘의 흐름과 일정이 나뉘는 갈래 이름이 바뀝니다",
     setWeek: en ? "Week starts" : "주 시작", setWeekD: en ? "First day of the calendar week" : "캘린더 한 주의 시작 요일",
     setTheme: en ? "Theme" : "테마", setThemeD: en ? "Light and dark" : "밝은 화면과 어두운 화면",
     setSize: en ? "Text size" : "글자 크기", setSizeD: en ? "Enlarge text across the screen" : "화면 전체 글자를 키워요",
     setNotif: en ? "Notifications" : "알림", setNotifD: en ? "We'll flag upcoming events and key tasks" : "다가오는 일정·중요한 할 일을 알려드려요",
     setAuto: en ? "AI auto-confirm" : "AI 자동 확정", setAutoD: en ? "Register AI-suggested events without asking" : "AI가 제안한 일정을 확인 없이 바로 등록",
-    segStudent: en ? "Student" : "학생", segOffice: en ? "Office" : "직장인", segGeneral: en ? "General" : "일반",
+    // segStudent·segOffice·segGeneral 은 걷었다 — 사용 유형의 이름은 이제 MODE_CONFIG
+    // (lib/mode.ts)가 갖는다. 같은 낱말을 두 곳에 두면 한쪽만 고쳐지고, 실제로 그랬다:
+    // 여기 남아 있던 '일반' 은 화면 어디에도 쓰이지 않는 채로 '개인' 과 다른 말을 하고 있었다.
     segSun: en ? "Sunday" : "일요일", segMon: en ? "Monday" : "월요일",
     segMd: en ? "Normal" : "보통", segLg: en ? "Large" : "크게", segXl: en ? "Larger" : "더 크게",
   };

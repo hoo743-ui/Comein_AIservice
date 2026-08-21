@@ -3,6 +3,9 @@
 import { create } from "zustand";
 
 import type { UserMode } from "./mode";
+// prefs ↔ store 는 서로를 가리킨다. 양쪽 다 **함수 안에서만** 쓰므로 모듈이 처음 평가될
+// 때는 서로를 건드리지 않는다(mode ↔ store 도 같은 모양으로 이미 그렇게 돌고 있다).
+import { loadPrefs, savePrefs } from "./prefs";
 import type {
   ChatMessage,
   ChatRoom,
@@ -350,6 +353,8 @@ interface WorkspaceState {
 
   // Settings
   updateSettings: (patch: Partial<Settings>) => void;
+  /** 이 기기에 남겨 둔 설정을 얹는다. 마운트 뒤에 한 번 — 서버 렌더와 어긋나지 않게. */
+  hydratePrefs: () => void;
 }
 
 /** 낙관적으로 얹었던 내 말이 서버 id 를 받아 자리를 잡는다.
@@ -1056,7 +1061,17 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     })();
   },
 
-  updateSettings: (patch) => set((st) => ({ settings: { ...st.settings, ...patch } })),
+  // 고른 것은 이 기기에 남는다 — 새로고침에 '학생'으로 되돌아가지 않게(lib/prefs.ts).
+  // 저장을 여기 한 곳에 두는 이유: 설정을 바꾸는 길이 이 함수 하나뿐이라, 화면 쪽에서
+  // 따로 저장하게 하면 새 설정을 더할 때마다 저장을 잊을 자리가 하나씩 생긴다.
+  updateSettings: (patch) =>
+    set((st) => {
+      const settings = { ...st.settings, ...patch };
+      savePrefs(settings);
+      return { settings };
+    }),
+
+  hydratePrefs: () => set((st) => ({ settings: { ...st.settings, ...loadPrefs() } })),
 }));
 
 // 함께 걷어낸 것들 —

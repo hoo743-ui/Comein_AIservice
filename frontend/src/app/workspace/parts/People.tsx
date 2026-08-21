@@ -14,7 +14,8 @@
  */
 
 import * as React from "react";
-import { CalendarDays, MoreHorizontal, Search, Users, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { CalendarDays, MoreHorizontal, Search, Trash2, Users, X } from "lucide-react";
 
 import { suggestionLine, summarize, type AnalysisOutcome } from "@/lib/conversation";
 import { copyText } from "@/lib/clipboard";
@@ -56,6 +57,18 @@ export function PersonMenu({ person, at, lang, onClose, onRename, onUnlink }: {
   const [copied, setCopied] = React.useState<boolean | null>(null);
   const [asking, setAsking] = React.useState(false);
 
+  // 이 메뉴는 body 로 옮겨 붙인다(아래 createPortal).
+  //
+  // 왜 — `position: fixed` 는 보통 뷰포트를 기준으로 앉지만, 조상 중 하나라도
+  // transform·filter·will-change 를 갖고 있으면 **그 조상이 기준을 가로챈다**(CSS 규격).
+  // 워크스페이스의 작업면 `.rmg-flow` 가 탭 전환 크로스페이드 때문에
+  // `will-change: opacity, transform` 을 달고 있어서(styles.ts), 여기서 넘긴 clientX/clientY
+  // 뷰포트 좌표가 작업면의 왼쪽 위를 원점으로 다시 읽혔다 — 그래서 메뉴가 누른 자리가 아니라
+  // 엉뚱한 곳에 떠 있었다. 좌표를 보정하는 대신 아예 그 상자 밖으로 내보낸다:
+  // 보정은 조상이 하나 바뀔 때마다 다시 틀리지만, 밖으로 나온 것은 계속 맞는다.
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+
   // 바깥을 누르거나 Esc 를 누르면 닫힌다. 스크롤에도 닫는다 — 메뉴는 뷰포트에 고정돼 있어서
   // 목록이 움직이면 엉뚱한 줄 위에 떠 있게 된다(그러면 어느 사람의 메뉴인지 거짓말이 된다).
   React.useEffect(() => {
@@ -91,7 +104,9 @@ export function PersonMenu({ person, at, lang, onClose, onRename, onUnlink }: {
     if (ok) window.setTimeout(onClose, 700);
   };
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div ref={box} className="rmg-pmenu" role="menu" style={{ left: pos.x, top: pos.y }}>
       {/* 붙이는 이름 — 나만 본다. 그 말을 적어 두지 않으면 상대에게 보일까 봐 아무도 안 쓴다. */}
       {naming ? (
@@ -155,7 +170,8 @@ export function PersonMenu({ person, at, lang, onClose, onRename, onUnlink }: {
           {en ? "Shared events stay." : "함께한 일정은 그대로 남아요."}
         </p>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
@@ -725,7 +741,7 @@ export function PersonPanel({ person, messages, sharedEvents, participantsOf, my
 /** People — 연락처가 아니라 '일정으로 이어진 사람'.
  *  사람을 누르면 그 사람과 내가 함께 있는 일정이 펼쳐지고, 거기서 바로 그 일정의 대화로 들어간다.
  *  사람 → 일정 → 대화. 1:1 DM 은 만들지 않는다 — Comein 의 대화는 늘 일정에 매여 있다. */
-export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent, teams, memberCountOf, openGroupId, onOpenGroup, onNewGroup, onRenamePerson, onUnlinkPerson }: any) {
+export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEventsWith, query, onQuery, onNewRoom, onFind, onRequest, onCancelRequest, requests, requestError, outgoing, myHandle, onAnswerRequest, unreadOf, convo, openEventId, onOpenEvent, teams, memberCountOf, openGroupId, onOpenGroup, onNewGroup, onRenamePerson, onUnlinkPerson, onClearRoom }: any) {
   const t = L(lang as Lang);
   const en = lang === "en";
   // 앞의 @ 는 이름의 일부가 아니라 '핸들을 부르는 방식' 이다. 여기서 벗겨야
@@ -770,6 +786,47 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
 
   /** 오른쪽 클릭으로 연 메뉴 — 누구를, 어디서. */
   const [menu, setMenu] = React.useState<{ person: Contact; x: number; y: number } | null>(null);
+
+  /**
+   * 치우려고 휴지통을 누른 줄. 한 번에 치우지 않고 그 자리에서 한 번 되묻는다.
+   *
+   * 되묻는 이유는 이것이 위험해서가 아니다 — 치워도 **내 화면에서만** 사라지고
+   * 상대의 대화는 그대로다(clearmark, 되돌릴 수 있다). 다만 목록에서 누르면 그 방을
+   * 열어 보지도 않은 채 사라지므로, 되돌리는 줄(ClearedLine)을 볼 기회가 없다.
+   * 볼 수 없는 되돌리기 대신, 누르기 전에 한 번 묻는 쪽을 택했다.
+   */
+  const [clearing, setClearing] = React.useState<string | null>(null);
+
+  /** 목록의 한 줄에 붙는 휴지통 — 평소엔 없고, 손이 올라오면 나타난다(CSS). */
+  const ClearBtn = ({ id, kind }: { id: string; kind: "dm" | "event" }) =>
+    !onClearRoom ? null : clearing === id ? (
+      <span className="rmg-ppl-rowact rmg-ppl-clearask">
+        <button
+          type="button"
+          className="rmg-ppl-make"
+          onClick={(e) => { e.stopPropagation(); setClearing(null); }}
+        >
+          {en ? "Cancel" : "취소"}
+        </button>
+        <button
+          type="button"
+          className="rmg-mg-del"
+          onClick={(e) => { e.stopPropagation(); onClearRoom(kind, id); setClearing(null); }}
+        >
+          {en ? "Clear" : "치우기"}
+        </button>
+      </span>
+    ) : (
+      <button
+        type="button"
+        className="rmg-ppl-rowact rmg-ppl-trash"
+        aria-label={en ? "Clear this conversation from my view" : "이 대화 치우기"}
+        title={en ? "Clears it from your view only" : "내 화면에서만 치워집니다"}
+        onClick={(e) => { e.stopPropagation(); setClearing(id); }}
+      >
+        <Trash2 className="rmg-ppl-trash-ic" />
+      </button>
+    );
 
   React.useEffect(() => {
     if (!onFind || q.length < 2) { setFound([]); setFinding(false); return; }
@@ -947,7 +1004,7 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
               .map((g) => {
                 const on = openEventId === g.id;
                 return (
-                  <li key={g.id} className={`rmg-ppl ${on ? "on" : ""}`}>
+                  <li key={g.id} className={`rmg-ppl ${on ? "on" : ""} ${onClearRoom ? "act-trash" : ""}`}>
                     <button type="button" className="rmg-ppl-head" aria-current={on} onClick={() => onOpenEvent?.(g.id, true)}>
                       <span className="rmg-ppl-av grp"><Users className="rmg-ppl-avic" /></span>
                       <span className="rmg-ppl-txt">
@@ -963,6 +1020,8 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
                         </span>
                       </span>
                     </button>
+                    {/* 자리 대화도 치울 수 있다 — 줄 자체가 버튼이라 안에 못 넣고 형제로 둔다. */}
+                    <ClearBtn id={g.id} kind="event" />
                   </li>
                 );
               })}
@@ -1000,10 +1059,15 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
             const n = (sharedEventsWith(c.id) as any[]).length;
             const nu = unreadOf ? unreadOf(c.id) : 0;
             const last = dm.get(c.id)?.last;
+            // 이 줄 오른쪽 끝에 무엇이 서는가 — 알약(요청/요청함·취소)인가, 휴지통인가.
+            // 손잡이는 줄 위에 **겹쳐** 서므로(.rmg-ppl-rowact), 그만큼 글의 자리를
+            // 미리 비워 두지 않으면 '일정 3' 위에 '요청' 이 올라탄다. 실제로 그랬다.
+            // hover 때만 비우면 손이 닿을 때마다 글자가 밀려 목록이 출렁인다 — 늘 비운다.
+            const act = lane === "dm" ? "trash" : (lane === "contacts" && !c.connected) ? "pill" : null;
             return (
               <li
                 key={c.id}
-                className={`rmg-ppl ${on ? "on" : ""}`}
+                className={`rmg-ppl ${on ? "on" : ""} ${act ? `act-${act}` : ""}`}
                 // 오른쪽 클릭 — 자주 쓰지 않는 것들은 여기 숨어 있다가 필요할 때만 나온다.
                 onContextMenu={(e) => { e.preventDefault(); setMenu({ person: c, x: e.clientX, y: e.clientY }); }}
               >
@@ -1029,6 +1093,9 @@ export function PeopleView({ contacts, lang, personId, onSelectPerson, sharedEve
                     검색은 '이미 내 목록에 있는 사람'을 걸러 내므로, 여기서 청할 길이 없으면
                     그 사람에게는 영영 요청을 보낼 수 없다. 줄 자체가 버튼이라 안에 또 버튼을
                     넣을 수 없어(중첩 금지), 형제로 두고 오른쪽 끝에 세운다. */}
+                {/* 개인 채팅 갈래에서만 휴지통 — 연락처는 '대화 목록'이 아니라 사람 목록이다.
+                    거기 휴지통을 달면 사람을 지우는 것으로 읽힌다(그건 '연결 끊기'다). */}
+                {lane === "dm" && <ClearBtn id={c.id} kind="dm" />}
                 {lane === "contacts" && !c.connected && (
                   (asked[c.id] || (outgoing ?? []).includes(c.id)) ? (
                     <button type="button" className="rmg-ppl-act rmg-ppl-rowact" disabled={answering === c.id} onClick={() => void unask(c.id)}>

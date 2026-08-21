@@ -22,10 +22,13 @@ import { dayKey, hhmm, pad } from "../datetime";
 import { L, type Lang } from "../i18n";
 import type { Receipt } from "../nav";
 import {
-  TT_FROM, TT_GAP, TT_MIN_H, TT_ROW, TT_TO,
-  eventDurationToHeight, eventToPosition, layoutSpans, spanRange, spansOf, timeToPosition,
-  type Span,
+  TT_FOLD_FROM, TT_FROM, TT_GAP, TT_MIN_H, TT_ROW, TT_TO,
+  eventDurationToHeight, eventToPosition, layoutClusters, layoutSpans, spanRange, spansOf, timeToPosition,
+  type Span, type SpanCluster,
 } from "../spans";
+
+/** 자정으로부터의 분 → "HH:MM". 접힌 덩어리는 Date 가 아니라 분으로 범위를 들고 있다. */
+const minHHMM = (m: number) => `${pad(Math.floor(m / 60) % 24)}:${pad(m % 60)}`;
 
 /** Calendar — 월(月)과 그날의 24시간 원이 나란히. 날짜를 고르면 화면은 그대로 두고 오른쪽 원만 바뀐다.
  *  타임테이블(표)은 화면을 갈아치우는 일이므로 사용자가 스스로 눌렀을 때만 연다. */
@@ -375,7 +378,32 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
   const isToday = dayKey(now) === dayKey(day);
   const nowMin = now.getHours() * 60 + now.getMinutes();
   const nowInRange = isToday && nowMin >= TT_FROM * 60 && nowMin <= TT_TO * 60;
-  const lay = React.useMemo(() => layoutSpans(spans), [spans]);
+  const { lay, clusters, clusterOf } = React.useMemo(() => layoutClusters(spans), [spans]);
+
+  /** 펴 둔 덩어리. 접힌 칸을 누르면 그 덩어리만 열로 갈라진다(다시 누르면 접힌다).
+   *  날이 바뀌면 비운다 — 어제 펴 둔 것을 오늘까지 들고 가면 왜 열려 있는지 알 수 없다. */
+  const [opened, setOpened] = React.useState<Set<string>>(new Set());
+  React.useEffect(() => setOpened(new Set()), [day]);
+  const toggleCluster = (id: string) =>
+    setOpened((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+
+  /** 지금 접혀 있는 덩어리들 — 셋 이상 겹쳤고, 아직 펴지 않은 것. */
+  const folded = React.useMemo(() => {
+    const m = new Map<string, SpanCluster>();
+    for (const c of clusters) {
+      if (c.ids.length >= TT_FOLD_FROM && !opened.has(c.id)) m.set(c.id, c);
+    }
+    return m;
+  }, [clusters, opened]);
+
+  const titleOf = React.useCallback(
+    (id: string) => spans.find((s) => s.id === id)?.title ?? "",
+    [spans],
+  );
   const canvasH = (TT_TO - TT_FROM) * TT_ROW;
 
   /** 굴려서 날을 넘겼을 때 어느 끝에 세울 것인가. 버튼으로 넘어왔으면 null 이다. */
@@ -472,7 +500,52 @@ export function DayTimetable({ day, spans, now, lang, onAdd, onOpenEvent, partic
               </div>
             ))}
 
+            {/* 접힌 덩어리 — 셋 이상이 겹친 자리는 열로 쪼개지 않고 한 칸으로 둔다.
+                "OO 외 2건". 누르면 그 자리만 펴진다. */}
+            {[...folded.values()].map((c) => {
+              const h = Math.max(((c.to - c.from) / 60) * TT_ROW, TT_MIN_H);
+              const head = titleOf(c.id);
+              const rest = c.ids.length - 1;
+              return (
+                <button
+                  key={`fold-${c.id}`}
+                  type="button"
+                  className={`rmg-tt-block rmg-tt-fold ${h <= TT_MIN_H + 8 ? "tight" : ""}`}
+                  style={{ top: `${timeToPosition(c.from)}px`, height: `${h}px`, left: 0, width: `calc(100% - ${TT_GAP}px)` }}
+                  aria-expanded={false}
+                  onClick={(e) => { e.stopPropagation(); toggleCluster(c.id); }}
+                >
+                  <span className="rmg-tt-block-title">
+                    {lang === "en" ? `${head} +${rest} more` : `${head} 외 ${rest}건`}
+                  </span>
+                  {/* 덩어리 전체가 걸친 시간 — 접혀 있어도 '언제쯤 붐비는가'는 남긴다. */}
+                  <span className="rmg-tt-block-meta">
+                    {minHHMM(c.from)}–{minHHMM(c.to)}
+                  </span>
+                </button>
+              );
+            })}
+
+            {/* 펴 둔 덩어리 위의 '접기' — 편 사람이 되돌릴 길을 같은 자리에 둔다.
+                이게 없으면 한 번 편 것은 날을 넘기기 전까지 접히지 않는다. */}
+            {clusters
+              .filter((c) => c.ids.length >= TT_FOLD_FROM && opened.has(c.id))
+              .map((c) => (
+                <button
+                  key={`unfold-${c.id}`}
+                  type="button"
+                  className="rmg-tt-unfold"
+                  style={{ top: `${timeToPosition(c.from)}px` }}
+                  onClick={(e) => { e.stopPropagation(); toggleCluster(c.id); }}
+                >
+                  {lang === "en" ? `▲ fold ${c.ids.length}` : `▲ ${c.ids.length}건 접기`}
+                </button>
+              ))}
+
             {spans.map((s) => {
+              // 접혀 있는 덩어리에 속한 일정은 그리지 않는다 — 위의 한 칸이 대신 서 있다.
+              const cid = clusterOf.get(s.id);
+              if (cid && folded.has(cid)) return null;
               const { col, cols } = lay.get(s.id) ?? { col: 0, cols: 1 };
               const eventId = s.id.startsWith("r-") ? null : s.id;
               const n = eventId && participantsOf ? participantsOf(eventId).length : 0;

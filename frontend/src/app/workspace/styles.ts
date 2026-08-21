@@ -326,8 +326,12 @@ html { font-size: 17px; }
 }
 /* hover 에서만 드러나는 것들 — 평소엔 문이 조용히 서 있기만 한다. */
 .rmg-doorway-wrap { position: relative; --door-w: clamp(160px, 17vw, 224px); }
-.rmg-doorway-hint { font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 66%, transparent); opacity: 0; transform: translateY(-3px); transition: opacity 200ms ease-out, transform 200ms ease-out; }
-.rmg-doorway-wrap:hover .rmg-doorway-hint { opacity: 1; transform: none; }
+/* '사용 가이드 보기' — 늘 보인다.
+   전에는 손이 닿아야 나타났다. 문에 마우스를 올려 볼 이유를 이미 아는 사람에게만 보이는
+   안내였던 셈이라, 정작 안내가 필요한 사람에게는 없는 것과 같았다(§0 — 조작을 배우게
+   하지 않는다). 손이 닿으면 한 겹 또렷해지는 것만 남긴다. */
+.rmg-doorway-hint { font-size: 0.82rem; color: color-mix(in srgb, var(--ink) 52%, transparent); transition: color 200ms ease-out; }
+.rmg-doorway-wrap:hover .rmg-doorway-hint { color: color-mix(in srgb, var(--ink) 78%, transparent); }
 .rmg-doorway-wrap:hover .rmg-doorway { transform: scale(1.012); }
 .rmg-doorway { transition: transform 200ms ease-out; }
 /* 처음 온 사람에게만 — 점 하나. 배지도 숫자도 두지 않는다. */
@@ -354,7 +358,7 @@ html { font-size: 17px; }
    hover 로 드러나는 것들을 그대로 쓴다: 다른 모양을 새로 만들면 안내와 실제가 달라진다.
    그래서 여기서 배운 자리가 곧 다음에 손이 갈 자리다. */
 .rmg-doorway-wrap.hint .rmg-doorprev { opacity: 1; transform: translate(-50%, 0); pointer-events: auto; cursor: pointer; }
-.rmg-doorway-wrap.hint .rmg-doorway-hint { opacity: 1; transform: none; }
+.rmg-doorway-wrap.hint .rmg-doorway-hint { color: color-mix(in srgb, var(--ink) 78%, transparent); }
 .rmg-doorway-wrap.hint .rmg-doorway-door { opacity: 0.88; }
 /* 표식은 한 번씩 번져 나간다 — 세 번이면 눈에 들어오고, 그 뒤로는 조용해진다. */
 .rmg-doorway-wrap.hint .rmg-doorway-new::after {
@@ -430,10 +434,13 @@ html { font-size: 17px; }
   background: color-mix(in srgb, var(--ink) 4%, transparent);
   font-size: 0.88rem; line-height: 1.65; color: color-mix(in srgb, var(--ink) 66%, transparent); }
 
+/* 꼬리 한 줄 — 키보드 안내(왼쪽)와 건너뛰기(오른쪽). '다음' 버튼 바로 아래에 온다. */
+.rmg-tour-tail { display: flex; align-items: baseline; justify-content: space-between; gap: var(--sp-2); margin-top: 12px; }
 /* 키보드 안내 — 되던 일인데 아무도 몰랐다. 있는 줄만 알면 되므로 가장 옅게. */
-.rmg-tour-keys { margin: 12px 0 0; font-size: 0.74rem; letter-spacing: 0.02em; color: var(--faint); }
-/* 건너뛰기 — 강조하지 않되, 찾는 사람 눈에는 보여야 한다. */
-.rmg-tour-skip { position: absolute; top: 10px; right: 12px; border: 0; background: none; font: inherit; font-size: 0.85rem; font-weight: 400; color: color-mix(in srgb, var(--ink) 70%, transparent); cursor: pointer; padding: 4px 6px; border-radius: 6px; transition: color 170ms ease-out; }
+.rmg-tour-keys { margin: 0; font-size: 0.74rem; letter-spacing: 0.02em; color: var(--faint); }
+/* 건너뛰기 — 강조하지 않되, 찾는 사람 눈에는 보여야 한다.
+   카드 모서리에 띄우지 않는다: 거기는 걸음 수(1 / 9)의 자리라 둘이 겹쳐 읽혔다. */
+.rmg-tour-skip { flex-shrink: 0; border: 0; background: none; font: inherit; font-size: 0.8rem; font-weight: 400; color: color-mix(in srgb, var(--ink) 58%, transparent); cursor: pointer; padding: 2px 4px; margin-right: -4px; border-radius: 6px; transition: color 170ms ease-out; }
 .rmg-tour-skip:hover { color: var(--ink); }
 
 /* 열린 뒤 — 문이 있던 자리에 안내가 그대로 선다(새 창이 아니라 이 화면의 한 칸). */
@@ -1161,6 +1168,20 @@ html { font-size: 17px; }
 .rmg-tt-block.pending { background: color-mix(in srgb, var(--accent) 8%, transparent); border-style: dashed; }
 .rmg-tt-block-title { font-size: 0.82rem; font-weight: 500; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; line-height: 1.3; }
 .rmg-tt-block-meta { font-size: 0.7rem; color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 접힌 자리 — 셋 이상이 겹쳐 "OO 외 2건" 한 칸으로 서 있는 것.
+   일정 하나가 아니라 **여러 개가 여기 있다**는 표시라, 채우지 않고 테두리만 둔다.
+   왼쪽에 굵은 획을 하나 세워 '이 시간대가 붐빈다'를 색이 아니라 형태로 말한다. */
+.rmg-tt-block.rmg-tt-fold { background: color-mix(in srgb, var(--surface) 82%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 16%, var(--hair));
+  border-left: 3px solid color-mix(in srgb, var(--accent) 55%, transparent); }
+.rmg-tt-block.rmg-tt-fold:hover { background: color-mix(in srgb, var(--ink) 6%, transparent);
+  border-color: color-mix(in srgb, var(--ink) 26%, var(--hair));
+  border-left-color: var(--accent); }
+/* 펴 둔 덩어리를 다시 접는 손잡이 — 열들 위 왼쪽 끝에 작게 앉는다. */
+.rmg-tt-unfold { position: absolute; z-index: 3; margin-left: 6px; transform: translateY(-100%);
+  border: 0; background: none; padding: 0 4px; cursor: pointer; font: inherit;
+  font-size: 0.68rem; color: var(--faint); transition: color 150ms ease-out; }
+.rmg-tt-unfold:hover { color: var(--ink); }
 /* 낮은 카드는 제목 한 줄만 — 두 줄을 우겨넣으면 글자가 잘린다. */
 .rmg-tt-block.tight { justify-content: center; padding: 0 8px; }
 .rmg-tt-block.tight .rmg-tt-block-meta { display: none; }
@@ -1235,9 +1256,29 @@ html { font-size: 17px; }
    평소엔 물러나 있다가 그 줄에 손이 닿으면 또렷해진다(늘 떠 있으면 목록이 버튼밭이 된다). */
 .rmg-ppl-rowact { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); z-index: 1;
   opacity: 0; transition: opacity 160ms ease-out, color 170ms ease-out, border-color 170ms ease-out; }
+/* 손잡이가 설 자리를 줄 안쪽에서 미리 비워 둔다.
+   겹쳐 서는 방식(absolute)은 줄을 누르는 것을 방해하지 않아서 택한 것인데, 비워 두지
+   않으면 줄 오른쪽 끝의 글('일정 3' · 마지막 말)을 그대로 밟는다. 손이 닿을 때만 비우면
+   글자가 밀려 목록이 출렁이므로, 그 줄에 손잡이가 있는 한 늘 비워 둔다.
+   폭은 가장 넓은 상태 기준이다 — '요청함 · 취소' 가 '요청' 보다 훨씬 길다. */
+.rmg-ppl.act-pill > .rmg-ppl-head { padding-right: 108px; }
+.rmg-ppl.act-trash > .rmg-ppl-head { padding-right: 40px; }
 .rmg-ppl:hover .rmg-ppl-rowact, .rmg-ppl-rowact:focus-visible { opacity: 1; }
 @media (hover: none) { .rmg-ppl-rowact { opacity: 1; } }
 @media (prefers-reduced-motion: reduce) { .rmg-ppl-rowact { transition: none; } }
+/* 대화를 치우는 휴지통 — 같은 자리, 같은 규칙(손이 닿을 때만). 테두리 없는 아이콘 하나로
+   둔다: 알약(.rmg-ppl-act)으로 만들면 '요청'·'동의' 같은 주 액션과 같은 무게로 읽히는데,
+   이건 목록을 정리하는 곁일일 뿐이다. */
+.rmg-ppl-trash { display: grid; place-items: center; width: 28px; height: 28px; padding: 0;
+  border: 0; border-radius: 8px; background: none; color: var(--faint); cursor: pointer;
+  transition: background 160ms ease-out, color 160ms ease-out; }
+.rmg-ppl-trash:hover { background: color-mix(in srgb, var(--ink) 6%, transparent); color: var(--ink); }
+.rmg-ppl-trash-ic { width: 15px; height: 15px; stroke-width: 1.5; }
+/* 되물을 때는 줄 위에 계속 떠 있어야 한다 — 손이 버튼으로 옮겨 가는 사이에 사라지면
+   대답할 수가 없다(hover 는 줄을 벗어나는 순간 풀린다). */
+.rmg-ppl-clearask { display: flex; align-items: center; gap: 6px; opacity: 1;
+  padding: 2px 4px; border-radius: 999px;
+  background: color-mix(in srgb, var(--surface) 92%, transparent); }
 
 /* 검색 한 줄이 '그쪽이 먼저 보냈다' 를 말할 때 — 상태와 손잡이가 한 덩어리로 붙는다. */
 .rmg-ppl-req { display: inline-flex; align-items: center; gap: var(--sp-1); flex-shrink: 0; }

@@ -132,6 +132,10 @@ export default function Reimagine() {
   const removeParticipant = useWorkspace((s) => s.removeParticipant);
   const settings = useWorkspace((s) => s.settings);
   const updateSettings = useWorkspace((s) => s.updateSettings);
+  // 이 기기에 남겨 둔 설정을 얹는다. 마운트 뒤에 한 번 — 서버가 그린 첫 화면은 기본값으로
+  // 서 있어야 하고(localStorage 는 서버에 없다), 그 뒤에 조용히 고쳐 앉는다.
+  const hydratePrefs = useWorkspace((s) => s.hydratePrefs);
+  React.useEffect(() => { hydratePrefs(); }, [hydratePrefs]);
   const lang: Lang = settings.language;
   /** 지금 이 워크스페이스가 서 있는 Context. 화면은 여기서만 읽는다 — 컴포넌트마다
    *  settings.mode 를 꺼내 쓰면 나중에 '한 계정에 여러 Context' 로 넓힐 자리가 흩어진다. */
@@ -1627,7 +1631,8 @@ export default function Reimagine() {
           >
             <AiDoor active={doorOpening} className="rmg-doorway-door" />
             <span className="rmg-doorway-cta">{lang === "en" ? "Come in" : "들어오세요"}</span>
-            {/* hover 에서만 드러나는 한 줄 — 평소엔 문이 조용히 서 있기만 한다. */}
+            {/* 늘 서 있는 한 줄. 손이 닿아야 나타나던 것을 고쳤다 —
+                안내가 필요한 사람은 문에 마우스를 올려 볼 이유를 아직 모르는 사람이다. */}
             <span className="rmg-doorway-hint">{lang === "en" ? "See the guide →" : "사용 가이드 보기 →"}</span>
             {/* 처음 온 사람에게만 아주 작은 표식. 가이드를 강제로 재생하지는 않는다. */}
             {firstVisit && <span className="rmg-doorway-new" aria-hidden />}
@@ -2092,6 +2097,11 @@ export default function Reimagine() {
                   onNewGroup={() => { selectGroup(null); setNewGroup(true); }}
                   onRenamePerson={renamePerson}
                   onUnlinkPerson={unlinkPerson}
+                  // 목록에서 대화 한 자리를 치운다 — 방을 없애는 것이 아니라 내 화면에서
+                  // 접는 것이다(clearmark). 같은 일을 방 안에서는 빗금 `/clear` 가 한다.
+                  onClearRoom={(kind: "dm" | "event", id: string) =>
+                    clearRoom(kind === "dm" ? roomIdOfPeer(id) : roomIdOfEvent(id))
+                  }
                   onSearchDay={() => setCalSearchOpen(true)}
                   focusDay={calFocus}
                 />
@@ -2306,6 +2316,8 @@ function Feature(props: {
   onNewGroup: () => void;
   onRenamePerson: (personId: string, label: string) => void;
   onUnlinkPerson: (personId: string) => void;
+  /** 목록에서 대화 한 자리를 내 화면에서만 치운다(방·상대의 기록은 그대로). */
+  onClearRoom: (kind: "dm" | "event", id: string) => void;
   /** 말로 날짜를 찾는 자리를 연다 · 그렇게 찾은 날이 있는 달로 달력을 옮긴다. */
   onSearchDay?: () => void;
   focusDay?: Date | null;
