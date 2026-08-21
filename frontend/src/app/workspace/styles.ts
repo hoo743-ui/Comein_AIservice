@@ -2054,6 +2054,29 @@ html { font-size: 17px; }
 .rmg-slash-row + .rmg-slash-row { border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
 /* 고른 줄은 배경으로 말한다 — 보라는 AI 의 언어라 여기 쓰지 않는다(§0). */
 .rmg-slash-row.on { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+
+/* ── @ 로 사람 부르기 ──
+   캡처 바 위로 뜬다(바가 화면 아래에 있어 아래로 펴면 창 밖이다).
+   빗금 목록과 같은 결로 두되, 여긴 사람이라 얼굴 자리(머리글자)를 하나 둔다. */
+.rmg-ment { position: absolute; left: 0; right: 0; bottom: calc(100% + 8px); z-index: 21;
+  display: flex; flex-direction: column; overflow: hidden;
+  border: 1px solid var(--hair); border-radius: var(--r);
+  background: color-mix(in srgb, var(--surface) 96%, transparent);
+  backdrop-filter: blur(8px);
+  box-shadow: 0 6px 24px color-mix(in srgb, var(--ink) 10%, transparent);
+  animation: rmg-prop-in 160ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+@media (prefers-reduced-motion: reduce) { .rmg-ment { animation: none; } }
+.rmg-ment-row { display: flex; align-items: center; gap: 10px; text-align: left;
+  border: 0; background: none; font: inherit; padding: 8px var(--sp-2); cursor: pointer;
+  transition: background 140ms ease-out; }
+.rmg-ment-row + .rmg-ment-row { border-top: 1px solid color-mix(in srgb, var(--hair) 60%, transparent); }
+.rmg-ment-row.on { background: color-mix(in srgb, var(--ink) 6%, transparent); }
+.rmg-ment-av { display: grid; place-items: center; width: 24px; height: 24px; border-radius: 50%;
+  background: var(--surface); border: 1px solid var(--hair); flex-shrink: 0;
+  font-size: 0.72rem; font-weight: 600; color: var(--muted); }
+.rmg-ment-name { font-size: 0.88rem; color: var(--ink); }
+/* 핸들은 오른쪽 끝에, 한 겹 옅게 — 고르는 기준은 이름이고 핸들은 그것을 확인해 주는 값이다. */
+.rmg-ment-handle { margin-left: auto; font-size: 0.78rem; font-weight: 300; color: var(--faint); }
 .rmg-slash-name { flex-shrink: 0; font-size: 0.84rem; font-weight: 500; color: var(--ink);
   font-variant-numeric: tabular-nums; }
 .rmg-slash-hint { min-width: 0; font-size: 0.78rem; color: var(--muted);

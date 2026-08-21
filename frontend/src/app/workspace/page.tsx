@@ -12,6 +12,7 @@ import { fmtTime, fmtDate } from "@/lib/format";
 import { CSS } from "./styles";
 import { pendingAnswers } from "@/lib/awaiting";
 import { clashAsk, findClash } from "@/lib/clash";
+import { harvestMentions, proposalLine } from "@/lib/mention";
 import { loadMarks, markCleared, splitByMark, unmark, type ClearMarks } from "@/lib/clearmark";
 import { suggestEventTitle } from "@/lib/roomName";
 import { ENTERED_KEY, THRESHOLD_KEY, entryVerdict } from "@/lib/entry";
@@ -507,8 +508,21 @@ export default function Reimagine() {
   }, []);
 
   const capture = async (v: string) => {
-    const t = v.trim();
-    if (!t) return;
+    const raw = v.trim();
+    if (!raw) return;
+
+    // ── @ 로 못 박은 사람들을 먼저 거둔다 ──
+    //
+    // 아래에서 AI 가 돌려준 이름을 연락처와 맞춰 보는 흐린 일치가 한 번 더 돈다. 그건
+    // 아무 단서가 없을 때의 마지막 수단이지, 사용자가 이미 **고른** 사람에게 쓸 것은
+    // 아니다. 여기서 거둔 사람은 그 추측을 건너뛴다 — 고른 것을 다시 추측하는 것은
+    // 사용자의 답을 무시하는 일이다.
+    //
+    // AI 에게는 핸들 대신 그 사람의 이름으로 바꿔 보낸다. 모델은 "@sihyun" 보다 "시현"
+    // 을 잘 읽고, 우리는 이미 누구인지 알고 있어 모델의 읽기에 기댈 이유가 없다.
+    const picked = harvestMentions(raw, contacts as Contact[]);
+    const t = picked.text.trim() || raw;
+    const mentionIds = picked.ids;
 
     // 응답이 올 때까지 '정리 중' 상태를 유지한다 (콜드스타트면 수십 초가 걸릴 수 있다).
     if (orgTimer.current) clearTimeout(orgTimer.current);
@@ -619,6 +633,11 @@ export default function Reimagine() {
           existing: useWorkspace.getState().schedules,
         }), lang === "en");
         if (bump) clashes.push(bump);
+        // ① 사용자가 @ 로 고른 사람 — 추측이 아니라 답이다. 먼저, 그리고 확실하게.
+        //    (addParticipant 가 그 일정의 방까지 함께 세운다 — store 의 ensureRoom.)
+        for (const id of mentionIds) addParticipant(eventId, id);
+
+        // ② AI 가 글에서 읽어 낸 이름 — 여기서만 흐린 일치를 쓴다.
         for (const name of p.participants ?? []) {
           // 이름은 사람이 부르는 방식이라 정확히 안 맞는다 — 부분 일치까지 받아준다.
           const key = name.replace(/\s|님/g, "").toLowerCase();
@@ -626,8 +645,21 @@ export default function Reimagine() {
             const n = String(c.name ?? "").replace(/\s|님/g, "").toLowerCase();
             return n === key || n.includes(key) || key.includes(n);
           });
-          if (hit) addParticipant(eventId, hit.id);
-          else unknownNames.push(name);
+          // 이미 못 박힌 사람은 건너뛴다 — 같은 이름이 흐린 일치로 다른 사람에게 걸려도
+          // 고른 쪽이 이긴다. 추측이 답을 덮지 않는다.
+          if (hit && !mentionIds.includes(hit.id)) addParticipant(eventId, hit.id);
+          else if (!hit) unknownNames.push(name);
+        }
+
+        // ③ 부른 사람이 있으면 그 자리의 방에 시각을 내민다.
+        //
+        //    보내는 사람은 **나**다. AI 이름으로 보내지 않는다 — `chat_messages` 에는
+        //    사람 발신자밖에 없고(sender_id), 그 자리에 AI 를 앉히려면 표부터 고쳐야 한다.
+        //    무엇보다 이건 사실의 문제다: 상대에게 가는 것은 내 제안이고, AI 는 그 말을
+        //    골라 준 것뿐이다. 도구가 한 일을 사람이 한 것처럼, 사람이 한 일을 도구가 한
+        //    것처럼 적지 않는다.
+        if (mentionIds.length) {
+          sendEventMessage(eventId, proposalLine(p.title, p.date, p.end ?? null, lang));
         }
       }
 
@@ -2375,6 +2407,9 @@ export default function Reimagine() {
             lang={lang}
             organizing={organizing}
             onSubmit={capture}
+            /* @ 로 부를 수 있는 사람 — 이어진 사람만. 아직 잇지 않은 사람을 여기 세우면
+               고를 수는 있는데 부를 수는 없는 이름이 목록에 서게 된다. */
+            people={contacts.filter((c: Contact) => c.connected)}
             /* 아래에 이미 제 입력칸을 가진 화면 위에서는 물러난다.
                새 자리 만들기 폼도 그중 하나다 — 물러나지 않으면 캡처 바가 '만들기' 버튼
                한복판을 덮어 클릭을 가로챈다(실제로 눌리지 않았다). */

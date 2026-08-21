@@ -53,12 +53,43 @@ const queueInvite = (eventId: ID, userId: ID) => {
   pendingInvites.set(eventId, list);
 };
 
-/** 지역 id 가 진짜 id 로 바뀐 순간 — 밀렸던 초대를 그 id 로 보낸다. */
+// 같은 이유로 **말도** 밀린다.
+//
+// 초대에만 큐를 달아 두었는데, 일정을 세우자마자 그 자리의 방에 한 마디를 넣는 길이
+// 생기면서(캡처 바에서 @ 로 사람을 부르면 시각을 내민다) 같은 함정에 다시 빠졌다:
+// 방은 서버 트리거가 세워 주는데 그 방의 **진짜 id 는 진짜 일정 id 를 알아야** 찾을 수
+// 있다. 지역 id 로 물으면 아무것도 안 나오고, 지역 방 id 로 밀어 넣으면 uuid 가 아니라
+// 거절당한다. 화면에는 잠깐 보였다가 다음 동기화에서 사라졌다 — 보낸 사람만 보낸 줄 아는
+// 말이 된다. 초대와 같은 자리에서, 같은 방식으로 기다리게 한다.
+// 화면에 이미 얹어 둔 그 줄의 id 를 함께 들고 있는다 — 나중에 서버 id 로 갈아 달 때
+// **어느 줄**이었는지 알아야 한다(같은 문장을 두 번 보냈을 수도 있다).
+const pendingSays = new Map<ID, { msgId: ID; text: string }[]>();
+
+const queueSay = (eventId: ID, msgId: ID, text: string) => {
+  const list = pendingSays.get(eventId) ?? [];
+  list.push({ msgId, text });
+  pendingSays.set(eventId, list);
+};
+
+/** 지역 id 가 진짜 id 로 바뀐 순간 — 밀렸던 초대와 말을 그 id 로 보낸다. */
 const flushInvites = (localId: ID, realId: ID) => {
   unsynced.delete(localId);
   const list = pendingInvites.get(localId);
   pendingInvites.delete(localId);
   for (const userId of list ?? []) void pushParticipant(realId, userId);
+
+  const says = pendingSays.get(localId);
+  pendingSays.delete(localId);
+  if (!says?.length) return;
+  void (async () => {
+    // 방은 서버 트리거가 세운다 — 그 진짜 id 는 진짜 일정 id 로만 찾을 수 있다.
+    const rid = await roomIdForEvent(realId);
+    if (!rid) return;   // 방이 아직 없으면 화면의 낙관적 줄은 그대로 둔다(거짓말을 더하지 않는다)
+    for (const { msgId, text } of says) {
+      const realMsgId = await pushMessage(rid, text);
+      useWorkspace.setState((st) => ({ chatMessages: settleSent(st.chatMessages, msgId, realMsgId, rid) }));
+    }
+  })();
 };
 
 // ── 유틸 ───────────────────────────────────────────────
@@ -1003,6 +1034,9 @@ export const useWorkspace = create<WorkspaceState>((set, get) => ({
     const msg: ChatMessage = { id: uid(), roomId, senderId: ME_ID, content: text, createdAt: nowISO(), pending: remoteReady() };
     set((st) => ({ chatMessages: [...st.chatMessages, msg] }));
     if (!remoteReady()) return;
+    // 아직 서버에 없는 일정이면 지금 보내 봐야 갈 곳이 없다 — 지역 id 로는 그 방을 찾을 수
+    // 없고, 지역 방 id 는 uuid 가 아니라 거절당한다. 초대와 같이 밀어 뒀다가 함께 보낸다.
+    if (unsynced.has(eventId)) { queueSay(eventId, msg.id, text); return; }
     void (async () => {
       const rid = (await roomIdForEvent(eventId)) ?? roomId;
       const realId = await pushMessage(rid, text);
